@@ -3,6 +3,8 @@ import Hero from './Hero';
 
 function HeroSlider({ slides }) {
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [touchStart, setTouchStart] = useState(null);
+    const [touchEnd, setTouchEnd] = useState(null);
 
     // Reset index when slides change
     useEffect(() => {
@@ -19,8 +21,35 @@ function HeroSlider({ slides }) {
         setCurrentIndex((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
     };
 
+    // the required distance between touchStart and touchEnd to be detected as a swipe
+    const minSwipeDistance = 50;
+
+    const onTouchStart = (e) => {
+        setTouchEnd(null);
+        setTouchStart(e.targetTouches[0].clientX);
+    };
+
+    const onTouchMove = (e) => setTouchEnd(e.targetTouches[0].clientX);
+
+    const onTouchEnd = () => {
+        if (!touchStart || !touchEnd) return;
+        const distance = touchStart - touchEnd;
+        const isLeftSwipe = distance > minSwipeDistance;
+        const isRightSwipe = distance < -minSwipeDistance;
+        if (isLeftSwipe) {
+            nextSlide();
+        } else if (isRightSwipe) {
+            prevSlide();
+        }
+    };
+
     return (
-        <div className="hero-slider-container">
+        <div
+            className="hero-slider-container"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+        >
             {slides.map((anime, index) => (
                 <Hero
                     key={anime.id || index}
