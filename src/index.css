@@ -1,0 +1,736 @@
+:root {
+    --bg-color: #f5f5f5;
+    --card-bg: #ffffff;
+    --text-main: #333333;
+    --text-sub: #666666;
+    --primary: #4a90e2;
+    /* Standard Blue */
+    --accent: #e25555;
+    /* Standard Red for tags/accents */
+    --border-color: #ddd;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: sans-serif;
+    /* System font */
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    line-height: 1.6;
+}
+
+.app-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header */
+.app-header {
+    padding: 20px 0;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 30px;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--text-main);
+}
+
+/* Hero Section */
+.hero {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* Hero base styles - mostly handled by slider container now */
+.hero {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.badge {
+    background-color: var(--primary);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    display: inline-block;
+    width: fit-content;
+}
+
+.hero h1 {
+    font-size: 28px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.hero-meta {
+    color: var(--text-sub);
+    font-size: 14px;
+}
+
+.dot {
+    margin: 0 10px;
+}
+
+.hero-actions {
+    margin-top: 10px;
+}
+
+.translate-link {
+    color: var(--primary);
+    text-decoration: underline;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* Controls */
+.controls {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.search-box input,
+.filter-box select {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 16px;
+    min-width: 250px;
+}
+
+.results-count {
+    margin-bottom: 10px;
+    color: var(--text-sub);
+}
+
+/* Grid */
+.anime-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+}
+
+.anime-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-image-wrapper {
+    position: relative;
+    aspect-ratio: 2/3;
+    background-color: #eee;
+}
+
+.card-image-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.episodes-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.card-info {
+    padding: 15px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-info h3 {
+    font-size: 18px;
+    margin-bottom: 5px;
+    /* Truncate */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.card-meta {
+    color: var(--text-sub);
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.card-genres {
+    margin-top: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.genre-tag {
+    background: #eee;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #555;
+}
+
+/* Loading */
+.loading-bar-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    border-top: 1px solid #ddd;
+    padding: 10px;
+}
+
+.progress-bar {
+    height: 10px;
+    background: #eee;
+    margin-top: 5px;
+    border-radius: 5px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 5px;
+    transition: width 0.3s;
+}
+
+/* Footer */
+.app-footer {
+    margin-top: 40px;
+    padding: 20px;
+    text-align: center;
+    border-top: 1px solid var(--border-color);
+    color: var(--text-sub);
+}
+
+/* Add Anime Controls */
+.add-anime-box {
+    flex: 1;
+    min-width: 300px;
+}
+
+.add-input-wrapper {
+    display: flex;
+    gap: 10px;
+}
+
+.add-input-wrapper input {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: #fff;
+    color: var(--text-main);
+    font-size: 1rem;
+}
+
+.add-input-wrapper button {
+    padding: 0 20px;
+    border-radius: 12px;
+    border: none;
+    background: var(--primary);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.add-input-wrapper button:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.add-input-wrapper button:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
+
+/* Card Delete Button */
+.delete-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    color: white;
+    font-size: 1.2rem;
+    z-index: 10;
+}
+
+.card-image-wrapper:hover .delete-button {
+    opacity: 1;
+}
+
+.delete-button:hover {
+    background: rgba(239, 68, 68, 0.9);
+}
+
+@media (max-width: 768px) {
+    .controls {
+        flex-direction: column;
+    }
+}
+
+/* =========================================
+   Hero Slider Styles
+   ========================================= */
+.hero-slider-container {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 40px;
+    background-color: var(--card-bg);
+}
+
+.hero-slide {
+    display: none;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.hero-slide.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Reuse existing .hero styles but remove margin/border since container handles it */
+.hero-slider-container .hero {
+    position: relative;
+    /* For overlay positioning */
+    border: none;
+    margin-bottom: 0;
+    padding: 60px 40px;
+    /* Increased padding */
+    min-height: 400px;
+    /* Increased height for better visual */
+    justify-content: flex-end;
+    /* Push content to bottom for better banner look */
+    overflow: hidden;
+    color: white;
+    /* Default text color to white for dark backgrounds */
+}
+
+/* Background Overlay for Readability */
+.hero-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to bottom,
+            rgba(0, 0, 0, 0.2) 0%,
+            rgba(0, 0, 0, 0.7) 100%);
+    z-index: 1;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    /* Show above overlay */
+    max-width: 800px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.hero h1 {
+    font-size: 32px;
+    margin-bottom: 10px;
+    color: white;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    padding-bottom: 10px;
+}
+
+.hero-meta {
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 15px;
+}
+
+.hero-desc {
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.6;
+    font-size: 1.05rem;
+}
+
+.slider-nav-button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s;
+    z-index: 10;
+}
+
+.slider-nav-button:hover {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.slider-prev {
+    left: 10px;
+}
+
+.slider-next {
+    right: 10px;
+}
+
+.slider-indicators {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+}
+
+.slider-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    border: none;
+    transition: background 0.3s;
+}
+
+.slider-dot.active {
+    background: var(--primary);
+    transform: scale(1.2);
+}
+
+/* Badge for selection reason */
+.selection-reason-badge {
+    background-color: var(--accent);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-bottom: 10px;
+    display: inline-block;
+}
+
+/* =========================================
+   Stats Section Styles
+   ========================================= */
+.stats-container {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin: 20px 0 40px;
+    flex-wrap: wrap;
+}
+
+.stat-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    min-width: 240px;
+    flex: 1;
+    max-width: 320px;
+    transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    font-size: 2rem;
+    background: #f0f7ff;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--primary);
+}
+
+.stat-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1.1;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: var(--text-sub);
+    font-weight: 500;
+}
+
+/* =========================================
+   Add Anime Screen Styles
+   ========================================= */
+.add-screen-container {
+    max-width: 600px;
+    margin: 40px auto;
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.add-screen-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.add-screen-header h2 {
+    font-size: 1.8rem;
+    margin-bottom: 10px;
+    color: var(--text-main);
+}
+
+.add-description,
+.search-spec {
+    font-size: 0.9rem;
+    color: var(--text-sub);
+    line-height: 1.6;
+    margin-bottom: 20px;
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.search-spec h3 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+    color: var(--text-main);
+}
+
+.add-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.add-form input {
+    width: 100%;
+    padding: 15px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1.1rem;
+    transition: border-color 0.3s;
+}
+
+.add-form input:focus {
+    border-color: var(--primary);
+    outline: none;
+}
+
+.action-button {
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.1s;
+}
+
+.add-button {
+    background: var(--primary);
+    color: white;
+}
+
+.add-button:hover {
+    background: var(--primary-hover);
+    transform: translateY(-2px);
+}
+
+.add-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.back-button {
+    background: #e2e8f0;
+    color: var(--text-main);
+}
+
+.back-button:hover {
+    background: #cbd5e1;
+}
+
+.status-message {
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    margin-bottom: 20px;
+    animation: fadeIn 0.3s;
+}
+
+.status-message.success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+
+.status-message.error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.registered-anime-preview {
+    margin-top: 15px;
+    text-align: center;
+}
+
+.registered-anime-preview img {
+    height: 150px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-top: 10px;
+}
+
+/* Floating Add Button in Home */
+.fab-add-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 15px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.fab-add-button:hover {
+    background: var(--primary-hover);
+}
+
+/* Confirmation Preview Styles */
+.preview-card {
+    background: #f8fafc;
+    border: 2px solid var(--primary);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 25px;
+    animation: fadeIn 0.3s;
+}
+
+.preview-title {
+    font-size: 1.4rem;
+    font-weight: bold;
+    color: var(--text-main);
+    margin-bottom: 15px;
+}
+
+.preview-image {
+    max-width: 200px;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 10px;
+}
+
+.preview-meta {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--text-sub);
+}
+
+.button-group {
+    display: flex;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.confirm-button {
+    background: var(--primary);
+    color: white;
+    flex: 2;
+}
+
+.confirm-button:hover {
+    background: var(--primary-hover);
+    transform: translateY(-2px);
+}
+
+.cancel-button {
+    background: #ef4444;
+    color: white;
+    flex: 1;
+}
+
+.cancel-button:hover {
+    background: #dc2626;
+    transform: translateY(-2px);
+}
