@@ -56,24 +56,24 @@ function AddAnimeScreen({ onAdd, onBack }) {
     return (
         <div className="add-screen-container">
             <div className="add-screen-header">
-                <h2><span className="header-icon">➕</span> 作品を追加</h2>
+                <h2>作品を追加</h2>
 
                 <div className="add-info-grid">
                     <div className="add-description">
-                        <h3>📖 操作方法</h3>
+                        <h3>操作方法</h3>
                         <ul>
-                            <li>入力欄に、追加したい作品名を入力してください</li>
-                            <li>「検索」ボタンから AniList の作品を検索します</li>
+                            <li>追加したい作品名を入力してください</li>
+                            <li>「検索」ボタンから作品を検索します</li>
                             <li>正しい作品が表示されたら「登録する」を押してください</li>
                         </ul>
                     </div>
 
                     <div className="search-spec">
-                        <h3>💡 検索のコツ</h3>
+                        <h3>検索のコツ</h3>
                         <ul>
-                            <li>正式名称（例：STEINS;GATE）での検索を推奨します</li>
+                            <li>正式名称（例：STEINS;GATE）での検索を推奨</li>
                             <li>英語タイトルの方がヒットしやすい場合があります</li>
-                            <li>略称（例：リコリコ）では見つからないことがあります</li>
+                            <li>略称ではなく正確なタイトルで検索してください</li>
                         </ul>
                     </div>
                 </div>
@@ -90,7 +90,6 @@ function AddAnimeScreen({ onAdd, onBack }) {
                         disabled={isSearching}
                         className="search-input"
                     />
-                    <i className="input-search-icon">🔍</i>
                 </div>
                 <button type="submit" className="action-button primary-button" disabled={isSearching}>
                     {isSearching ? '検索中...' : '作品を検索する'}
@@ -100,9 +99,6 @@ function AddAnimeScreen({ onAdd, onBack }) {
             {/* Status Message */}
             {status.message && (
                 <div className={`status-message-container ${status.type}`}>
-                    <span className="status-icon">
-                        {status.type === 'success' ? '✅' : status.type === 'error' ? '⚠️' : 'ℹ️'}
-                    </span>
                     <div className="status-text">{status.message}</div>
                 </div>
             )}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { translateGenre } from '../../constants/animeData';
 
 function StatsSection({ animeList }) {
     const totalAnime = animeList.length;
@@ -34,8 +35,8 @@ function StatsSection({ animeList }) {
             <div className="stat-card">
                 <div className="stat-icon">❤️</div>
                 <div className="stat-info">
-                    <span className="stat-value">{topGenre}</span>
-                    <span className="stat-label">最愛ジャンル</span>
+                    <span className="stat-value">{topGenre !== 'なし' ? translateGenre(topGenre) : 'なし'}</span>
+                    <span className="stat-label">最も見たジャンル</span>
                 </div>
             </div>
         </div>

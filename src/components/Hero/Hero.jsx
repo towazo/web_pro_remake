@@ -107,7 +107,7 @@ function Hero({ anime, isActive }) {
                 )}
                 <h1>{anime.title ? (anime.title.native || anime.title.romaji) : 'No Title'}</h1>
                 <div className="hero-meta">
-                    <span>{anime.seasonYear || '不明'}</span>
+                    <span>{anime.seasonYear ? `${anime.seasonYear}年` : '不明'}</span>
                     <span className="dot">•</span>
                     <span>{anime.genres ? anime.genres.slice(0, 3).map(translateGenre).join(' / ') : ''}</span>
                     <span className="dot">•</span>

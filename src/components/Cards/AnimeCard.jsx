@@ -1,4 +1,4 @@
-import React from 'react';
+import { translateGenre } from '../../constants/animeData';
 
 function AnimeCard({ anime, onRemove }) {
     return (
@@ -25,9 +25,12 @@ function AnimeCard({ anime, onRemove }) {
             </div>
             <div className="card-info">
                 <h3>{anime.title.native || anime.title.romaji}</h3>
-                <p className="card-meta">
-                    {anime.seasonYear} {anime.genres?.[0]}
-                </p>
+                <div className="card-meta">
+                    {anime.seasonYear && <span className="meta-tag year">{anime.seasonYear}年</span>}
+                    {anime.genres?.map((genre, idx) => (
+                        <span key={idx} className="meta-tag genre">{translateGenre(genre)}</span>
+                    ))}
+                </div>
             </div>
         </div>
     );
