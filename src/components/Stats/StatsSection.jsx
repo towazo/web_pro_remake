@@ -19,21 +19,27 @@ function StatsSection({ animeList }) {
     return (
         <div className="stats-container">
             <div className="stat-card">
-                <div className="stat-icon">📚</div>
+                <div className="stat-icon">
+                    <img src="/images/picture_1.png" alt="Anime Count" />
+                </div>
                 <div className="stat-info">
                     <span className="stat-value">{totalAnime} 作品</span>
                     <span className="stat-label">登録作品数</span>
                 </div>
             </div>
             <div className="stat-card">
-                <div className="stat-icon">📺</div>
+                <div className="stat-icon">
+                    <img src="/images/picture_2.png.png" alt="Episodes Count" />
+                </div>
                 <div className="stat-info">
                     <span className="stat-value">{totalEpisodes} 話</span>
                     <span className="stat-label">総エピソード</span>
                 </div>
             </div>
             <div className="stat-card">
-                <div className="stat-icon">❤️</div>
+                <div className="stat-icon">
+                    <img src="/images/picture_3.png.png" alt="Top Genre" />
+                </div>
                 <div className="stat-info">
                     <span className="stat-value">{topGenre !== 'なし' ? translateGenre(topGenre) : 'なし'}</span>
                     <span className="stat-label">最も見たジャンル</span>

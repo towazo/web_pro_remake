@@ -604,7 +604,6 @@ body {
 }
 
 .stat-icon {
-    font-size: 2rem;
     background: #ffffff;
     width: 64px;
     height: 64px;
@@ -614,6 +613,15 @@ body {
     border-radius: 0;
     color: black;
     border: 1px solid #000;
+    overflow: hidden;
+    padding: 4px;
+    /* Reduced from 12px for larger icons */
+}
+
+.stat-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .stat-info {
