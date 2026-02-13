@@ -18,10 +18,11 @@
 
 body {
     font-family: sans-serif;
-    /* System font */
     background-color: var(--bg-color);
     color: var(--text-main);
     line-height: 1.6;
+    overflow-wrap: break-word;
+    /* 枠外への文字溢れを防止 */
 }
 
 .app-container {
@@ -98,21 +99,61 @@ body {
     cursor: pointer;
 }
 
-/* Controls */
+/* Controls Panel Layout */
 .controls {
     display: flex;
-    gap: 20px;
-    margin-bottom: 20px;
+    align-items: center;
+    gap: 15px;
+    margin: 30px 0;
     flex-wrap: wrap;
+}
+
+.search-box,
+.filter-box {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
 }
 
 .search-box input,
 .filter-box select {
-    padding: 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    font-size: 16px;
-    min-width: 250px;
+    width: 100%;
+    padding: 14px 16px 14px 45px;
+    border: 2px solid #edf2f7;
+    border-radius: 12px;
+    font-size: 1rem;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: all 0.3s ease;
+    outline: none;
+    color: var(--text-main);
+}
+
+.filter-box select {
+    padding-left: 16px;
+    /* Select doesn't need icon space */
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%234a90e2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 15px center;
+    background-size: 18px;
+}
+
+.search-box input:focus,
+.filter-box select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.1);
+}
+
+.search-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--primary);
+    font-size: 1.1rem;
+    z-index: 10;
 }
 
 .results-count {
@@ -423,6 +464,72 @@ body {
     left: 10px;
 }
 
+/* =========================================
+   Tutorial Slide Specific Styles
+   ========================================= */
+.tutorial-hero {
+    display: none;
+    /* デフォルトは非表示 */
+}
+
+.tutorial-hero.active {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 450px !important;
+    height: 450px !important;
+    background: white !important;
+    color: var(--text-main) !important;
+}
+
+.tutorial-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    width: 100% !important;
+    max-width: 700px !important;
+    margin: 0 auto !important;
+    padding: 0 40px !important;
+    text-shadow: none !important;
+}
+
+.tutorial-badge {
+    background-color: #94a3b8 !important;
+    margin-bottom: 20px !important;
+    color: white !important;
+}
+
+.tutorial-title {
+    color: var(--text-main) !important;
+    font-size: 2rem !important;
+    font-weight: 800 !important;
+    margin-bottom: 20px !important;
+    border: none !important;
+    padding-bottom: 0 !important;
+}
+
+.tutorial-desc {
+    color: var(--text-sub) !important;
+    font-size: 1.1rem !important;
+    line-height: 1.8 !important;
+    margin-bottom: 30px !important;
+}
+
+.tutorial-image-wrapper {
+    height: 120px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.tutorial-image {
+    max-height: 100% !important;
+    width: auto !important;
+    object-fit: contain !important;
+}
+
 .slider-next {
     right: 10px;
 }
@@ -515,6 +622,7 @@ body {
     font-weight: 800;
     color: var(--text-main);
     line-height: 1.1;
+    overflow-wrap: break-word;
 }
 
 .stat-label {
@@ -526,211 +634,402 @@ body {
 /* =========================================
    Add Anime Screen Styles
    ========================================= */
+/* --- Add Anime Screen Refinement --- */
 .add-screen-container {
-    max-width: 600px;
-    margin: 40px auto;
-    background: white;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.add-screen-header {
-    text-align: center;
-    margin-bottom: 30px;
+    max-width: 700px;
+    margin: 40px auto 80px;
+    background: var(--card-bg);
+    padding: 40px;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+    /* プレミアムな柔らかい影 */
+    animation: slideUp 0.5s ease;
 }
 
 .add-screen-header h2 {
-    font-size: 1.8rem;
-    margin-bottom: 10px;
+    font-size: 2.2rem;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 35px;
     color: var(--text-main);
+    letter-spacing: -0.5px;
 }
 
-.add-description,
-.search-spec {
-    font-size: 0.9rem;
-    color: var(--text-sub);
-    line-height: 1.6;
-    margin-bottom: 20px;
-    background: #f8fafc;
-    padding: 15px;
-    border-radius: 8px;
+.header-icon {
+    display: inline-block;
+    background: var(--primary);
+    color: white;
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+    border-radius: 10px;
+    font-size: 1.2rem;
+    margin-right: 12px;
+    vertical-align: middle;
 }
 
-.search-spec h3 {
-    font-size: 1rem;
-    margin-bottom: 8px;
-    color: var(--text-main);
-}
-
-.add-form {
-    display: flex;
-    flex-direction: column;
+.add-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 20px;
     margin-bottom: 30px;
 }
 
-.add-form input {
-    width: 100%;
-    padding: 15px;
-    border: 2px solid var(--border-color);
-    border-radius: 8px;
-    font-size: 1.1rem;
-    transition: border-color 0.3s;
+@media (max-width: 600px) {
+    .add-info-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
-.add-form input:focus {
-    border-color: var(--primary);
-    outline: none;
+.add-description,
+.search-spec {
+    background: #fdfdfd;
+    border: 1px solid #f0f0f0;
+    padding: 24px;
+    border-radius: 16px;
+    height: 100%;
 }
 
-.action-button {
-    padding: 15px;
-    border: none;
-    border-radius: 8px;
+.add-description h3,
+.search-spec h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 10px;
+}
+
+.add-description ul,
+.search-spec ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.add-description li,
+.search-spec li {
+    font-size: 0.9rem;
+    color: var(--text-sub);
+    line-height: 1.6;
+    margin-bottom: 10px;
+    position: relative;
+    padding-left: 18px;
+}
+
+.add-description li::before,
+.search-spec li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--primary);
     font-weight: bold;
-    font-size: 1.1rem;
-    cursor: pointer;
-    transition: background 0.3s, transform 0.1s;
 }
 
-.add-button {
-    background: var(--primary);
-    color: white;
+
+/* Form Styling */
+.add-form {
+    margin: 40px 0;
 }
 
-.add-button:hover {
-    background: var(--primary-hover);
+.search-field-wrapper {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 20px 25px 20px 55px !important;
+    font-size: 1.2rem !important;
+    border: 3px solid #f0f0f0 !important;
+    border-radius: 15px !important;
+    background: #f9f9f9;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+.search-input:focus {
+    background: white;
+    border-color: var(--primary) !important;
+    box-shadow: 0 8px 20px rgba(74, 144, 226, 0.1) !important;
     transform: translateY(-2px);
 }
 
-.add-button:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-    transform: none;
+.input-search-icon {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.4rem;
+    opacity: 0.5;
 }
 
-.back-button {
-    background: #e2e8f0;
-    color: var(--text-main);
+.primary-button {
+    width: 100%;
+    padding: 18px !important;
+    font-size: 1.2rem !important;
+    background: var(--primary) !important;
+    color: white !important;
+    border-radius: 15px !important;
+    box-shadow: 0 10px 20px rgba(74, 144, 226, 0.25) !important;
+    transition: all 0.3s ease !important;
 }
 
-.back-button:hover {
-    background: #cbd5e1;
+.primary-button:hover:not(:disabled) {
+    background: #357abd !important;
+    transform: translateY(-3px);
+    box-shadow: 0 12px 25px rgba(74, 144, 226, 0.35) !important;
 }
 
-.status-message {
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-    margin-bottom: 20px;
-    animation: fadeIn 0.3s;
-}
-
-.status-message.success {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-}
-
-.status-message.error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
-}
-
-.registered-anime-preview {
-    margin-top: 15px;
-    text-align: center;
-}
-
-.registered-anime-preview img {
-    height: 150px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    margin-top: 10px;
-}
-
-/* Floating Add Button in Home */
-.fab-add-button {
+/* Status Message Container */
+.status-message-container {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-    padding: 15px;
+    padding: 20px;
+    border-radius: 15px;
+    margin-top: 25px;
+    animation: fadeIn 0.4s ease;
+}
+
+.status-message-container.success {
+    background: #eefdf5;
+    border: 1px solid #c7f1d9;
+    color: #1a7f4e;
+}
+
+.status-message-container.error {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+    color: #c53030;
+}
+
+.status-icon {
+    font-size: 1.5rem;
+    margin-right: 15px;
+}
+
+.status-text {
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
+/* Preview Confirmation Card Refined */
+.preview-confirmation-card {
+    margin-top: 40px;
+    border: 2px solid var(--primary);
+    border-radius: 20px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 10px 25px rgba(74, 144, 226, 0.1);
+    animation: expandIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes expandIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.preview-card-header {
     background: var(--primary);
     color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 1.1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background 0.3s;
-    margin-bottom: 30px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.fab-add-button:hover {
-    background: var(--primary-hover);
-}
-
-/* Confirmation Preview Styles */
-.preview-card {
-    background: #f8fafc;
-    border: 2px solid var(--primary);
-    border-radius: 12px;
-    padding: 20px;
+    padding: 15px;
     text-align: center;
-    margin-bottom: 25px;
-    animation: fadeIn 0.3s;
 }
 
-.preview-title {
-    font-size: 1.4rem;
-    font-weight: bold;
-    color: var(--text-main);
-    margin-bottom: 15px;
+.preview-card-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.preview-card-body {
+    display: flex;
+    padding: 25px;
+    gap: 25px;
+}
+
+@media (max-width: 500px) {
+    .preview-card-body {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
 }
 
 .preview-image {
-    max-width: 200px;
-    height: auto;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    margin-bottom: 10px;
+    width: 140px;
+    height: 190px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
-.preview-meta {
-    margin-top: 10px;
+.preview-info-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.preview-anime-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    color: var(--text-main);
+}
+
+.preview-tags {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.preview-tag {
+    font-size: 0.8rem;
+    background: #f0f4f8;
+    color: var(--primary);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.preview-genres {
     font-size: 0.9rem;
     color: var(--text-sub);
+    font-style: italic;
 }
 
-.button-group {
+.preview-card-actions {
     display: flex;
+    padding: 20px 25px;
     gap: 15px;
-    margin-top: 10px;
+    background: #f9fbff;
+    border-top: 1px solid #edf2f7;
 }
 
-.confirm-button {
-    background: var(--primary);
-    color: white;
+.confirm-execution-button {
     flex: 2;
+    background: #10b981 !important;
+    color: white !important;
+    padding: 15px !important;
+    border-radius: 12px !important;
+    font-weight: 700 !important;
+    box-shadow: 0 5px 15px rgba(16, 185, 129, 0.3) !important;
 }
 
-.confirm-button:hover {
-    background: var(--primary-hover);
+.confirm-execution-button:hover {
+    background: #059669 !important;
     transform: translateY(-2px);
 }
 
-.cancel-button {
-    background: #ef4444;
-    color: white;
+.dismiss-button {
     flex: 1;
+    background: #f1f5f9 !important;
+    color: #64748b !important;
+    padding: 15px !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
 }
 
-.cancel-button:hover {
-    background: #dc2626;
-    transform: translateY(-2px);
+.dismiss-button:hover {
+    background: #e2e8f0 !important;
+}
+
+/* Footer & Back Link */
+.add-screen-footer {
+    margin-top: 40px;
+    text-align: center;
+}
+
+.back-to-home-link {
+    background: none;
+    border: none;
+    color: var(--text-sub);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 10px 20px;
+    border-radius: 10px;
+    transition: all 0.3s;
+}
+
+.back-to-home-link:hover {
+    color: var(--primary);
+    background: #f0f7ff;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =========================================
+   Final UI Refinements - Action Button
+   ========================================= */
+.fab-add-button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    background: #4a90e2 !important;
+    color: white !important;
+    border: none !important;
+    padding: 14px 28px !important;
+    /* 他の入力要素と高さを合わせる */
+    border-radius: 12px !important;
+    font-size: 1rem !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    margin: 0 !important;
+    /* 横並びなので中央寄せマージンを削除 */
+    width: auto !important;
+    white-space: nowrap !important;
+}
+
+.fab-add-button::before {
+    content: "+" !important;
+    font-size: 1.4rem !important;
+    font-weight: 400 !important;
+    margin-right: 2px !important;
+}
+
+.fab-add-button:hover {
+    background: #357abd !important;
+    transform: translateY(-3px) !important;
+    box-shadow: 0 6px 15px rgba(74, 144, 226, 0.3) !important;
+}
+
+.fab-add-button:active {
+    transform: translateY(-1px) !important;
+}
+
+/* Responsive adjustment for controls */
+@media (max-width: 850px) {
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .fab-add-button {
+        width: 100% !important;
+    }
 }
