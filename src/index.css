@@ -1394,6 +1394,30 @@ body {
     gap: 15px;
 }
 
+@media (max-width: 480px) {
+    .review-hits-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        max-height: 70vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-right: 6px;
+    }
+
+    .review-hit-item {
+        padding: 8px;
+        gap: 8px;
+    }
+
+    .hit-title {
+        font-size: 0.8rem;
+    }
+
+    .hit-meta {
+        font-size: 0.65rem;
+    }
+}
+
 .review-hit-item {
     position: relative;
     border: 1px solid #eee;
@@ -1705,6 +1729,8 @@ body {
     background: transparent;
     cursor: pointer;
     width: auto;
+    color: #000 !important;
+    -webkit-text-fill-color: #000 !important;
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
     background-repeat: no-repeat;
@@ -1712,6 +1738,10 @@ body {
     background-size: 16px;
     padding-right: 34px;
     outline: none;
+}
+
+.sort-box select option {
+    color: #000 !important;
 }
 
 .sort-order-button {
@@ -1730,6 +1760,7 @@ body {
     flex-shrink: 0;
     padding: 0;
     line-height: 1;
+    color: #000 !important;
 }
 
 .sort-order-button:hover {
