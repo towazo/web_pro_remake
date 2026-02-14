@@ -839,23 +839,43 @@ body {
 .stat-info {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .stat-value {
-    font-size: 2.2rem;
+    font-size: clamp(1.4rem, 3.2vw, 2.2rem);
     font-weight: 950;
     color: black;
     line-height: 1;
     letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .stat-label {
-    font-size: 0.8rem;
+    font-size: clamp(0.72rem, 2.2vw, 0.8rem);
     color: #888;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-top: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stat-card:last-child .stat-value {
+    font-size: clamp(1.1rem, 2.8vw, 2.0rem);
+    letter-spacing: -0.03em;
+    text-overflow: clip;
+    overflow: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.stat-card:last-child .stat-value::-webkit-scrollbar {
+    display: none;
 }
 
 /* =========================================
