@@ -598,6 +598,22 @@ body {
     max-width: 850px;
 }
 
+.hero-slider-container .hero-content {
+    padding: 0 64px;
+}
+
+@media (max-width: 768px) {
+    .hero-slider-container .hero-content {
+        padding: 0 48px;
+    }
+}
+
+@media (max-width: 480px) {
+    .hero-slider-container .hero-content {
+        padding: 0;
+    }
+}
+
 .hero h1 {
     font-size: clamp(1.8rem, 5vw, 2.8rem);
     font-weight: 900;
@@ -607,6 +623,13 @@ body {
     padding-bottom: 15px;
     letter-spacing: -0.02em;
     line-height: 1.1;
+}
+
+.hero-slider-container .hero h1 {
+    overflow-wrap: normal;
+    word-break: normal;
+    line-break: strict;
+    text-wrap: balance;
 }
 
 .hero-meta {
@@ -672,6 +695,27 @@ body {
 
 .slider-next {
     right: 15px;
+}
+
+@media (max-width: 480px) {
+    .slider-nav-button {
+        display: none;
+        top: auto;
+        bottom: 64px;
+        transform: none;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .slider-prev {
+        left: 10px;
+    }
+
+    .slider-next {
+        right: 10px;
+    }
 }
 
 /* Tutorial Overrides within Slider */
