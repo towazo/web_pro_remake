@@ -35,6 +35,8 @@ function App() {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("All");
+  const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year', 'score'
+  const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
 
   // 1. Storage Persistence
   useEffect(() => {
@@ -49,6 +51,29 @@ function App() {
     setFeaturedSlides(slides);
   }, [animeList]);
 
+  // 3. Scroll Reset on View Change
+  useEffect(() => {
+    // Immediate scroll
+    window.scrollTo(0, 0);
+
+    // Also try on the next animation frame to ensure layout has settled
+    const scrollReset = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+
+    const animId = requestAnimationFrame(scrollReset);
+
+    // One more check after a short delay for good measure (some browsers/layouts need this)
+    const timeoutId = setTimeout(scrollReset, 10);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      clearTimeout(timeoutId);
+    };
+  }, [view]);
+
   // 3. Initial Data Acquisition (Hydration) - Empty for Clean Start
 
   // 4. Action Handlers
@@ -56,7 +81,9 @@ function App() {
     if (animeList.some(a => a.id === data.id)) {
       return { success: false, message: 'その作品は既に追加されています。' };
     }
-    setAnimeList(prev => [data, ...prev]);
+    // Add timestamp for "added" sort
+    const animeWithDate = { ...data, addedAt: Date.now() };
+    setAnimeList(prev => [animeWithDate, ...prev]);
     return { success: true };
   };
 
@@ -80,7 +107,7 @@ function App() {
   }, [animeList]);
 
   const filteredList = useMemo(() => {
-    return animeList.filter(anime => {
+    let result = animeList.filter(anime => {
       const titleNative = (anime.title.native || "").toLowerCase();
       const titleRomaji = (anime.title.romaji || "").toLowerCase();
       const searchLower = searchQuery.toLowerCase();
@@ -90,7 +117,38 @@ function App() {
 
       return matchesSearch && matchesGenre;
     });
-  }, [animeList, searchQuery, selectedGenre]);
+
+    // Apply Sorting
+    result.sort((a, b) => {
+      let valA, valB;
+
+      switch (sortKey) {
+        case 'title':
+          valA = (a.title.romaji || a.title.native || "").toLowerCase();
+          valB = (b.title.romaji || b.title.native || "").toLowerCase();
+          break;
+        case 'year':
+          valA = a.seasonYear || 0;
+          valB = b.seasonYear || 0;
+          break;
+        case 'score':
+          valA = a.averageScore || 0;
+          valB = b.averageScore || 0;
+          break;
+        case 'added':
+        default:
+          valA = a.addedAt || 0;
+          valB = b.addedAt || 0;
+          break;
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [animeList, searchQuery, selectedGenre, sortKey, sortOrder]);
 
   // 6. UI Render
   return (
@@ -119,6 +177,7 @@ function App() {
           <AddAnimeScreen
             onAdd={handleAddAnime}
             onBack={() => setView('home')}
+            animeList={animeList}
           />
         </main>
       ) : (
@@ -133,7 +192,7 @@ function App() {
                 <i className="search-icon">🔍</i>
                 <input
                   type="text"
-                  placeholder="タイトルを検索..."
+                  placeholder="登録された作品からタイトルを検索"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -146,6 +205,22 @@ function App() {
                     <option key={genre} value={genre}>{translateGenre(genre)}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="sort-box">
+                <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+                  <option value="added">追加順</option>
+                  <option value="title">タイトル順</option>
+                  <option value="year">放送年順</option>
+                  <option value="score">評価順</option>
+                </select>
+                <button
+                  className="sort-order-button"
+                  onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                  title={sortOrder === 'asc' ? '昇順' : '降順'}
+                >
+                  {sortOrder === 'asc' ? '↑' : '↓'}
+                </button>
               </div>
 
               <button className="fab-add-button" onClick={() => setView('add')}>
