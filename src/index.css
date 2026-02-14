@@ -1144,20 +1144,24 @@ body {
 
 .preview-card-actions {
     display: flex;
+    width: 100%;
     padding: 0;
     border-top: 1px solid #000;
 }
 
 .confirm-execution-button {
-    flex: 2;
+    flex: 1.6;
     background: #000 !important;
     color: white !important;
-    padding: 20px !important;
+    padding: 0 24px !important;
     border-radius: 0 !important;
     font-weight: 900 !important;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.05em;
     border: none !important;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .confirm-execution-button:hover {
@@ -1165,9 +1169,14 @@ body {
 }
 
 .dismiss-button {
+    flex: 1;
     background: #fff !important;
     color: #000 !important;
     border: 1px solid #000 !important;
+    padding: 0 24px !important;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .dismiss-button:hover {
