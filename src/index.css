@@ -128,14 +128,34 @@ body {
 .controls {
     display: flex;
     align-items: stretch;
-    gap: 16px;
+    gap: 12px;
     margin: 50px 0;
     flex-wrap: wrap;
+    width: 100%;
+}
+
+.search-box {
+    flex: 2 1 320px;
+    min-width: 260px;
+}
+
+.filter-box {
+    flex: 1 1 220px;
+    min-width: 200px;
+}
+
+.sort-box {
+    flex: 1 1 240px;
+    min-width: 220px;
+}
+
+.fab-add-button {
+    flex: 0 0 170px;
 }
 
 @media (max-width: 850px) {
     .controls {
-        gap: 12px;
+        gap: 10px;
         margin: 30px 0;
     }
 
@@ -143,11 +163,12 @@ body {
     .filter-box,
     .sort-box {
         flex: 1;
-        min-width: 250px;
+        min-width: 200px;
     }
 
     .fab-add-button {
         flex: 0 0 auto;
+        min-width: 140px;
     }
 }
 
@@ -172,12 +193,12 @@ body {
 .search-box input,
 .filter-box select {
     width: 100%;
-    height: 56px;
-    /* Increased height for premium feel and accessibility */
+    height: 52px;
+    /* Optimized height for better mobile touch targets */
     padding: 0 16px 0 46px;
     border: 1px solid var(--border-strong);
     border-radius: 0;
-    font-size: 1rem;
+    font-size: 0.95rem;
     background: white;
     transition: all 0.2s ease;
     outline: none;
@@ -186,12 +207,13 @@ body {
 
 .filter-box select {
     padding-left: 16px;
+    padding-right: 40px;
     cursor: pointer;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 16px center;
-    background-size: 18px;
+    background-position: right 12px center;
+    background-size: 16px;
 }
 
 .search-box input:focus,
@@ -479,7 +501,25 @@ body {
 
 @media (max-width: 768px) {
     .controls {
-        flex-direction: column;
+        gap: 8px;
+    }
+
+    .search-box,
+    .filter-box,
+    .sort-box {
+        width: 100% !important;
+        display: flex !important;
+    }
+
+    .filter-box select,
+    .sort-box select {
+        flex: 1 !important;
+        width: 100% !important;
+    }
+
+    .fab-add-button {
+        width: 100% !important;
+        min-width: auto !important;
     }
 }
 
@@ -1591,21 +1631,21 @@ body {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 8px !important;
-    background: #000 !important;
+    height: 52px !important;
+    padding: 0 20px !important;
+    background: var(--primary) !important;
     color: white !important;
     border: none !important;
-    height: 56px !important;
-    /* Unified height */
-    padding: 0 24px !important;
     border-radius: 0 !important;
-    /* Sharp corners */
     font-size: 0.9rem !important;
     font-weight: 800 !important;
     cursor: pointer !important;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     transition: all 0.2s ease !important;
+    white-space: nowrap;
+    min-width: 140px;
+    flex-shrink: 0;
 }
 
 .fab-add-button:hover {
@@ -1615,9 +1655,9 @@ body {
 
 .fab-add-button::before {
     content: "+" !important;
-    font-size: 1.4rem !important;
+    font-size: 1.2rem !important;
     font-weight: 400 !important;
-    margin-right: 2px !important;
+    margin-right: 6px !important;
 }
 
 .fab-add-button:active {
@@ -1642,32 +1682,45 @@ body {
     gap: 0;
     border: 1px solid var(--border-strong);
     background: #fff;
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: unset;
 }
 
 .sort-box select {
     border: none;
-    padding: 0 20px;
-    height: 56px;
-    font-size: 1rem;
+    padding: 0 16px;
+    height: 52px;
+    font-size: 0.95rem;
     font-weight: 700;
     background: transparent;
     cursor: pointer;
+    width: auto;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+    padding-right: 34px;
     outline: none;
 }
 
 .sort-order-button {
-    width: 56px;
-    height: 56px;
+    width: 40px;
+    height: 52px;
     border: none;
     border-left: 1px solid var(--border-strong);
     background: transparent;
-    font-size: 1.4rem;
-    font-weight: 900;
+    font-size: 1.05rem;
+    font-weight: bold;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+    line-height: 1;
 }
 
 .sort-order-button:hover {
