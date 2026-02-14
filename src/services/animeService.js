@@ -22,6 +22,27 @@ const ANIME_QUERY = `
   }
 `;
 
+const ANIME_LIST_QUERY = `
+  query ($search: String, $perPage: Int) {
+    Page (perPage: $perPage) {
+      media (search: $search, type: ANIME) {
+        id
+        title {
+          native
+          romaji
+          english
+        }
+        coverImage {
+          large
+        }
+        seasonYear
+        episodes
+        genres
+      }
+    }
+  }
+`;
+
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const fetchAnimeDetails = async (title) => {
@@ -45,6 +66,30 @@ export const fetchAnimeDetails = async (title) => {
   } catch (error) {
     console.error(`Error fetching ${title}:`, error);
     return null;
+  }
+};
+
+export const searchAnimeList = async (title, perPage = 8) => {
+  try {
+    const response = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        query: ANIME_LIST_QUERY,
+        variables: { search: title, perPage }
+      })
+    });
+
+    if (!response.ok) return [];
+
+    const result = await response.json();
+    return result.data?.Page?.media || [];
+  } catch (error) {
+    console.error(`Error searching list for ${title}:`, error);
+    return [];
   }
 };
 

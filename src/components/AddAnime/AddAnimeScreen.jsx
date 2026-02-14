@@ -1,19 +1,38 @@
-import React, { useState } from 'react';
-import { fetchAnimeDetails } from '../../services/animeService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { fetchAnimeDetails, searchAnimeList } from '../../services/animeService';
 import { translateGenre } from '../../constants/animeData';
 
 function AddAnimeScreen({ onAdd, onBack }) {
     const [query, setQuery] = useState('');
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
     const [isSearching, setIsSearching] = useState(false);
 
-    // 1. Search Logic
+    // 1. Autocomplete Search Logic (Debounced)
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (query.trim().length >= 2 && !previewData) {
+                const results = await searchAnimeList(query, 8);
+                setSuggestions(results);
+                setShowSuggestions(true);
+            } else {
+                setSuggestions([]);
+                setShowSuggestions(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [query, previewData]);
+
+    // 2. Search Logic (Manual Search)
     const handleSearch = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         if (!query.trim()) return;
 
         setIsSearching(true);
+        setShowSuggestions(false);
         setPreviewData(null); // Clear previous preview
         setStatus({ type: 'info', message: '検索中...' });
 
@@ -32,7 +51,16 @@ function AddAnimeScreen({ onAdd, onBack }) {
         }
     };
 
-    // 2. Confirm & Add Logic
+    // 3. Selection Logic
+    const handleSelectSuggestion = (anime) => {
+        setPreviewData(anime);
+        setQuery(anime.title.native || anime.title.romaji);
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setStatus({ type: 'info', message: '作品が選択されました。内容を確認してください。' });
+    };
+
+    // 4. Confirm & Add Logic
     const handleConfirm = () => {
         if (!previewData) return;
 
@@ -46,11 +74,13 @@ function AddAnimeScreen({ onAdd, onBack }) {
         }
     };
 
-    // 3. Cancel Logic
+    // 5. Cancel Logic
     const handleCancel = () => {
         setPreviewData(null);
         setQuery('');
         setStatus({ type: '', message: '' });
+        setSuggestions([]);
+        setShowSuggestions(false);
     };
 
     return (
@@ -63,7 +93,7 @@ function AddAnimeScreen({ onAdd, onBack }) {
                         <h3>操作方法</h3>
                         <ul>
                             <li>追加したい作品名を入力してください</li>
-                            <li>「検索」ボタンから作品を検索します</li>
+                            <li>表示される候補から選択するか、検索ボタンを押してください</li>
                             <li>正しい作品が表示されたら「登録する」を押してください</li>
                         </ul>
                     </div>
@@ -84,12 +114,47 @@ function AddAnimeScreen({ onAdd, onBack }) {
                     <input
                         type="text"
                         value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        onChange={(e) => {
+                            setQuery(e.target.value);
+                            if (previewData) setPreviewData(null); // Reset preview when typing
+                        }}
                         placeholder="作品タイトルを入力（日本語・英語可）"
                         autoFocus
                         disabled={isSearching}
                         className="search-input"
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                        onFocus={() => {
+                            if (suggestions.length > 0) setShowSuggestions(true);
+                        }}
                     />
+
+                    {/* Suggestions Dropdown */}
+                    {showSuggestions && suggestions.length > 0 && (
+                        <div className="suggestions-dropdown">
+                            {suggestions.map((anime) => (
+                                <div
+                                    key={anime.id}
+                                    className="suggestion-item"
+                                    onClick={() => handleSelectSuggestion(anime)}
+                                >
+                                    <img
+                                        src={anime.coverImage.large}
+                                        alt=""
+                                        className="suggestion-thumb"
+                                    />
+                                    <div className="suggestion-info">
+                                        <div className="suggestion-title">
+                                            {anime.title.native || anime.title.romaji}
+                                        </div>
+                                        <div className="suggestion-meta">
+                                            {anime.seasonYear && <span>{anime.seasonYear}年</span>}
+                                            {anime.episodes && <span>{anime.episodes}話</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <button type="submit" className="action-button primary-button" disabled={isSearching}>
                     {isSearching ? '検索中...' : '作品を検索する'}
