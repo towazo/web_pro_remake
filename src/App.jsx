@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 // Constants & Multi-language data
 import { WATCHED_TITLES, ANIME_DESCRIPTIONS, translateGenre } from './constants/animeData';
 
 // Services
-import { fetchAnimeDetails, selectFeaturedAnimes, sleep } from './services/animeService';
+import { selectFeaturedAnimes } from './services/animeService';
 
 // Components
 import LoadingOverlay from './components/Common/LoadingOverlay';
@@ -35,8 +35,16 @@ function App() {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("All");
-  const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year', 'score'
+  const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year'
   const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
+  const [quickNavState, setQuickNavState] = useState({
+    visible: false,
+    mobile: false,
+    nearTop: true,
+    nearBottom: false,
+  });
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
 
   // 1. Storage Persistence
   useEffect(() => {
@@ -74,9 +82,87 @@ function App() {
     };
   }, [view]);
 
+  // 4. Home Quick Navigation (Top/Bottom)
+  useEffect(() => {
+    if (view !== 'home') {
+      setIsSelectionMode(false);
+      setSelectedAnimeIds([]);
+      setQuickNavState({
+        visible: false,
+        mobile: false,
+        nearTop: true,
+        nearBottom: false,
+      });
+      return;
+    }
+
+    let rafId = null;
+    const updateQuickNav = () => {
+      const scrollTop = window.scrollY || window.pageYOffset || 0;
+      const viewportH = window.innerHeight || 0;
+      const docH = Math.max(
+        document.body?.scrollHeight || 0,
+        document.documentElement?.scrollHeight || 0
+      );
+      const maxScroll = Math.max(0, docH - viewportH);
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+
+      const nearTop = scrollTop <= 24;
+      const nearBottom = maxScroll - scrollTop <= 24;
+      const hasLongContent = maxScroll > 240;
+      const visible = hasLongContent && (!isMobile || scrollTop > 140 || nearBottom);
+
+      setQuickNavState((prev) => {
+        if (
+          prev.visible === visible &&
+          prev.mobile === isMobile &&
+          prev.nearTop === nearTop &&
+          prev.nearBottom === nearBottom
+        ) {
+          return prev;
+        }
+        return { visible, mobile: isMobile, nearTop, nearBottom };
+      });
+    };
+
+    const requestUpdate = () => {
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updateQuickNav();
+      });
+    };
+
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate);
+    updateQuickNav();
+
+    return () => {
+      if (rafId != null) cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', requestUpdate);
+      window.removeEventListener('resize', requestUpdate);
+    };
+  }, [view, animeList.length, searchQuery, selectedGenre, sortKey, sortOrder]);
+
+  useEffect(() => {
+    setSelectedAnimeIds((prev) => prev.filter((id) => animeList.some((anime) => anime.id === id)));
+  }, [animeList]);
+
   // 3. Initial Data Acquisition (Hydration) - Empty for Clean Start
 
   // 4. Action Handlers
+  const handleScrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleScrollToBottom = () => {
+    const docH = Math.max(
+      document.body?.scrollHeight || 0,
+      document.documentElement?.scrollHeight || 0
+    );
+    window.scrollTo({ top: docH, behavior: 'smooth' });
+  };
+
   const handleAddAnime = (data) => {
     if (animeList.some(a => a.id === data.id)) {
       return { success: false, message: 'その作品は既に追加されています。' };
@@ -95,6 +181,43 @@ function App() {
       }
       return updated;
     });
+  };
+
+  const handleLongPressAnime = (id) => {
+    setIsSelectionMode(true);
+    setSelectedAnimeIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  };
+
+  const handleToggleAnimeSelection = (id) => {
+    if (!isSelectionMode) return;
+    setSelectedAnimeIds((prev) =>
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
+    );
+  };
+
+  const handleCancelSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedAnimeIds([]);
+  };
+
+  const handleBulkRemoveSelected = () => {
+    if (selectedAnimeIds.length === 0) return;
+
+    if (!window.confirm(`選択した ${selectedAnimeIds.length} 件の作品を削除しますか？`)) {
+      return;
+    }
+
+    setAnimeList((prev) => {
+      const selectedSet = new Set(selectedAnimeIds);
+      const updated = prev.filter((anime) => !selectedSet.has(anime.id));
+      if (updated.length === 0) {
+        localStorage.removeItem('myAnimeList');
+      }
+      return updated;
+    });
+
+    setIsSelectionMode(false);
+    setSelectedAnimeIds([]);
   };
 
   // 5. Data Derived States (Filters/Computed)
@@ -130,10 +253,6 @@ function App() {
         case 'year':
           valA = a.seasonYear || 0;
           valB = b.seasonYear || 0;
-          break;
-        case 'score':
-          valA = a.averageScore || 0;
-          valB = b.averageScore || 0;
           break;
         case 'added':
         default:
@@ -184,7 +303,7 @@ function App() {
         <>
           <HeroSlider slides={featuredSlides} />
 
-          <main className="main-content">
+          <main className={`main-content${isSelectionMode ? ' has-selection-dock' : ''}`}>
             <StatsSection animeList={animeList} />
 
             <div className="controls">
@@ -212,7 +331,6 @@ function App() {
                   <option value="added">追加順</option>
                   <option value="title">タイトル順</option>
                   <option value="year">放送年順</option>
-                  <option value="score">評価順</option>
                 </select>
                 <button
                   className="sort-order-button"
@@ -232,9 +350,27 @@ function App() {
               {filteredList.length} 作品が見つかりました
             </div>
 
+            {isSelectionMode && (
+              <div className="selection-toolbar" role="region" aria-label="選択モード">
+                <div className="selection-toolbar-info">
+                  <p className="selection-toolbar-title">選択モード</p>
+                  <p className="selection-toolbar-count">{selectedAnimeIds.length} 件を選択中</p>
+                  <p className="selection-toolbar-sub">カードをタップして選択/解除できます</p>
+                </div>
+              </div>
+            )}
+
             <div className="anime-grid">
               {filteredList.map(anime => (
-                <AnimeCard key={anime.id} anime={anime} onRemove={handleRemoveAnime} />
+                <AnimeCard
+                  key={anime.id}
+                  anime={anime}
+                  onRemove={handleRemoveAnime}
+                  isSelectionMode={isSelectionMode}
+                  isSelected={selectedAnimeIds.includes(anime.id)}
+                  onToggleSelect={handleToggleAnimeSelection}
+                  onLongPress={handleLongPressAnime}
+                />
               ))}
             </div>
 
@@ -248,6 +384,54 @@ function App() {
       <footer className="app-footer">
         <p>AniTrigger &copy; 2025 - Data provided by AniList API</p>
       </footer>
+
+      {view === 'home' && isSelectionMode && (
+        <div className="selection-action-dock" role="region" aria-label="選択モード操作">
+          <p className="selection-action-dock-count">{selectedAnimeIds.length} 件を選択中</p>
+          <div className="selection-action-dock-buttons">
+            <button
+              type="button"
+              className="selection-toolbar-delete"
+              onClick={handleBulkRemoveSelected}
+              disabled={selectedAnimeIds.length === 0}
+            >
+              選択した作品を削除
+            </button>
+            <button
+              type="button"
+              className="selection-toolbar-cancel"
+              onClick={handleCancelSelectionMode}
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
+
+      {view === 'home' && !isSelectionMode && quickNavState.visible && (
+        <aside className={`quick-nav-rail ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
+          <button
+            type="button"
+            className="quick-nav-button"
+            onClick={handleScrollToTop}
+            disabled={quickNavState.nearTop}
+            aria-label="ページ最上部へ移動"
+            title="最上部へ"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="quick-nav-button"
+            onClick={handleScrollToBottom}
+            disabled={quickNavState.nearBottom}
+            aria-label="ページ最下部へ移動"
+            title="最下部へ"
+          >
+            ↓
+          </button>
+        </aside>
+      )}
     </div>
   );
 }
