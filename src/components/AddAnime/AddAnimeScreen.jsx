@@ -915,9 +915,10 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     };
 
     return (
-        <div className="add-screen-container has-bottom-home-nav">
+        <div className="add-screen-container page-shell has-bottom-home-nav">
             <div className="add-screen-header">
-                <h2>作品の追加</h2>
+                <h2 className="page-main-title">作品の追加</h2>
+                <p className="page-main-subtitle">マイリストやブックマークに追加する作品を探せます。</p>
 
                 <div className="entry-tab-switcher">
                     <button

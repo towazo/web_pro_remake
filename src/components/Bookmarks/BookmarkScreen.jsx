@@ -108,17 +108,17 @@ function BookmarkScreen({
   };
 
   return (
-    <div className={`bookmark-screen${isSelectionMode ? ' has-selection-dock' : ''}`}>
+    <div className={`bookmark-screen page-shell${isSelectionMode ? ' has-selection-dock' : ''}`}>
       <div className="bookmark-screen-header">
         <div>
-          <h2>ブックマーク</h2>
+          <h2 className="page-main-title">ブックマーク</h2>
           <p className="bookmark-screen-sub">{sortedBookmarks.length} 件の作品</p>
-          <p className="bookmark-screen-desc">今後見たい作品や気になる作品を保存できます。</p>
+          <p className="bookmark-screen-desc page-main-subtitle">今後見たい作品や気になる作品を保存できます。</p>
         </div>
         <div className="bookmark-screen-actions">
           <button type="button" className="bookmark-screen-add" onClick={onOpenBookmarkAdd}>
             <span className="bookmark-screen-add-icon">＋</span>
-            <span>作品を探す</span>
+            <span>作品を追加</span>
           </button>
         </div>
       </div>

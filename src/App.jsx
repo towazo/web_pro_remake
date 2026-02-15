@@ -473,10 +473,18 @@ function App() {
           />
         </main>
       ) : view === 'mylist' ? (
-          <main className={`main-content mylist-page-main${isSelectionMode ? ' has-selection-dock' : ''}`}>
-            <div className="mylist-section-header">
-              <h3 className="mylist-section-title">マイリスト</h3>
-              <p className="mylist-section-sub">登録済み作品の検索・絞り込み・並び替え</p>
+          <main className={`main-content mylist-page-main page-shell${isSelectionMode ? ' has-selection-dock' : ' has-bottom-home-nav'}`}>
+            <div className="mylist-section-header bookmark-screen-header">
+              <div>
+                <h3 className="page-main-title">マイリスト</h3>
+                <p className="bookmark-screen-desc page-main-subtitle">登録済み作品の検索・絞り込み・並び替え</p>
+              </div>
+              <div className="bookmark-screen-actions">
+                <button className="bookmark-screen-add" onClick={() => navigateTo('add')}>
+                  <span className="bookmark-screen-add-icon">＋</span>
+                  <span>作品を追加</span>
+                </button>
+              </div>
             </div>
 
             <div className="controls">
@@ -514,9 +522,6 @@ function App() {
                 </button>
               </div>
 
-              <button className="fab-add-button" onClick={() => navigateTo('add')}>
-                マイリストに作品を追加
-              </button>
             </div>
 
             <div className="results-count">
@@ -556,8 +561,6 @@ function App() {
           <HeroSlider slides={featuredSlides} />
 
           <main className="main-content">
-            <StatsSection animeList={animeList} />
-
             <div className="bookmark-entry-bar">
               <button
                 type="button"
@@ -597,6 +600,12 @@ function App() {
                 ＋
               </button>
             </div>
+
+            <p className="page-guide-text">
+              目的に合わせて移動できます。視聴済みは「マイリスト」、あとで見たい作品は「ブックマーク」で管理してください。
+            </p>
+
+            <StatsSection animeList={animeList} />
           </main>
         </>
       )}
@@ -626,6 +635,14 @@ function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {view === 'mylist' && !isSelectionMode && (
+        <nav className="screen-bottom-home-nav" aria-label="画面移動">
+          <button type="button" className="screen-bottom-home-button" onClick={() => navigateTo('home')}>
+            ← ホームへ戻る
+          </button>
+        </nav>
       )}
 
       {view === 'mylist' && !isSelectionMode && quickNavState.visible && (

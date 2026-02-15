@@ -9,6 +9,36 @@
     /* Medium Gray */
     --border-color: #eeeeee;
     --border-strong: #000000;
+    --fs-heading-xl: 2rem;
+    --fs-heading-lg: 1.5rem;
+    --fs-heading-md: 1.2rem;
+    --fs-body-md: 0.95rem;
+    --fs-body-sm: 0.84rem;
+    --fs-caption: 0.76rem;
+    --lh-heading: 1.3;
+    --lh-body: 1.6;
+}
+
+@media (max-width: 768px) {
+    :root {
+        --fs-heading-xl: 1.65rem;
+        --fs-heading-lg: 1.32rem;
+        --fs-heading-md: 1.08rem;
+        --fs-body-md: 0.9rem;
+        --fs-body-sm: 0.8rem;
+        --fs-caption: 0.74rem;
+    }
+}
+
+@media (max-width: 480px) {
+    :root {
+        --fs-heading-xl: 1.45rem;
+        --fs-heading-lg: 1.2rem;
+        --fs-heading-md: 1rem;
+        --fs-body-md: 0.88rem;
+        --fs-body-sm: 0.78rem;
+        --fs-caption: 0.72rem;
+    }
 }
 
 * {
@@ -31,6 +61,29 @@ body {
     margin: 0 auto;
     padding: 0 40px;
     position: relative;
+}
+
+.page-shell {
+    max-width: 900px;
+    margin: 60px auto 120px;
+    background: #ffffff;
+    padding: 60px 80px;
+    border: 1px solid var(--border-strong);
+    border-radius: 0;
+}
+
+@media (max-width: 768px) {
+    .page-shell {
+        padding: 30px 24px;
+        margin: 22px 12px 72px;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-shell {
+        padding: 22px 16px;
+        margin: 14px 8px 56px;
+    }
 }
 
 @media (max-width: 768px) {
@@ -77,11 +130,12 @@ body {
     border-right: 1px solid #000;
     background: #fff;
     color: #000;
-    font-size: 0.84rem;
+    font-size: var(--fs-body-sm);
     font-weight: 800;
     cursor: pointer;
     padding: 0 10px;
     white-space: nowrap;
+    line-height: var(--lh-heading);
 }
 
 .global-view-nav-button:last-child {
@@ -268,10 +322,9 @@ body {
 .results-count {
     margin-bottom: 20px;
     color: var(--text-main);
-    font-size: 0.85rem;
+    font-size: var(--fs-body-sm);
     font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     border-left: 4px solid #000;
     padding-left: 12px;
 }
@@ -289,7 +342,7 @@ body {
     border: 1px solid #000;
     background: #fff;
     color: #000;
-    font-size: 0.95rem;
+    font-size: var(--fs-body-md);
     font-weight: 900;
     display: flex;
     align-items: center;
@@ -333,39 +386,51 @@ body {
 }
 
 .mylist-section-header {
-    margin: 8px 0 12px;
-    padding-top: 16px;
-    border-top: 1px solid #e8e8e8;
-}
-
-.mylist-section-title {
-    margin: 0;
-    font-size: 1.28rem;
-    font-weight: 900;
-    color: #000;
-    letter-spacing: 0.01em;
-    line-height: 1.2;
-}
-
-.mylist-section-sub {
-    margin: 6px 0 0;
-    font-size: 0.8rem;
-    color: #666;
-    font-weight: 700;
+    margin: 0 0 20px;
+    padding-top: 0;
+    border-top: none;
 }
 
 .mylist-section-header+.controls {
-    margin-top: 16px;
+    margin-top: 0;
 }
 
-.mylist-page-main {
-    padding-top: 8px;
+.page-guide-text {
+    margin: 10px 0 16px;
+    font-size: var(--fs-body-sm);
+    color: #666;
+    line-height: var(--lh-body);
+    font-weight: 600;
 }
 
 .mylist-page-main .mylist-section-header {
     margin-top: 0;
     padding-top: 0;
     border-top: none;
+}
+
+.mylist-page-main .controls {
+    margin: 22px 0 28px;
+}
+
+.page-main-title {
+    font-size: var(--fs-heading-xl);
+    font-weight: 900;
+    color: #000;
+    line-height: var(--lh-heading);
+    letter-spacing: -0.01em;
+    border-bottom: 4px solid var(--border-strong);
+    padding-bottom: 10px;
+    display: inline-block;
+    margin: 0;
+}
+
+.page-main-subtitle {
+    margin: 8px 0 0;
+    font-size: var(--fs-body-sm);
+    color: #666;
+    font-weight: 600;
+    line-height: var(--lh-body);
 }
 
 .selection-toolbar {
@@ -473,6 +538,31 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     /* Slightly wider for better card balance */
     gap: 30px;
+}
+
+.mylist-page-main .anime-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px;
+}
+
+@media (max-width: 1024px) {
+    .mylist-page-main .anime-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .mylist-page-main .anime-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
+@media (max-width: 360px) {
+    .mylist-page-main .anime-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
 }
 
 @media (max-width: 500px) {
@@ -1229,17 +1319,24 @@ body {
    Stats Section Styles
    ========================================= */
 .stats-container {
-    display: flex;
-    justify-content: center;
-    gap: 25px;
-    margin: 60px 0 80px;
-    flex-wrap: wrap;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin: 18px 0 56px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     .stats-container {
-        gap: 15px;
-        margin: 40px 0 60px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .stats-container {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin: 14px 0 42px;
     }
 }
 
@@ -1247,21 +1344,18 @@ body {
     background: #ffffff;
     border: 2px solid var(--border-strong);
     border-radius: 0;
-    padding: 30px;
+    padding: 22px;
     display: flex;
     align-items: center;
-    gap: 25px;
-    min-width: 280px;
-    flex: 1;
-    max-width: 340px;
+    gap: 16px;
+    min-width: 0;
     transition: all 0.2s ease;
 }
 
 @media (max-width: 480px) {
     .stat-card {
-        padding: 20px;
-        min-width: 100%;
-        gap: 15px;
+        padding: 16px;
+        gap: 12px;
     }
 }
 
@@ -1298,22 +1392,21 @@ body {
 }
 
 .stat-value {
-    font-size: clamp(1.4rem, 3.2vw, 2.2rem);
+    font-size: clamp(1.05rem, 2.1vw, 1.5rem);
     font-weight: 950;
     color: black;
-    line-height: 1;
-    letter-spacing: -0.02em;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .stat-label {
-    font-size: clamp(0.72rem, 2.2vw, 0.8rem);
+    font-size: var(--fs-caption);
     color: #888;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.03em;
     margin-top: 6px;
     white-space: nowrap;
     overflow: hidden;
@@ -1321,20 +1414,13 @@ body {
 }
 
 .stat-card:last-child .stat-value {
-    font-size: clamp(1.1rem, 2.8vw, 2.0rem);
-    letter-spacing: -0.03em;
-    text-overflow: clip;
-    overflow: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-}
-
-.stat-card:last-child .stat-value::-webkit-scrollbar {
-    display: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.25;
 }
 
 .bookmark-screen {
-    margin: 10px 0 30px;
     padding-bottom: 110px;
 }
 
@@ -1347,23 +1433,23 @@ body {
 }
 
 .bookmark-screen-header h2 {
-    font-size: 1.8rem;
-    font-weight: 900;
     margin: 0;
 }
 
 .bookmark-screen-sub {
     margin-top: 6px;
-    font-size: 0.85rem;
+    font-size: var(--fs-body-sm);
     color: #666;
     font-weight: 700;
+    line-height: var(--lh-body);
 }
 
 .bookmark-screen-desc {
     margin-top: 6px;
-    font-size: 0.78rem;
+    font-size: var(--fs-caption);
     color: #666;
     font-weight: 600;
+    line-height: var(--lh-body);
 }
 
 .bookmark-action-notice {
@@ -1809,7 +1895,7 @@ body {
 
     .global-view-nav-button {
         min-height: 42px;
-        font-size: 0.8rem;
+        font-size: var(--fs-body-sm);
         padding: 0 6px;
     }
 
@@ -1819,32 +1905,12 @@ body {
 
     .bookmark-entry-main {
         min-height: 48px;
-        font-size: 0.88rem;
+        font-size: var(--fs-body-md);
     }
 
     .bookmark-entry-add {
         width: 52px;
         min-height: 48px;
-    }
-
-    .mylist-section-header {
-        margin: 10px 0 10px;
-        padding-top: 12px;
-    }
-
-    .mylist-section-title {
-        font-size: 1.12rem;
-    }
-
-    .mylist-section-sub {
-        font-size: 0.76rem;
-    }
-
-    .bookmark-screen {
-        margin: 6px 0 28px;
-        padding: 14px 10px 110px;
-        border: 1px solid #dddddd;
-        background: #ffffff;
     }
 
     .bookmark-screen-header {
@@ -1853,11 +1919,6 @@ body {
         margin-bottom: 14px;
         padding-bottom: 12px;
         border-bottom: 1px solid #ececec;
-    }
-
-    .bookmark-screen-header h2 {
-        font-size: 1.54rem;
-        line-height: 1.2;
     }
 
     .bookmark-screen-actions {
@@ -1871,7 +1932,7 @@ body {
     }
 
     .bookmark-screen-desc {
-        font-size: 0.74rem;
+        font-size: var(--fs-caption);
         line-height: 1.55;
     }
 
@@ -1972,14 +2033,6 @@ body {
         grid-template-columns: 1fr;
     }
 
-    .bookmark-screen {
-        padding: 12px 8px 110px;
-    }
-
-    .bookmark-screen-header h2 {
-        font-size: 1.42rem;
-    }
-
     .bookmark-screen-add,
     .bookmark-screen-home {
         min-height: 44px;
@@ -1991,6 +2044,15 @@ body {
 
     .mylist-section-header+.controls {
         margin-top: 12px;
+    }
+
+    .mylist-page-main .controls {
+        margin: 14px 0 18px;
+    }
+
+    .page-guide-text {
+        margin: 8px 0 12px;
+        font-size: var(--fs-caption);
     }
 
     .browse-quick-nav-rail.bookmark-add-quick-nav.mobile {
@@ -2043,29 +2105,17 @@ body {
    Add Anime Screen Styles
    ========================================= */
 .add-screen-container {
-    max-width: 900px;
-    margin: 60px auto 120px;
-    background: #ffffff;
-    padding: 60px 80px;
-    border: 1px solid var(--border-strong);
-    border-radius: 0;
     animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @media (max-width: 768px) {
-    .add-screen-container {
-        padding: 30px 24px;
-        margin: 22px 12px 72px;
-    }
-
     .add-screen-header {
         margin-bottom: 4px;
     }
 
     .add-screen-header h2 {
-        font-size: 1.58rem;
-        margin-bottom: 18px;
-        padding-bottom: 10px;
+        border-bottom-width: 3px;
+        padding-bottom: 8px;
     }
 
     .add-form {
@@ -2076,13 +2126,13 @@ body {
     .search-input {
         height: 54px;
         padding: 0 16px !important;
-        font-size: 0.96rem !important;
+        font-size: var(--fs-body-md) !important;
     }
 
     .primary-button,
     .action-button {
         height: 52px;
-        font-size: 0.88rem !important;
+        font-size: var(--fs-body-sm) !important;
         letter-spacing: 0.04em;
     }
 
@@ -2097,53 +2147,38 @@ body {
 
     .add-description h3,
     .search-spec h3 {
-        font-size: 0.88rem;
+        font-size: var(--fs-heading-md);
         margin-bottom: 12px;
     }
 
     .add-description li,
     .search-spec li {
-        font-size: 0.82rem;
+        font-size: var(--fs-body-sm);
         line-height: 1.6;
         margin-bottom: 8px;
     }
 }
 
 @media (max-width: 480px) {
-    .add-screen-container {
-        padding: 22px 16px;
-        margin: 14px 8px 56px;
-    }
-
     .add-screen-header h2 {
-        font-size: 1.36rem;
-        margin-bottom: 14px;
-        border-bottom-width: 3px;
+        border-bottom-width: 2px;
+        padding-bottom: 7px;
     }
 
     .search-input {
         height: 50px;
-        font-size: 0.92rem !important;
+        font-size: var(--fs-body-md) !important;
     }
 
     .primary-button,
     .action-button {
         height: 48px;
-        font-size: 0.84rem !important;
+        font-size: var(--fs-body-sm) !important;
     }
 }
 
 .add-screen-header h2 {
-    font-size: 2.2rem;
-    font-weight: 900;
-    text-align: left;
-    margin-bottom: 34px;
-    color: var(--text-main);
-    text-transform: uppercase;
-    letter-spacing: -0.02em;
-    border-bottom: 4px solid var(--border-strong);
-    padding-bottom: 12px;
-    display: inline-block;
+    margin: 0;
 }
 
 .add-info-grid {
@@ -2176,12 +2211,11 @@ body {
 
 .add-description h3,
 .search-spec h3 {
-    font-size: 0.95rem;
+    font-size: var(--fs-heading-md);
     font-weight: 900;
     margin-bottom: 18px;
     color: #000;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
 }
 
 .add-description ul,
@@ -2192,9 +2226,9 @@ body {
 
 .add-description li,
 .search-spec li {
-    font-size: 0.9rem;
+    font-size: var(--fs-body-md);
     color: var(--text-sub);
-    line-height: 1.8;
+    line-height: var(--lh-body);
     margin-bottom: 12px;
     position: relative;
     padding-left: 20px;
@@ -2244,9 +2278,9 @@ body {
 .entry-guide-summary {
     margin: 0;
     color: #444;
-    font-size: 0.84rem;
+    font-size: var(--fs-body-sm);
     font-weight: 600;
-    line-height: 1.5;
+    line-height: var(--lh-body);
 }
 
 .entry-guide-toggle {
@@ -3106,7 +3140,7 @@ body {
 
     .mode-switcher-label {
         margin-bottom: 6px;
-        font-size: 0.68rem;
+        font-size: var(--fs-caption);
     }
 
     .browse-year-controls {
@@ -3253,7 +3287,7 @@ body {
         border-right: 1px solid #000;
         border-bottom: 1px solid #000;
         min-height: 40px;
-        font-size: 0.78rem;
+        font-size: var(--fs-body-sm);
         padding: 0 8px;
     }
 
@@ -3321,11 +3355,10 @@ body {
 
 .mode-switcher-label {
     margin-bottom: 8px;
-    font-size: 0.72rem;
+    font-size: var(--fs-caption);
     color: #555;
     font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .mode-button {
