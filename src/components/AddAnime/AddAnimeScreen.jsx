@@ -76,6 +76,7 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
     const entryScrollPositionsRef = React.useRef({ search: 0, browse: 0 });
     const browseRequestIdRef = React.useRef(0);
     const browseResultsTopRef = React.useRef(null);
+    const pendingBrowseScrollPageRef = React.useRef(null);
 
     const currentYear = new Date().getFullYear();
     const browseYearOptions = React.useMemo(
@@ -211,6 +212,22 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
         run();
     }, [selectedBrowseYear, browsePage, browseGenreFilters, YEAR_PER_PAGE]);
 
+    useEffect(() => {
+        if (entryTab !== 'browse') return;
+        if (pendingBrowseScrollPageRef.current == null) return;
+        if (browseLoading) return;
+
+        const currentPage = Math.max(1, Number(browsePageInfo.currentPage) || browsePage);
+        const requestedPage = Number(pendingBrowseScrollPageRef.current);
+
+        if (currentPage === requestedPage) {
+            requestAnimationFrame(() => {
+                scrollToBrowseResultsTop('auto');
+            });
+            pendingBrowseScrollPageRef.current = null;
+        }
+    }, [entryTab, browseLoading, browsePageInfo.currentPage, browsePage]);
+
     const getSeasonKeyByMonth = (month) => {
         if (month >= 1 && month <= 3) return 'winter';
         if (month >= 4 && month <= 6) return 'spring';
@@ -305,9 +322,10 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
         const page = Number(nextPage);
         const lastPage = Number(browsePageInfo.lastPage) || 1;
         if (!Number.isFinite(page) || page < 1 || page > lastPage) return;
+        pendingBrowseScrollPageRef.current = page;
         setBrowsePage(page);
         requestAnimationFrame(() => {
-            scrollToBrowseResultsTop('smooth');
+            scrollToBrowseResultsTop('auto');
         });
     };
 
@@ -798,7 +816,6 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
                                 if (previewData) setPreviewData(null); // Reset preview when typing
                             }}
                             placeholder="作品タイトルを入力（日本語・英語可）"
-                            autoFocus
                             disabled={isSearching}
                             className="search-input"
                             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
