@@ -63,6 +63,40 @@ body {
     transition: height 0.3s ease;
 }
 
+.global-view-nav {
+    margin: -10px 0 24px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid #000;
+    background: #fff;
+}
+
+.global-view-nav-button {
+    min-height: 46px;
+    border: none;
+    border-right: 1px solid #000;
+    background: #fff;
+    color: #000;
+    font-size: 0.84rem;
+    font-weight: 800;
+    cursor: pointer;
+    padding: 0 10px;
+    white-space: nowrap;
+}
+
+.global-view-nav-button:last-child {
+    border-right: none;
+}
+
+.global-view-nav-button.active {
+    background: #000;
+    color: #fff;
+}
+
+.global-view-nav-button:hover:not(.active) {
+    background: #f5f5f5;
+}
+
 @media (max-width: 480px) {
     .logo img {
         height: 80px;
@@ -240,6 +274,98 @@ body {
     letter-spacing: 0.1em;
     border-left: 4px solid #000;
     padding-left: 12px;
+}
+
+.bookmark-entry-bar {
+    margin: 0 0 20px;
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.bookmark-entry-main {
+    flex: 1;
+    min-height: 52px;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    font-size: 0.95rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.bookmark-entry-main:hover {
+    background: #f5f5f5;
+}
+
+.bookmark-entry-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.bookmark-entry-add {
+    width: 56px;
+    min-height: 52px;
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.bookmark-entry-add:hover {
+    background: #222;
+}
+
+.mylist-section-header {
+    margin: 8px 0 12px;
+    padding-top: 16px;
+    border-top: 1px solid #e8e8e8;
+}
+
+.mylist-section-title {
+    margin: 0;
+    font-size: 1.28rem;
+    font-weight: 900;
+    color: #000;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+}
+
+.mylist-section-sub {
+    margin: 6px 0 0;
+    font-size: 0.8rem;
+    color: #666;
+    font-weight: 700;
+}
+
+.mylist-section-header+.controls {
+    margin-top: 16px;
+}
+
+.mylist-page-main {
+    padding-top: 8px;
+}
+
+.mylist-page-main .mylist-section-header {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
 }
 
 .selection-toolbar {
@@ -1207,6 +1333,709 @@ body {
     display: none;
 }
 
+.bookmark-screen {
+    margin: 10px 0 30px;
+    padding-bottom: 110px;
+}
+
+.bookmark-screen-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.bookmark-screen-header h2 {
+    font-size: 1.8rem;
+    font-weight: 900;
+    margin: 0;
+}
+
+.bookmark-screen-sub {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 700;
+}
+
+.bookmark-screen-desc {
+    margin-top: 6px;
+    font-size: 0.78rem;
+    color: #666;
+    font-weight: 600;
+}
+
+.bookmark-action-notice {
+    margin: 0 0 14px;
+    border: 1px solid #ddd;
+    background: #fafafa;
+    padding: 9px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.bookmark-action-notice.success {
+    border-color: #b6d7b9;
+    background: #f5fbf6;
+    color: #1f6a2a;
+}
+
+.bookmark-action-notice.error {
+    border-color: #e5c4c4;
+    background: #fff6f6;
+    color: #8b2d2d;
+}
+
+.bookmark-screen-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.bookmark-screen-add,
+.bookmark-screen-home {
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    min-height: 46px;
+    padding: 0 14px;
+    font-size: 0.84rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bookmark-screen-add {
+    background: #000;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+}
+
+.bookmark-screen-add-icon {
+    font-size: 1rem;
+    line-height: 1;
+    font-weight: 900;
+}
+
+.bookmark-screen-add:hover {
+    background: #222;
+    transform: translateY(-1px);
+}
+
+.bookmark-screen-home:hover {
+    background: #f5f5f5;
+}
+
+.bookmark-screen.has-selection-dock {
+    padding-bottom: 110px;
+}
+
+.bookmark-empty {
+    border: 1px dashed #ccc;
+    background: #fafafa;
+    color: #666;
+    padding: 26px 18px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.bookmark-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+}
+
+.bookmark-item-card {
+    border: 1px solid #eee;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.bookmark-item-card.selection-mode {
+    cursor: pointer;
+}
+
+.bookmark-item-card.selected {
+    border-color: #000;
+    box-shadow: inset 0 0 0 2px #000;
+}
+
+.bookmark-item-thumb {
+    width: 100%;
+    aspect-ratio: 2/3;
+    object-fit: cover;
+    -webkit-user-drag: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    pointer-events: none;
+}
+
+.bookmark-item-content {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bookmark-item-title {
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.bookmark-item-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.72rem;
+    color: #666;
+    font-weight: 700;
+}
+
+.bookmark-item-genres {
+    font-size: 0.72rem;
+    color: #444;
+    min-height: 24px;
+}
+
+.bookmark-watched-pill {
+    width: 100%;
+    border: 1px solid #666;
+    background: #ececec;
+    color: #444;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.bookmark-toggle-button {
+    width: 100%;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.bookmark-toggle-button:hover {
+    background: #f5f5f5;
+}
+
+.bookmark-toggle-button.active {
+    border-color: #0f3b2a;
+    background: #163f2f;
+    color: #fff;
+}
+
+.bookmark-toggle-button.active:hover {
+    background: #0f2f23;
+}
+
+.bookmark-toggle-button:disabled {
+    background: #f2f2f2;
+    border-color: #cfcfcf;
+    color: #888;
+    cursor: not-allowed;
+}
+
+.bookmark-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bookmark-item-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bookmark-mark-watched-button {
+    width: 100%;
+    border: 1px solid #bdbdbd;
+    background: #fff;
+    color: #333;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 0.73rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.bookmark-mark-watched-button:hover {
+    background: #f7f7f7;
+}
+
+.bookmark-sub-toggle-button {
+    width: 100%;
+    border: 1px solid #bcbcbc;
+    background: #fff;
+    color: #333;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 0.73rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.bookmark-sub-toggle-button:hover {
+    background: #f7f7f7;
+}
+
+.bookmark-sub-toggle-button.active {
+    border-color: #8b8b8b;
+    background: #ececec;
+    color: #222;
+}
+
+.bookmark-selection-toolbar {
+    margin-bottom: 14px;
+    border: 1px solid #000;
+    background: #fff;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.bookmark-selection-title {
+    margin: 0;
+    font-size: 0.84rem;
+    font-weight: 900;
+}
+
+.bookmark-selection-count {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #444;
+    font-weight: 700;
+}
+
+.bookmark-selection-indicator {
+    align-self: flex-end;
+    width: 30px;
+    height: 30px;
+    border: 1px solid #000;
+    background: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.bookmark-selection-indicator.active {
+    background: #000;
+    color: #fff;
+}
+
+.bookmark-selection-dock {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(1200px, 100%);
+    background: rgba(255, 255, 255, 0.98);
+    border-top: 1px solid #000;
+    box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.12);
+    z-index: 2200;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.bookmark-selection-dock-count {
+    margin: 0;
+    font-size: 0.84rem;
+    font-weight: 800;
+    color: #111;
+    white-space: nowrap;
+}
+
+.bookmark-selection-dock-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bookmark-selection-remove,
+.bookmark-selection-cancel {
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #000;
+    font-size: 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+    background: #fff;
+    color: #000;
+}
+
+.bookmark-selection-remove {
+    background: #000;
+    color: #fff;
+}
+
+.bookmark-selection-remove:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.bookmark-add-screen .bookmark-add-header {
+    margin-bottom: 22px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.bookmark-add-screen .bookmark-add-header h2 {
+    font-size: 2.1rem;
+    font-weight: 900;
+    margin: 0;
+    border-bottom: 4px solid #000;
+    padding-bottom: 8px;
+}
+
+.has-bottom-home-nav {
+    padding-bottom: 140px;
+}
+
+.screen-bottom-home-nav {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(1200px, 100%);
+    background: rgba(255, 255, 255, 0.98);
+    border-top: 1px solid #000;
+    box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.12);
+    z-index: 2100;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+}
+
+.screen-bottom-home-button {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    font-size: 0.86rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.screen-bottom-home-button:hover {
+    background: #222;
+}
+
+.has-bookmark-bottom-nav {
+    padding-bottom: 140px;
+}
+
+.bookmark-bottom-nav {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(1200px, 100%);
+    background: rgba(255, 255, 255, 0.98);
+    border-top: 1px solid #000;
+    box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.12);
+    z-index: 2200;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.bookmark-bottom-nav-button {
+    min-height: 46px;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    font-size: 0.84rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.bookmark-bottom-nav-button.primary {
+    background: #000;
+    color: #fff;
+}
+
+.bookmark-bottom-nav-button.primary:hover {
+    background: #222;
+}
+
+.bookmark-bottom-nav-button.secondary:hover {
+    background: #f5f5f5;
+}
+
+.browse-quick-nav-rail.bookmark-add-quick-nav.mobile {
+    bottom: calc(92px + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 768px) {
+    .global-view-nav {
+        margin: 0 0 14px;
+    }
+
+    .global-view-nav-button {
+        min-height: 42px;
+        font-size: 0.8rem;
+        padding: 0 6px;
+    }
+
+    .bookmark-entry-bar {
+        gap: 8px;
+    }
+
+    .bookmark-entry-main {
+        min-height: 48px;
+        font-size: 0.88rem;
+    }
+
+    .bookmark-entry-add {
+        width: 52px;
+        min-height: 48px;
+    }
+
+    .mylist-section-header {
+        margin: 10px 0 10px;
+        padding-top: 12px;
+    }
+
+    .mylist-section-title {
+        font-size: 1.12rem;
+    }
+
+    .mylist-section-sub {
+        font-size: 0.76rem;
+    }
+
+    .bookmark-screen {
+        margin: 6px 0 28px;
+        padding: 14px 10px 110px;
+        border: 1px solid #dddddd;
+        background: #ffffff;
+    }
+
+    .bookmark-screen-header {
+        flex-direction: column;
+        align-items: stretch;
+        margin-bottom: 14px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #ececec;
+    }
+
+    .bookmark-screen-header h2 {
+        font-size: 1.54rem;
+        line-height: 1.2;
+    }
+
+    .bookmark-screen-actions {
+        width: 100%;
+        display: block;
+    }
+
+    .bookmark-screen-add,
+    .bookmark-screen-home {
+        width: 100%;
+    }
+
+    .bookmark-screen-desc {
+        font-size: 0.74rem;
+        line-height: 1.55;
+    }
+
+    .bookmark-list-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .bookmark-item-card {
+        display: grid;
+        grid-template-columns: 100px 1fr;
+        min-height: 146px;
+    }
+
+    .bookmark-item-thumb {
+        width: 100px;
+        height: 100%;
+        min-height: 146px;
+        aspect-ratio: auto;
+    }
+
+    .bookmark-item-content {
+        padding: 9px;
+        gap: 6px;
+    }
+
+    .bookmark-add-screen .bookmark-add-header {
+        margin-bottom: 16px;
+    }
+
+    .bookmark-add-screen .bookmark-add-header h2 {
+        font-size: 1.8rem;
+    }
+
+    .bookmark-selection-dock {
+        width: 100%;
+        padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .bookmark-selection-dock-count {
+        white-space: normal;
+    }
+
+    .bookmark-selection-dock-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .has-bottom-home-nav {
+        padding-bottom: 150px;
+    }
+
+    .screen-bottom-home-nav {
+        width: 100%;
+        padding: 9px 10px calc(10px + env(safe-area-inset-bottom));
+    }
+
+    .screen-bottom-home-button {
+        min-height: 48px;
+        font-size: 0.82rem;
+    }
+
+    .has-bookmark-bottom-nav {
+        padding-bottom: 150px;
+    }
+
+    .bookmark-bottom-nav {
+        width: 100%;
+        padding: 9px 10px calc(10px + env(safe-area-inset-bottom));
+        gap: 8px;
+    }
+
+    .bookmark-bottom-nav-button {
+        min-height: 48px;
+        font-size: 0.8rem;
+    }
+
+    .browse-quick-nav-rail.bookmark-add-quick-nav.mobile {
+        bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+
+    .browse-quick-nav-rail.add-screen-quick-nav.mobile {
+        bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+}
+
+@media (max-width: 480px) {
+    .global-view-nav {
+        margin: 0 0 12px;
+    }
+
+    .bookmark-screen-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .bookmark-screen {
+        padding: 12px 8px 110px;
+    }
+
+    .bookmark-screen-header h2 {
+        font-size: 1.42rem;
+    }
+
+    .bookmark-screen-add,
+    .bookmark-screen-home {
+        min-height: 44px;
+    }
+
+    .bookmark-bottom-nav {
+        grid-template-columns: 1fr;
+    }
+
+    .mylist-section-header+.controls {
+        margin-top: 12px;
+    }
+
+    .browse-quick-nav-rail.bookmark-add-quick-nav.mobile {
+        bottom: calc(148px + env(safe-area-inset-bottom));
+    }
+
+    .browse-quick-nav-rail.add-screen-quick-nav.mobile {
+        bottom: calc(148px + env(safe-area-inset-bottom));
+    }
+}
+
+@media (hover: none) {
+    .bookmark-screen-add:hover,
+    .bookmark-screen-home:hover,
+    .bookmark-bottom-nav-button.primary:hover,
+    .bookmark-bottom-nav-button.secondary:hover {
+        transform: none;
+        background: initial;
+    }
+
+    .bookmark-screen-add:hover {
+        background: #000;
+    }
+
+    .bookmark-screen-home:hover,
+    .bookmark-bottom-nav-button.secondary:hover {
+        background: #fff;
+    }
+
+    .bookmark-bottom-nav-button.primary:hover {
+        background: #000;
+    }
+
+    .screen-bottom-home-button:hover {
+        background: #000;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bookmark-screen-add,
+    .bookmark-screen-home {
+        transition: none;
+    }
+}
+
 /* =========================================
    Add Anime Screen Styles
    ========================================= */
@@ -1225,28 +2054,95 @@ body {
 
 @media (max-width: 768px) {
     .add-screen-container {
-        padding: 40px 30px;
-        margin: 30px 15px 80px;
+        padding: 30px 24px;
+        margin: 22px 12px 72px;
+    }
+
+    .add-screen-header {
+        margin-bottom: 4px;
+    }
+
+    .add-screen-header h2 {
+        font-size: 1.58rem;
+        margin-bottom: 18px;
+        padding-bottom: 10px;
+    }
+
+    .add-form {
+        margin: 28px 0;
+        gap: 10px;
+    }
+
+    .search-input {
+        height: 54px;
+        padding: 0 16px !important;
+        font-size: 0.96rem !important;
+    }
+
+    .primary-button,
+    .action-button {
+        height: 52px;
+        font-size: 0.88rem !important;
+        letter-spacing: 0.04em;
+    }
+
+    .entry-guide-inline {
+        padding: 10px 12px;
+    }
+
+    .add-description,
+    .search-spec {
+        padding: 16px 18px;
+    }
+
+    .add-description h3,
+    .search-spec h3 {
+        font-size: 0.88rem;
+        margin-bottom: 12px;
+    }
+
+    .add-description li,
+    .search-spec li {
+        font-size: 0.82rem;
+        line-height: 1.6;
+        margin-bottom: 8px;
     }
 }
 
 @media (max-width: 480px) {
     .add-screen-container {
-        padding: 30px 20px;
-        margin: 20px 10px 60px;
+        padding: 22px 16px;
+        margin: 14px 8px 56px;
+    }
+
+    .add-screen-header h2 {
+        font-size: 1.36rem;
+        margin-bottom: 14px;
+        border-bottom-width: 3px;
+    }
+
+    .search-input {
+        height: 50px;
+        font-size: 0.92rem !important;
+    }
+
+    .primary-button,
+    .action-button {
+        height: 48px;
+        font-size: 0.84rem !important;
     }
 }
 
 .add-screen-header h2 {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
     font-weight: 900;
     text-align: left;
-    margin-bottom: 50px;
+    margin-bottom: 34px;
     color: var(--text-main);
     text-transform: uppercase;
     letter-spacing: -0.02em;
     border-bottom: 4px solid var(--border-strong);
-    padding-bottom: 15px;
+    padding-bottom: 12px;
     display: inline-block;
 }
 
@@ -1370,10 +2266,10 @@ body {
 
 /* Form Styling */
 .add-form {
-    margin: 60px 0;
+    margin: 40px 0;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
 }
 
 .search-field-wrapper {
@@ -1383,9 +2279,9 @@ body {
 
 .search-input {
     width: 100%;
-    height: 64px;
-    padding: 0 25px !important;
-    font-size: 1.15rem !important;
+    height: 60px;
+    padding: 0 20px !important;
+    font-size: 1.04rem !important;
     border: 1px solid var(--border-strong) !important;
     border-radius: 0 !important;
     background: #ffffff !important;
@@ -1400,15 +2296,15 @@ body {
 
 .primary-button {
     width: 100%;
-    height: 64px;
+    height: 58px;
     padding: 0 !important;
-    font-size: 1rem !important;
+    font-size: 0.95rem !important;
     background: #000 !important;
     color: white !important;
     border-radius: 0 !important;
     font-weight: 900 !important;
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.08em;
     cursor: pointer;
     transition: all 0.2s ease !important;
     border: none !important;
@@ -1420,14 +2316,14 @@ body {
 
 .action-button {
     width: 100%;
-    height: 64px;
+    height: 58px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 0 !important;
     font-weight: 900 !important;
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.08em;
     cursor: pointer;
     transition: all 0.2s ease !important;
     font-size: 1rem;
@@ -1551,7 +2447,8 @@ body {
 }
 
 .preview-card-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     width: 100%;
     padding: 0;
     border-top: 1px solid #000;
@@ -1577,7 +2474,7 @@ body {
 }
 
 .dismiss-button {
-    flex: 1;
+    grid-column: 1 / -1;
     background: #fff !important;
     color: #000 !important;
     border: 1px solid #000 !important;
@@ -1589,6 +2486,32 @@ body {
 
 .dismiss-button:hover {
     background: #f5f5f5 !important;
+}
+
+.preview-bookmark-button {
+    background: #fff !important;
+    color: #333 !important;
+    border: 1px solid #bcbcbc !important;
+    padding: 0 12px !important;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.preview-bookmark-button:hover:not(:disabled) {
+    background: #f7f7f7 !important;
+}
+
+.preview-bookmark-button.active {
+    background: #ececec !important;
+    color: #222 !important;
+    border-color: #8b8b8b !important;
+}
+
+.preview-bookmark-button:disabled {
+    background: #f3f3f3 !important;
+    color: #888 !important;
+    border-color: #d3d3d3 !important;
+    cursor: not-allowed !important;
 }
 
 /* Suggestions Dropdown */
@@ -2047,6 +2970,12 @@ body {
     min-height: 30px;
 }
 
+.browse-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
 .browse-add-button {
     width: 100%;
     border: 1px solid #000;
@@ -2071,6 +3000,35 @@ body {
 
 .browse-add-button.added:hover {
     background: #0f2f23;
+}
+
+.browse-sub-action-button {
+    width: 100%;
+    border: 1px solid #bcbcbc;
+    background: #fff;
+    color: #333;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 0.73rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.browse-sub-action-button:hover:not(:disabled) {
+    background: #f7f7f7;
+}
+
+.browse-sub-action-button.active {
+    border-color: #8b8b8b;
+    background: #ececec;
+    color: #222;
+}
+
+.browse-sub-action-button:disabled {
+    background: #f2f2f2;
+    border-color: #d0d0d0;
+    color: #888;
+    cursor: not-allowed;
 }
 
 .add-toast {
@@ -2125,8 +3083,30 @@ body {
 
     .entry-tab-button {
         flex: 1;
-        padding: 11px 8px;
+        min-height: 42px;
+        padding: 10px 8px;
+        font-size: 0.8rem;
         letter-spacing: 0;
+    }
+
+    .mode-switcher-block {
+        margin-top: 16px;
+    }
+
+    .mode-switcher {
+        width: 100%;
+    }
+
+    .mode-button {
+        flex: 1;
+        padding: 10px 8px;
+        font-size: 0.8rem;
+        letter-spacing: 0.03em;
+    }
+
+    .mode-switcher-label {
+        margin-bottom: 6px;
+        font-size: 0.68rem;
     }
 
     .browse-year-controls {
@@ -2256,9 +3236,39 @@ body {
         min-height: 36px;
         padding: 0 10px;
     }
+
+    .browse-sub-action-button,
+    .bookmark-sub-toggle-button {
+        min-height: 34px;
+        font-size: 0.72rem;
+    }
 }
 
 @media (max-width: 480px) {
+    .global-view-nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .global-view-nav-button {
+        border-right: 1px solid #000;
+        border-bottom: 1px solid #000;
+        min-height: 40px;
+        font-size: 0.78rem;
+        padding: 0 8px;
+    }
+
+    .global-view-nav-button:nth-child(2n) {
+        border-right: none;
+    }
+
+    .global-view-nav-button:nth-last-child(-n+2) {
+        border-bottom: none;
+    }
+
+    .global-view-nav-button:last-child {
+        border-bottom: none;
+    }
+
     .browse-year-select {
         min-width: 0;
         font-size: 0.92rem;
@@ -2303,6 +3313,10 @@ body {
 
 .mode-switcher-block {
     margin-top: 26px;
+}
+
+.bulk-target-switcher {
+    margin-top: 0;
 }
 
 .mode-switcher-label {
@@ -2782,19 +3796,19 @@ body {
     align-items: center !important;
     justify-content: center !important;
     height: 52px !important;
-    padding: 0 20px !important;
+    padding: 0 16px !important;
     background: var(--primary) !important;
     color: white !important;
     border: none !important;
     border-radius: 0 !important;
-    font-size: 0.9rem !important;
+    font-size: 0.85rem !important;
     font-weight: 800 !important;
     cursor: pointer !important;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    text-transform: none;
+    letter-spacing: 0.01em;
     transition: all 0.2s ease !important;
     white-space: nowrap;
-    min-width: 140px;
+    min-width: 220px;
     flex-shrink: 0;
 }
 
@@ -2805,9 +3819,9 @@ body {
 
 .fab-add-button::before {
     content: "+" !important;
-    font-size: 1.2rem !important;
+    font-size: 1rem !important;
     font-weight: 400 !important;
-    margin-right: 6px !important;
+    margin-right: 5px !important;
 }
 
 .fab-add-button:active {

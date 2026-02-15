@@ -2,7 +2,7 @@
 import { fetchAnimeByYear, fetchAnimeDetails, fetchAnimeDetailsBulk, searchAnimeList } from '../../services/animeService';
 import { translateGenre } from '../../constants/animeData';
 
-function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
+function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList = [], bookmarkList = [] }) {
     const RECOMMENDED_BULK_TITLES = 20;
     const MAX_BULK_TITLES = 20;
     const YEAR_PER_PAGE = 36;
@@ -54,6 +54,12 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
         notFound: [],
         alreadyAdded: []
     });
+    const [bulkTarget, setBulkTarget] = useState('mylist'); // mylist | bookmark
+    const [bulkExecutionSummary, setBulkExecutionSummary] = useState({
+        added: 0,
+        skipped: 0,
+        target: 'mylist'
+    });
     const [showReview, setShowReview] = useState(false);
     const [isBulkComplete, setIsBulkComplete] = useState(false);
     const [pendingList, setPendingList] = useState([]);
@@ -90,6 +96,7 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
         [currentYear]
     );
     const addedAnimeIds = React.useMemo(() => new Set((animeList || []).map(a => a.id)), [animeList]);
+    const bookmarkIdSet = React.useMemo(() => new Set((bookmarkList || []).map(a => a.id)), [bookmarkList]);
     const browseGenreOptions = React.useMemo(() => {
         const genreSet = new Set(browseGenreFilters);
         browseResults.forEach((anime) => {
@@ -384,6 +391,21 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
         }
     };
 
+    const handleBrowseBookmarkToggle = (anime) => {
+        if (typeof onToggleBookmark !== 'function') return;
+        const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
+        const result = onToggleBookmark(anime);
+        if (result?.success) {
+            if (result.action === 'removed') {
+                setToast({ visible: true, message: `「${title}」をブックマークから外しました。`, type: 'warning' });
+            } else {
+                setToast({ visible: true, message: `「${title}」をブックマークに追加しました。`, type: 'success' });
+            }
+        } else if (result?.message) {
+            setToast({ visible: true, message: result.message, type: 'warning' });
+        }
+    };
+
     const scrollToBrowseResultsTop = (behavior = 'smooth') => {
         if (entryTab !== 'browse') return;
         const el = browseResultsTopRef.current;
@@ -468,14 +490,19 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
         setBulkResults({ hits: [], notFound: [], alreadyAdded: [] });
+        setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
 
         const hits = [];
         const notFound = [];
         const alreadyAdded = [];
 
-        const seenIds = new Set((animeList || []).map(a => a.id));
+        const isBookmarkTarget = bulkTarget === 'bookmark';
+        const existingForTarget = isBookmarkTarget
+            ? [...(animeList || []), ...(bookmarkList || [])]
+            : [...(animeList || [])];
+        const seenIds = new Set(existingForTarget.map((a) => a.id));
         const existingTitleSet = new Set(
-            (animeList || []).flatMap(a => [
+            existingForTarget.flatMap(a => [
                 (a.title?.native || '').toLowerCase(),
                 (a.title?.romaji || '').toLowerCase(),
                 (a.title?.english || '').toLowerCase()
@@ -687,12 +714,72 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
     const handleBulkConfirm = () => {
         const selectedAnimes = bulkResults.hits;
         let addedCount = 0;
-        selectedAnimes.forEach(hit => {
-            const result = onAdd(hit.data);
-            if (result.success) addedCount++;
-        });
+        let skippedCount = 0;
+        const localMyListIdSet = new Set((animeList || []).map((a) => a.id));
+        const localBookmarkIdSet = new Set((bookmarkList || []).map((a) => a.id));
 
-        setStatus({ type: '', message: '' }); // Clear general status, message will be in the header
+        if (bulkTarget === 'bookmark') {
+            selectedAnimes.forEach((hit) => {
+                const data = hit?.data;
+                if (!data || typeof data.id !== 'number') {
+                    skippedCount += 1;
+                    return;
+                }
+                if (localMyListIdSet.has(data.id) || localBookmarkIdSet.has(data.id)) {
+                    skippedCount += 1;
+                    return;
+                }
+                if (typeof onToggleBookmark !== 'function') {
+                    skippedCount += 1;
+                    return;
+                }
+                const result = onToggleBookmark(data);
+                if (result?.success && result.action === 'added') {
+                    addedCount += 1;
+                    localBookmarkIdSet.add(data.id);
+                } else {
+                    skippedCount += 1;
+                }
+            });
+            setStatus({
+                type: 'info',
+                message: skippedCount > 0
+                    ? `ブックマークに ${addedCount} 件追加、${skippedCount} 件は登録済みのためスキップしました。`
+                    : `ブックマークに ${addedCount} 件追加しました。`
+            });
+        } else {
+            selectedAnimes.forEach((hit) => {
+                const data = hit?.data;
+                if (!data || typeof data.id !== 'number') {
+                    skippedCount += 1;
+                    return;
+                }
+                if (localMyListIdSet.has(data.id)) {
+                    skippedCount += 1;
+                    return;
+                }
+                const result = onAdd(data);
+                if (result.success) {
+                    addedCount += 1;
+                    localMyListIdSet.add(data.id);
+                    localBookmarkIdSet.delete(data.id);
+                } else {
+                    skippedCount += 1;
+                }
+            });
+            setStatus({
+                type: 'info',
+                message: skippedCount > 0
+                    ? `マイリストに ${addedCount} 件追加、${skippedCount} 件は登録済みのためスキップしました。`
+                    : `マイリストに ${addedCount} 件追加しました。`
+            });
+        }
+
+        setBulkExecutionSummary({
+            added: addedCount,
+            skipped: skippedCount,
+            target: bulkTarget
+        });
         setIsBulkComplete(true);
     };
 
@@ -716,16 +803,45 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
         }
     };
 
-    // 8. Confirm & Add Logic
-    const handleConfirm = () => {
+    const handlePreviewMyListToggle = () => {
         if (!previewData) return;
+        const title = previewData?.title?.native || previewData?.title?.romaji || previewData?.title?.english || '作品';
+        const isAdded = addedAnimeIds.has(previewData.id);
+
+        if (isAdded) {
+            if (typeof onRemove !== 'function') {
+                setStatus({ type: 'error', message: 'マイリスト削除を実行できませんでした。' });
+                return;
+            }
+            onRemove(previewData.id);
+            setStatus({ type: 'info', message: `「${title}」をマイリストから外しました。` });
+            return;
+        }
 
         const result = onAdd(previewData);
         if (result.success) {
-            setStatus({ type: 'success', message: '登録が完了しました。' });
-            setPreviewData(null); // Hide preview after success
-            setQuery('');
+            setStatus({ type: 'success', message: `「${title}」をマイリストに追加しました。` });
         } else {
+            setStatus({ type: 'error', message: result.message || '追加に失敗しました。' });
+        }
+    };
+
+    const handlePreviewBookmarkToggle = () => {
+        if (!previewData || typeof onToggleBookmark !== 'function') return;
+        const title = previewData?.title?.native || previewData?.title?.romaji || previewData?.title?.english || '作品';
+        const isAdded = addedAnimeIds.has(previewData.id);
+        if (isAdded) {
+            setStatus({ type: 'info', message: 'マイリスト登録済み作品はブックマークできません。' });
+            return;
+        }
+        const result = onToggleBookmark(previewData);
+        if (result?.success) {
+            if (result.action === 'removed') {
+                setStatus({ type: 'info', message: `「${title}」をブックマークから外しました。` });
+            } else {
+                setStatus({ type: 'success', message: `「${title}」をブックマークに追加しました。` });
+            }
+        } else if (result?.message) {
             setStatus({ type: 'error', message: result.message });
         }
     };
@@ -754,6 +870,7 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
         setBulkPhase('idle');
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
+        setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
     };
 
     const guideSummaryText = entryTab === 'search'
@@ -779,6 +896,11 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
     const browseRangeEnd = browseRangeStart > 0
         ? browseRangeStart + browseResults.length - 1
         : 0;
+    const bulkTargetLabel = bulkTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト';
+    const bulkCompleteTargetLabel = bulkExecutionSummary.target === 'bookmark' ? 'ブックマーク' : 'マイリスト';
+    const bulkAlreadyAddedLabel = bulkTarget === 'bookmark'
+        ? '登録済み・重複（視聴済み / ブックマーク済み）'
+        : '登録済み・重複';
 
     const handleBrowseScrollToTop = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -793,9 +915,9 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
     };
 
     return (
-        <div className="add-screen-container">
+        <div className="add-screen-container has-bottom-home-nav">
             <div className="add-screen-header">
-                <h2>作品を追加</h2>
+                <h2>作品の追加</h2>
 
                 <div className="entry-tab-switcher">
                     <button
@@ -895,64 +1017,87 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
             </div>
 
             {entryTab === 'search' && (mode === 'normal' ? (
-                <form onSubmit={handleSearch} className="add-form">
-                    <div className="search-field-wrapper">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => {
-                                setQuery(e.target.value);
-                                if (previewData) setPreviewData(null); // Reset preview when typing
-                            }}
-                            placeholder="作品タイトルを入力（日本語・英語可）"
-                            disabled={isSearching}
-                            className="search-input"
-                            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                            onFocus={() => {
-                                if (query.trim().length >= 2) setShowSuggestions(true);
-                            }}
-                        />
+                !previewData && (
+                    <form onSubmit={handleSearch} className="add-form">
+                        <div className="search-field-wrapper">
+                            <input
+                                type="text"
+                                value={query}
+                                onChange={(e) => {
+                                    setQuery(e.target.value);
+                                    if (previewData) setPreviewData(null); // Reset preview when typing
+                                }}
+                                placeholder="作品タイトルを入力（日本語・英語可）"
+                                disabled={isSearching}
+                                className="search-input"
+                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                onFocus={() => {
+                                    if (query.trim().length >= 2) setShowSuggestions(true);
+                                }}
+                            />
 
-                        {showSuggestions && isSuggesting && (
-                            <div className="suggestions-loading">候補を検索中...</div>
-                        )}
+                            {showSuggestions && isSuggesting && (
+                                <div className="suggestions-loading">候補を検索中...</div>
+                            )}
 
-                        {/* Suggestions Dropdown */}
-                        {showSuggestions && suggestions.length > 0 && (
-                            <div className="suggestions-dropdown">
-                                {suggestions.map((anime) => (
-                                    <div
-                                        key={anime.id}
-                                        className="suggestion-item"
-                                        onClick={() => handleSelectSuggestion(anime)}
-                                    >
-                                        <img
-                                            src={anime.coverImage.large}
-                                            alt=""
-                                            className="suggestion-thumb"
-                                        />
-                                        <div className="suggestion-info">
-                                            <div className="suggestion-title">
-                                                {anime.title.native || anime.title.romaji}
-                                            </div>
-                                            <div className="suggestion-meta">
-                                                {anime.seasonYear && <span>{anime.seasonYear}年</span>}
-                                                {anime.episodes && <span>{anime.episodes}話</span>}
+                            {/* Suggestions Dropdown */}
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div className="suggestions-dropdown">
+                                    {suggestions.map((anime) => (
+                                        <div
+                                            key={anime.id}
+                                            className="suggestion-item"
+                                            onClick={() => handleSelectSuggestion(anime)}
+                                        >
+                                            <img
+                                                src={anime.coverImage.large}
+                                                alt=""
+                                                className="suggestion-thumb"
+                                            />
+                                            <div className="suggestion-info">
+                                                <div className="suggestion-title">
+                                                    {anime.title.native || anime.title.romaji}
+                                                </div>
+                                                <div className="suggestion-meta">
+                                                    {anime.seasonYear && <span>{anime.seasonYear}年</span>}
+                                                    {anime.episodes && <span>{anime.episodes}話</span>}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                    <button type="submit" className="action-button primary-button" disabled={isSearching}>
-                        {isSearching ? '検索中...' : '作品を検索する'}
-                    </button>
-                </form>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <button type="submit" className="action-button primary-button" disabled={isSearching}>
+                            {isSearching ? '検索中...' : '作品を検索する'}
+                        </button>
+                    </form>
+                )
             ) : (
                 <div className="bulk-add-section">
                     {!showReview ? (
                         <form onSubmit={handleBulkSearch} className="add-form">
+                            <div className="mode-switcher-block bulk-target-switcher">
+                                <div className="mode-switcher-label">一括追加先</div>
+                                <div className="mode-switcher">
+                                    <button
+                                        type="button"
+                                        className={`mode-button ${bulkTarget === 'mylist' ? 'active' : ''}`}
+                                        onClick={() => setBulkTarget('mylist')}
+                                        disabled={isSearching}
+                                    >
+                                        マイリスト
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`mode-button ${bulkTarget === 'bookmark' ? 'active' : ''}`}
+                                        onClick={() => setBulkTarget('bookmark')}
+                                        disabled={isSearching}
+                                    >
+                                        ブックマーク
+                                    </button>
+                                </div>
+                            </div>
                             <textarea
                                 value={bulkQuery}
                                 onChange={(e) => setBulkQuery(e.target.value)}
@@ -962,7 +1107,7 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                                 rows={10}
                             />
                             <div className="bulk-limit-note">
-                                {`一度に登録できるのは最大 ${MAX_BULK_TITLES} 件までです（推奨 ${RECOMMENDED_BULK_TITLES} 件）。長時間の再試行は自動で打ち切り、次の作品へ進みます。`}
+                                {`追加先: ${bulkTargetLabel} / 一度に登録できるのは最大 ${MAX_BULK_TITLES} 件までです（推奨 ${RECOMMENDED_BULK_TITLES} 件）。登録済み作品はスキップされます。`}
                             </div>
                             {isSearching && (
                                 <div className="bulk-search-progress">
@@ -1035,9 +1180,15 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                                     <div className="bulk-completion-summary">
                                         <div className="success-badge">
                                             <span className="badge-icon">✓</span>
-                                            <span className="badge-text">{bulkResults.hits.length}件の作品をリストに追加しました</span>
+                                            <span className="badge-text">
+                                                {`${bulkExecutionSummary.added}件の作品を${bulkCompleteTargetLabel}に追加しました`}
+                                            </span>
                                         </div>
-                                        <p>さらに作品を追加しますか？見つからなかった作品は保留リストで確認できます。</p>
+                                        <p>
+                                            {bulkExecutionSummary.skipped > 0
+                                                ? `${bulkExecutionSummary.skipped}件は登録済みのためスキップされました。`
+                                                : 'さらに作品を追加しますか？見つからなかった作品は保留リストで確認できます。'}
+                                        </p>
                                     </div>
                                 ) : (
                                     <p>検索された作品を確認し、登録を完了してください。</p>
@@ -1071,7 +1222,7 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
 
                                 {bulkResults.alreadyAdded.length > 0 && (
                                     <div className="review-section subtle">
-                                        <h4>登録済み・重複({bulkResults.alreadyAdded.length})</h4>
+                                        <h4>{bulkAlreadyAddedLabel} ({bulkResults.alreadyAdded.length})</h4>
                                         <ul className="simple-list">
                                             {bulkResults.alreadyAdded.map((t, i) => <li key={i}>{t}</li>)}
                                         </ul>
@@ -1083,7 +1234,7 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                                 {!isBulkComplete ? (
                                     <>
                                         <button className="action-button primary-button" onClick={handleBulkConfirm}>
-                                            上記をすべて登録する
+                                            {`上記をすべて${bulkTargetLabel}に追加する`}
                                         </button>
                                         <button className="action-button dismiss-button" onClick={handleCancel}>
                                             キャンセル
@@ -1093,9 +1244,6 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                                     <div className="completion-actions">
                                         <button className="action-button primary-button" onClick={handleCancel}>
                                             新しい検索を開始する
-                                        </button>
-                                        <button className="back-to-home-button" onClick={onBack}>
-                                            ← ホームに戻る
                                         </button>
                                     </div>
                                 )}
@@ -1286,6 +1434,7 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                                         <div className="browse-card-grid">
                                             {browseVisibleResults.map((anime) => {
                                                 const isAdded = addedAnimeIds.has(anime.id);
+                                                const isBookmarked = bookmarkIdSet.has(anime.id);
                                                 const displayTitle = anime.title?.native || anime.title?.romaji || anime.title?.english;
                                                 return (
                                                     <article key={anime.id} className="browse-anime-card">
@@ -1299,14 +1448,29 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                                                             <div className="browse-card-genres">
                                                                 {(anime.genres || []).slice(0, 3).map((g) => translateGenre(g)).join(' / ')}
                                                             </div>
-                                                            <button
-                                                                type="button"
-                                                                className={`browse-add-button ${isAdded ? 'added' : 'not-added'}`}
-                                                                onClick={() => handleBrowseToggle(anime, isAdded)}
-                                                                aria-pressed={isAdded}
-                                                            >
-                                                                {isAdded ? '✓ 追加済み（タップで取消）' : '＋ 追加'}
-                                                            </button>
+                                                            <div className="browse-card-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    className={`browse-add-button ${isAdded ? 'added' : 'not-added'}`}
+                                                                    onClick={() => handleBrowseToggle(anime, isAdded)}
+                                                                    aria-pressed={isAdded}
+                                                                >
+                                                                    {isAdded ? '✓ 追加済み（タップで取消）' : '＋ マイリストへ追加'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={`browse-sub-action-button ${isBookmarked ? 'active' : ''}`}
+                                                                    onClick={() => handleBrowseBookmarkToggle(anime)}
+                                                                    disabled={isAdded}
+                                                                    aria-pressed={isBookmarked}
+                                                                >
+                                                                    {isAdded
+                                                                        ? '視聴済み（ブックマーク不可）'
+                                                                        : isBookmarked
+                                                                            ? '★ ブックマーク済み（解除）'
+                                                                            : '☆ ブックマークへ追加'}
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </article>
                                                 );
@@ -1349,7 +1513,7 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
             )}
 
             {/* Status Message */}
-            {entryTab === 'search' && status.message && !(mode === 'bulk' && isSearching) && (
+            {entryTab === 'search' && status.message && !(mode === 'bulk' && isSearching) && !(mode === 'normal' && previewData) && (
                 <div className={`status-message-container ${status.type}`}>
                     <div className="status-text">{status.message}</div>
                 </div>
@@ -1382,9 +1546,20 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                     <div className="preview-card-actions">
                         <button
                             className="action-button confirm-execution-button"
-                            onClick={handleConfirm}
+                            onClick={handlePreviewMyListToggle}
                         >
-                            <span className="btn-icon">✓</span> 登録する
+                            <span className="btn-icon">✓</span>{addedAnimeIds.has(previewData.id) ? ' マイリスト追加済み（取消）' : ' マイリストへ追加'}
+                        </button>
+                        <button
+                            className={`action-button preview-bookmark-button ${bookmarkIdSet.has(previewData.id) ? 'active' : ''}`}
+                            onClick={handlePreviewBookmarkToggle}
+                            disabled={addedAnimeIds.has(previewData.id)}
+                        >
+                            {addedAnimeIds.has(previewData.id)
+                                ? '視聴済み（ブックマーク不可）'
+                                : bookmarkIdSet.has(previewData.id)
+                                    ? '★ ブックマーク済み（解除）'
+                                    : '☆ ブックマークへ追加'}
                         </button>
                         <button
                             className="action-button dismiss-button"
@@ -1425,27 +1600,21 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                 </div>
             )}
 
-            {/* Back Navigation - Only show if NOT in bulk review complete mode */}
-            {!isBulkComplete && (
-                <div className="add-screen-footer">
-                    <button
-                        className="back-to-home-link"
-                        onClick={onBack}
-                    >
-                        ← ホームに戻る
-                    </button>
-                </div>
-            )}
-
             {toast.visible && (
                 <div className={`add-toast ${toast.type}`}>
                     {toast.message}
                 </div>
             )}
 
+            <nav className="screen-bottom-home-nav" aria-label="画面移動">
+                <button type="button" className="screen-bottom-home-button" onClick={onBack}>
+                    ← ホームへ戻る
+                </button>
+            </nav>
+
             {entryTab === 'browse' && selectedBrowseYear && browseQuickNavState.visible && (
                 <aside
-                    className={`browse-quick-nav-rail ${browseQuickNavState.mobile ? 'mobile' : ''}`}
+                    className={`browse-quick-nav-rail add-screen-quick-nav ${browseQuickNavState.mobile ? 'mobile' : ''}`}
                     aria-label="一覧内ページ移動"
                 >
                     <button

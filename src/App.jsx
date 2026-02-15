@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 // Constants & Multi-language data
 import { WATCHED_TITLES, ANIME_DESCRIPTIONS, translateGenre } from './constants/animeData';
@@ -12,6 +12,29 @@ import HeroSlider from './components/Hero/HeroSlider';
 import AnimeCard from './components/Cards/AnimeCard';
 import StatsSection from './components/Stats/StatsSection';
 import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
+import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
+
+const APP_VIEW_HASHES = {
+  home: '#/',
+  mylist: '#/mylist',
+  add: '#/add',
+  bookmarks: '#/bookmarks',
+};
+
+const APP_VIEW_SET = new Set(Object.keys(APP_VIEW_HASHES));
+
+const getViewFromLocation = (hash = '', pathname = '') => {
+  const route = (hash || '').replace(/^#/, '');
+  if (route.startsWith('/bookmarks/add') || route.startsWith('/bookmark/add')) return 'add';
+  if (route.startsWith('/mylist')) return 'mylist';
+  if (route.startsWith('/bookmarks') || route.startsWith('/bookmark')) return 'bookmarks';
+  if (route.startsWith('/add')) return 'add';
+  if (pathname.startsWith('/bookmarks/add') || pathname.startsWith('/bookmark/add')) return 'add';
+  if (pathname.startsWith('/mylist')) return 'mylist';
+  if (pathname.startsWith('/bookmarks') || pathname.startsWith('/bookmark')) return 'bookmarks';
+  if (pathname.startsWith('/add')) return 'add';
+  return 'home';
+};
 
 /**
  * Main App Component
@@ -23,6 +46,10 @@ function App() {
     const saved = localStorage.getItem('myAnimeList');
     return saved ? JSON.parse(saved) : [];
   });
+  const [bookmarkList, setBookmarkList] = useState(() => {
+    const saved = localStorage.getItem('myAnimeBookmarkList');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const [loadingStatus, setLoadingStatus] = useState({
     loaded: 0,
@@ -30,7 +57,10 @@ function App() {
     active: false
   });
 
-  const [view, setView] = useState('home'); // 'home' or 'add'
+  const [view, setView] = useState(() => {
+    if (typeof window === 'undefined') return 'home';
+    return getViewFromLocation(window.location.hash, window.location.pathname);
+  });
   const [featuredSlides, setFeaturedSlides] = useState([]);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -45,13 +75,70 @@ function App() {
   });
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
+  const navigationTypeRef = useRef('init');
+
+  const navigateTo = (nextView, options = {}) => {
+    if (!APP_VIEW_SET.has(nextView)) return;
+    if (typeof window === 'undefined') {
+      setView(nextView);
+      return;
+    }
+
+    const { replace = false } = options;
+    const targetHash = APP_VIEW_HASHES[nextView] || '#/';
+    const currentHash = window.location.hash || '#/';
+    const isSameView = view === nextView && currentHash === targetHash;
+    if (isSameView) return;
+
+    navigationTypeRef.current = 'push';
+    const state = { ...(window.history.state || {}), appView: nextView };
+    if (replace) {
+      window.history.replaceState(state, '', targetHash);
+    } else {
+      window.history.pushState(state, '', targetHash);
+    }
+    setView(nextView);
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const normalizedView = getViewFromLocation(window.location.hash, window.location.pathname);
+    const state = { ...(window.history.state || {}), appView: normalizedView };
+    window.history.replaceState(state, '', APP_VIEW_HASHES[normalizedView] || '#/');
+    if (normalizedView !== view) {
+      navigationTypeRef.current = 'pop';
+      setView(normalizedView);
+    }
+
+    const handlePopState = (event) => {
+      const stateView = event?.state?.appView;
+      const nextView = APP_VIEW_SET.has(stateView)
+        ? stateView
+        : getViewFromLocation(window.location.hash, window.location.pathname);
+      navigationTypeRef.current = 'pop';
+      setView(nextView);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // 1. Storage Persistence
   useEffect(() => {
     if (animeList.length > 0) {
       localStorage.setItem('myAnimeList', JSON.stringify(animeList));
+    } else {
+      localStorage.removeItem('myAnimeList');
     }
   }, [animeList]);
+
+  useEffect(() => {
+    if (bookmarkList.length > 0) {
+      localStorage.setItem('myAnimeBookmarkList', JSON.stringify(bookmarkList));
+    } else {
+      localStorage.removeItem('myAnimeBookmarkList');
+    }
+  }, [bookmarkList]);
 
   // 2. Featured Content Selection
   useEffect(() => {
@@ -61,6 +148,12 @@ function App() {
 
   // 3. Scroll Reset on View Change
   useEffect(() => {
+    if (navigationTypeRef.current === 'pop') {
+      navigationTypeRef.current = 'idle';
+      return;
+    }
+    navigationTypeRef.current = 'idle';
+
     // Immediate scroll
     window.scrollTo(0, 0);
 
@@ -82,9 +175,9 @@ function App() {
     };
   }, [view]);
 
-  // 4. Home Quick Navigation (Top/Bottom)
+  // 4. MyList Quick Navigation (Top/Bottom)
   useEffect(() => {
-    if (view !== 'home') {
+    if (view !== 'mylist') {
       setIsSelectionMode(false);
       setSelectedAnimeIds([]);
       setQuickNavState({
@@ -170,6 +263,7 @@ function App() {
     // Add timestamp for "added" sort
     const animeWithDate = { ...data, addedAt: Date.now() };
     setAnimeList(prev => [animeWithDate, ...prev]);
+    setBookmarkList(prev => prev.filter((anime) => anime.id !== data.id));
     return { success: true };
   };
 
@@ -181,6 +275,39 @@ function App() {
       }
       return updated;
     });
+  };
+
+  const handleToggleBookmark = (data) => {
+    if (!data || typeof data.id !== 'number') {
+      return { success: false, message: '作品情報を取得できませんでした。' };
+    }
+
+    if (animeList.some((anime) => anime.id === data.id)) {
+      return { success: false, action: 'blocked', message: '視聴済み作品はブックマークできません。' };
+    }
+
+    const exists = bookmarkList.some((anime) => anime.id === data.id);
+    if (exists) {
+      setBookmarkList((prev) => prev.filter((anime) => anime.id !== data.id));
+      return { success: true, action: 'removed' };
+    }
+
+    const bookmarkItem = { ...data, bookmarkedAt: Date.now() };
+    setBookmarkList((prev) => [bookmarkItem, ...prev.filter((anime) => anime.id !== data.id)]);
+    return { success: true, action: 'added' };
+  };
+
+  const handleBulkRemoveBookmarks = (ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    const removeIdSet = new Set(ids);
+    setBookmarkList((prev) => prev.filter((anime) => !removeIdSet.has(anime.id)));
+  };
+
+  const handleMarkBookmarkAsWatched = (anime) => {
+    if (!anime || typeof anime.id !== 'number') {
+      return { success: false, message: '作品情報を取得できませんでした。' };
+    }
+    return handleAddAnime(anime);
   };
 
   const handleLongPressAnime = (id) => {
@@ -285,10 +412,41 @@ function App() {
 
       {/* Navigation Header */}
       <header className="app-header">
-        <div className="logo" onClick={() => setView('home')} style={{ cursor: 'pointer' }}>
+        <div className="logo" onClick={() => navigateTo('home')} style={{ cursor: 'pointer' }}>
           <img src="/images/logo.png" alt="AniTrigger" style={{ height: '120px' }} />
         </div>
       </header>
+
+      <nav className="global-view-nav" aria-label="メインナビゲーション">
+        <button
+          type="button"
+          className={`global-view-nav-button ${view === 'home' ? 'active' : ''}`}
+          onClick={() => navigateTo('home')}
+        >
+          ホーム
+        </button>
+        <button
+          type="button"
+          className={`global-view-nav-button ${view === 'mylist' ? 'active' : ''}`}
+          onClick={() => navigateTo('mylist')}
+        >
+          マイリスト
+        </button>
+        <button
+          type="button"
+          className={`global-view-nav-button ${view === 'bookmarks' ? 'active' : ''}`}
+          onClick={() => navigateTo('bookmarks')}
+        >
+          ブックマーク
+        </button>
+        <button
+          type="button"
+          className={`global-view-nav-button ${view === 'add' ? 'active' : ''}`}
+          onClick={() => navigateTo('add')}
+        >
+          作品の追加
+        </button>
+      </nav>
 
       {/* Content Rendering Loop */}
       {view === 'add' ? (
@@ -296,16 +454,30 @@ function App() {
           <AddAnimeScreen
             onAdd={handleAddAnime}
             onRemove={handleRemoveAnime}
-            onBack={() => setView('home')}
+            onToggleBookmark={handleToggleBookmark}
+            bookmarkList={bookmarkList}
+            onBack={() => navigateTo('home')}
             animeList={animeList}
           />
         </main>
-      ) : (
-        <>
-          <HeroSlider slides={featuredSlides} />
-
-          <main className={`main-content${isSelectionMode ? ' has-selection-dock' : ''}`}>
-            <StatsSection animeList={animeList} />
+      ) : view === 'bookmarks' ? (
+        <main className="main-content">
+          <BookmarkScreen
+            bookmarkList={bookmarkList}
+            watchedAnimeList={animeList}
+            onOpenBookmarkAdd={() => navigateTo('add')}
+            onBackHome={() => navigateTo('home')}
+            onToggleBookmark={handleToggleBookmark}
+            onMarkWatched={handleMarkBookmarkAsWatched}
+            onBulkRemoveBookmarks={handleBulkRemoveBookmarks}
+          />
+        </main>
+      ) : view === 'mylist' ? (
+          <main className={`main-content mylist-page-main${isSelectionMode ? ' has-selection-dock' : ''}`}>
+            <div className="mylist-section-header">
+              <h3 className="mylist-section-title">マイリスト</h3>
+              <p className="mylist-section-sub">登録済み作品の検索・絞り込み・並び替え</p>
+            </div>
 
             <div className="controls">
               <div className="search-box">
@@ -342,8 +514,8 @@ function App() {
                 </button>
               </div>
 
-              <button className="fab-add-button" onClick={() => setView('add')}>
-                作品を追加
+              <button className="fab-add-button" onClick={() => navigateTo('add')}>
+                マイリストに作品を追加
               </button>
             </div>
 
@@ -379,6 +551,53 @@ function App() {
               <div className="empty-state">該当する作品がありません</div>
             )}
           </main>
+      ) : (
+        <>
+          <HeroSlider slides={featuredSlides} />
+
+          <main className="main-content">
+            <StatsSection animeList={animeList} />
+
+            <div className="bookmark-entry-bar">
+              <button
+                type="button"
+                className="bookmark-entry-main"
+                onClick={() => navigateTo('mylist')}
+              >
+                マイリスト
+                <span className="bookmark-entry-count">{animeList.length}</span>
+              </button>
+              <button
+                type="button"
+                className="bookmark-entry-add"
+                onClick={() => navigateTo('add')}
+                aria-label="マイリスト追加画面へ"
+                title="マイリストに作品を追加"
+              >
+                ＋
+              </button>
+            </div>
+
+            <div className="bookmark-entry-bar">
+              <button
+                type="button"
+                className="bookmark-entry-main"
+                onClick={() => navigateTo('bookmarks')}
+              >
+                ブックマーク
+                <span className="bookmark-entry-count">{bookmarkList.length}</span>
+              </button>
+              <button
+                type="button"
+                className="bookmark-entry-add"
+                onClick={() => navigateTo('add')}
+                aria-label="作品追加画面へ"
+                title="作品を追加"
+              >
+                ＋
+              </button>
+            </div>
+          </main>
         </>
       )}
 
@@ -386,7 +605,7 @@ function App() {
         <p>AniTrigger &copy; 2025 - Data provided by AniList API</p>
       </footer>
 
-      {view === 'home' && isSelectionMode && (
+      {view === 'mylist' && isSelectionMode && (
         <div className="selection-action-dock" role="region" aria-label="選択モード操作">
           <p className="selection-action-dock-count">{selectedAnimeIds.length} 件を選択中</p>
           <div className="selection-action-dock-buttons">
@@ -409,7 +628,7 @@ function App() {
         </div>
       )}
 
-      {view === 'home' && !isSelectionMode && quickNavState.visible && (
+      {view === 'mylist' && !isSelectionMode && quickNavState.visible && (
         <aside className={`quick-nav-rail ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
           <button
             type="button"
