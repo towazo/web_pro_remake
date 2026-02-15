@@ -73,6 +73,12 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
     const [browseLoading, setBrowseLoading] = useState(false);
     const [browseError, setBrowseError] = useState('');
     const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+    const [browseQuickNavState, setBrowseQuickNavState] = useState({
+        visible: false,
+        mobile: false,
+        nearTop: true,
+        nearBottom: false
+    });
     const entryScrollPositionsRef = React.useRef({ search: 0, browse: 0 });
     const browseRequestIdRef = React.useRef(0);
     const browseResultsTopRef = React.useRef(null);
@@ -143,6 +149,66 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
         });
         return () => cancelAnimationFrame(rafId);
     }, [entryTab]);
+
+    useEffect(() => {
+        if (entryTab !== 'browse' || !selectedBrowseYear) {
+            setBrowseQuickNavState({
+                visible: false,
+                mobile: false,
+                nearTop: true,
+                nearBottom: false
+            });
+            return;
+        }
+
+        let rafId = null;
+
+        const updateBrowseQuickNav = () => {
+            const scrollTop = window.scrollY || window.pageYOffset || 0;
+            const viewportH = window.innerHeight || 0;
+            const docH = Math.max(
+                document.body?.scrollHeight || 0,
+                document.documentElement?.scrollHeight || 0
+            );
+            const maxScroll = Math.max(0, docH - viewportH);
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+
+            const nearTop = scrollTop <= 24;
+            const nearBottom = maxScroll - scrollTop <= 24;
+            const hasLongContent = maxScroll > 240;
+            const visible = hasLongContent && (!isMobile || scrollTop > 180 || nearBottom);
+
+            setBrowseQuickNavState((prev) => {
+                if (
+                    prev.visible === visible &&
+                    prev.mobile === isMobile &&
+                    prev.nearTop === nearTop &&
+                    prev.nearBottom === nearBottom
+                ) {
+                    return prev;
+                }
+                return { visible, mobile: isMobile, nearTop, nearBottom };
+            });
+        };
+
+        const requestUpdate = () => {
+            if (rafId != null) return;
+            rafId = requestAnimationFrame(() => {
+                rafId = null;
+                updateBrowseQuickNav();
+            });
+        };
+
+        window.addEventListener('scroll', requestUpdate, { passive: true });
+        window.addEventListener('resize', requestUpdate);
+        updateBrowseQuickNav();
+
+        return () => {
+            if (rafId != null) cancelAnimationFrame(rafId);
+            window.removeEventListener('scroll', requestUpdate);
+            window.removeEventListener('resize', requestUpdate);
+        };
+    }, [entryTab, selectedBrowseYear, browseLoading, browsePage, browseGenreFilters, browseSeasonFilters, browseResults.length]);
 
     useEffect(() => {
         if (!toast.visible) return;
@@ -713,6 +779,18 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
     const browseRangeEnd = browseRangeStart > 0
         ? browseRangeStart + browseResults.length - 1
         : 0;
+
+    const handleBrowseScrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleBrowseScrollToBottom = () => {
+        const docH = Math.max(
+            document.body?.scrollHeight || 0,
+            document.documentElement?.scrollHeight || 0
+        );
+        window.scrollTo({ top: docH, behavior: 'smooth' });
+    };
 
     return (
         <div className="add-screen-container">
@@ -1363,6 +1441,34 @@ function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
                 <div className={`add-toast ${toast.type}`}>
                     {toast.message}
                 </div>
+            )}
+
+            {entryTab === 'browse' && selectedBrowseYear && browseQuickNavState.visible && (
+                <aside
+                    className={`browse-quick-nav-rail ${browseQuickNavState.mobile ? 'mobile' : ''}`}
+                    aria-label="一覧内ページ移動"
+                >
+                    <button
+                        type="button"
+                        className="browse-quick-nav-button"
+                        onClick={handleBrowseScrollToTop}
+                        disabled={browseQuickNavState.nearTop}
+                        aria-label="一覧の最上部へ移動"
+                        title="最上部へ"
+                    >
+                        ↑
+                    </button>
+                    <button
+                        type="button"
+                        className="browse-quick-nav-button"
+                        onClick={handleBrowseScrollToBottom}
+                        disabled={browseQuickNavState.nearBottom}
+                        aria-label="一覧の最下部へ移動"
+                        title="最下部へ"
+                    >
+                        ↓
+                    </button>
+                </aside>
             )}
         </div>
     );
