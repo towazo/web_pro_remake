@@ -71,6 +71,7 @@ function AnimeCard({
       onPointerLeave={cancelLongPress}
       onClick={handleCardClick}
       onKeyDown={handleCardKeyDown}
+      onContextMenu={(event) => event.preventDefault()}
       role={isSelectionMode ? 'button' : undefined}
       tabIndex={isSelectionMode ? 0 : undefined}
       aria-pressed={isSelectionMode ? isSelected : undefined}
@@ -80,6 +81,8 @@ function AnimeCard({
           src={anime.coverImage.large}
           alt={anime.title.native || anime.title.romaji}
           loading="lazy"
+          draggable={false}
+          onDragStart={(event) => event.preventDefault()}
         />
         <div className="episodes-badge">{anime.episodes || '?'} 話</div>
         {isSelectionMode && (
