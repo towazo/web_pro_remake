@@ -75,6 +75,7 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
     const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
     const entryScrollPositionsRef = React.useRef({ search: 0, browse: 0 });
     const browseRequestIdRef = React.useRef(0);
+    const browseResultsTopRef = React.useRef(null);
 
     const currentYear = new Date().getFullYear();
     const browseYearOptions = React.useMemo(
@@ -289,11 +290,25 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
         }
     };
 
+    const scrollToBrowseResultsTop = (behavior = 'smooth') => {
+        if (entryTab !== 'browse') return;
+        const el = browseResultsTopRef.current;
+        if (!el) return;
+        const top = el.getBoundingClientRect().top + (window.pageYOffset || window.scrollY || 0) - 8;
+        window.scrollTo({
+            top: Math.max(0, top),
+            behavior
+        });
+    };
+
     const handleBrowsePageChange = (nextPage) => {
         const page = Number(nextPage);
         const lastPage = Number(browsePageInfo.lastPage) || 1;
         if (!Number.isFinite(page) || page < 1 || page > lastPage) return;
         setBrowsePage(page);
+        requestAnimationFrame(() => {
+            scrollToBrowseResultsTop('smooth');
+        });
     };
 
     // 2. Search Logic (Manual Search)
@@ -1017,7 +1032,7 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
                     {!selectedBrowseYear ? (
                         <div className="browse-empty-state">上のプルダウンで年を選び、「一覧を表示」を押してください。</div>
                     ) : (
-                        <div className="browse-results-area">
+                        <div className="browse-results-area" ref={browseResultsTopRef}>
                             <div className="browse-results-header">
                                 <div className="browse-results-title">{selectedBrowseYear}年の作品</div>
                                 <div className="browse-results-meta">
