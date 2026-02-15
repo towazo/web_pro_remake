@@ -295,6 +295,7 @@ function App() {
         <main className="main-content">
           <AddAnimeScreen
             onAdd={handleAddAnime}
+            onRemove={handleRemoveAnime}
             onBack={() => setView('home')}
             animeList={animeList}
           />

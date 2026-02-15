@@ -2,7 +2,7 @@
 import { fetchAnimeByYear, fetchAnimeDetails, fetchAnimeDetailsBulk, searchAnimeList } from '../../services/animeService';
 import { translateGenre } from '../../constants/animeData';
 
-function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
+function AddAnimeScreen({ onAdd, onRemove, onBack, animeList = [] }) {
     const RECOMMENDED_BULK_TITLES = 20;
     const MAX_BULK_TITLES = 20;
     const YEAR_PER_PAGE = 36;
@@ -297,10 +297,21 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
         setBrowsePage(1);
     };
 
-    const handleBrowseAdd = (anime) => {
+    const handleBrowseToggle = (anime, isAdded) => {
+        const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
+
+        if (isAdded) {
+            if (typeof onRemove === 'function') {
+                onRemove(anime.id);
+                setToast({ visible: true, message: `「${title}」の追加を取り消しました。`, type: 'warning' });
+            } else {
+                setToast({ visible: true, message: '削除処理を実行できませんでした。', type: 'warning' });
+            }
+            return;
+        }
+
         const result = onAdd(anime);
         if (result.success) {
-            const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
             setToast({ visible: true, message: `「${title}」を追加しました。`, type: 'success' });
         } else {
             setToast({ visible: true, message: result.message || 'すでに追加済みです。', type: 'warning' });
@@ -1212,11 +1223,11 @@ function AddAnimeScreen({ onAdd, onBack, animeList = [] }) {
                                                             </div>
                                                             <button
                                                                 type="button"
-                                                                className={`browse-add-button ${isAdded ? 'done' : ''}`}
-                                                                onClick={() => handleBrowseAdd(anime)}
-                                                                disabled={isAdded}
+                                                                className={`browse-add-button ${isAdded ? 'added' : 'not-added'}`}
+                                                                onClick={() => handleBrowseToggle(anime, isAdded)}
+                                                                aria-pressed={isAdded}
                                                             >
-                                                                {isAdded ? '✓ 追加済み' : '＋ 追加'}
+                                                                {isAdded ? '✓ 追加済み（タップで取消）' : '＋ 追加'}
                                                             </button>
                                                         </div>
                                                     </article>
