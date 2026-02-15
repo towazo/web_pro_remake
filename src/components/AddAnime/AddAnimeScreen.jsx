@@ -808,19 +808,30 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         const title = previewData?.title?.native || previewData?.title?.romaji || previewData?.title?.english || '作品';
         const isAdded = addedAnimeIds.has(previewData.id);
 
+        const resetNormalSearchAfterComplete = (message, type = 'success', clearInput = true) => {
+            setPreviewData(null);
+            setSuggestions([]);
+            setShowSuggestions(false);
+            autocompleteRequestIdRef.current += 1;
+            setIsSuggesting(false);
+            if (clearInput) setQuery('');
+            setStatus({ type: '', message: '' });
+            setToast({ visible: true, message, type });
+        };
+
         if (isAdded) {
             if (typeof onRemove !== 'function') {
                 setStatus({ type: 'error', message: 'マイリスト削除を実行できませんでした。' });
                 return;
             }
             onRemove(previewData.id);
-            setStatus({ type: 'info', message: `「${title}」をマイリストから外しました。` });
+            setToast({ visible: true, message: `「${title}」をマイリストから外しました。`, type: 'warning' });
             return;
         }
 
         const result = onAdd(previewData);
         if (result.success) {
-            setStatus({ type: 'success', message: `「${title}」をマイリストに追加しました。` });
+            resetNormalSearchAfterComplete(`「${title}」をマイリストに追加しました。`, 'success', true);
         } else {
             setStatus({ type: 'error', message: result.message || '追加に失敗しました。' });
         }
@@ -839,7 +850,14 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
             if (result.action === 'removed') {
                 setStatus({ type: 'info', message: `「${title}」をブックマークから外しました。` });
             } else {
-                setStatus({ type: 'success', message: `「${title}」をブックマークに追加しました。` });
+                setPreviewData(null);
+                setSuggestions([]);
+                setShowSuggestions(false);
+                autocompleteRequestIdRef.current += 1;
+                setIsSuggesting(false);
+                setQuery('');
+                setStatus({ type: '', message: '' });
+                setToast({ visible: true, message: `「${title}」をブックマークに追加しました。`, type: 'success' });
             }
         } else if (result?.message) {
             setStatus({ type: 'error', message: result.message });
