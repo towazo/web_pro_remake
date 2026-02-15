@@ -97,8 +97,10 @@ const ANIME_BY_YEAR_QUERY = `
           english
         }
         coverImage {
+          extraLarge
           large
         }
+        bannerImage
         seasonYear
         averageScore
         startDate {

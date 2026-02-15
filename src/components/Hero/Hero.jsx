@@ -83,17 +83,33 @@ function Hero({ anime, isActive }) {
     const description = translatedDesc || anime.description || '詳細情報がありません。';
     const showTranslateLink = !translatedDesc && anime.description && !isTranslating;
 
-    // Background Image logic
-    const bgImage = anime.bannerImage || (anime.coverImage && (anime.coverImage.extraLarge || anime.coverImage.large)) || '';
-    const heroStyle = bgImage ? {
-        backgroundImage: `url(${bgImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        position: 'relative'
-    } : {};
+    // Background Image logic (prefer banner image, fallback to cover image with srcSet for high DPI)
+    const hasBannerImage = Boolean(anime.bannerImage);
+    const coverLarge = anime?.coverImage?.large || '';
+    const coverExtraLarge = anime?.coverImage?.extraLarge || '';
+    const heroImageSrc = anime.bannerImage || coverExtraLarge || coverLarge || '';
+    const posterImageSrc = coverExtraLarge || coverLarge || '';
+    const mediaImageSrc = hasBannerImage ? anime.bannerImage : posterImageSrc;
+    const heroImageSrcSet = !hasBannerImage
+        ? [coverLarge ? `${coverLarge} 1x` : '', coverExtraLarge ? `${coverExtraLarge} 2x` : '']
+            .filter(Boolean)
+            .join(', ')
+        : '';
 
     return (
-        <section className={`hero ${isActive ? 'active' : ''} hero-slide`} style={heroStyle}>
+        <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}`}>
+            {heroImageSrc && (
+                <img
+                    className={`hero-bg-image ${hasBannerImage ? 'banner' : 'cover-fallback'}`}
+                    src={heroImageSrc}
+                    srcSet={heroImageSrcSet || undefined}
+                    sizes="(min-width: 1400px) 1120px, (min-width: 1100px) 1000px, (min-width: 901px) 920px, 100vw"
+                    alt=""
+                    decoding="async"
+                    loading={isActive ? 'eager' : 'lazy'}
+                    fetchPriority={isActive ? 'high' : 'auto'}
+                />
+            )}
             {/* Overlay for readability */}
             <div className="hero-overlay"></div>
 
@@ -130,6 +146,22 @@ function Hero({ anime, isActive }) {
                     </div>
                 )}
             </div>
+
+            {mediaImageSrc && (
+                <div className={`hero-media-panel ${hasBannerImage ? 'banner-media' : 'poster-media'}`}>
+                    <img
+                        src={mediaImageSrc}
+                        srcSet={hasBannerImage ? undefined : (heroImageSrcSet || undefined)}
+                        sizes={hasBannerImage
+                            ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
+                            : "(max-width: 768px) 42vw, 220px"}
+                        alt=""
+                        className={`hero-media-image ${hasBannerImage ? 'banner-media-image' : 'poster-media-image'}`}
+                        decoding="async"
+                        loading={isActive ? 'eager' : 'lazy'}
+                    />
+                </div>
+            )}
         </section>
     );
 }
