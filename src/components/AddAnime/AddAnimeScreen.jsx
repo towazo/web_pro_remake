@@ -1,5 +1,13 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { fetchAnimeByYear, fetchAnimeDetails, fetchAnimeDetailsBulk, searchAnimeList } from '../../services/animeService';
+import {
+    fetchAnimeByYear,
+    fetchAnimeDetails,
+    fetchAnimeDetailsBulk,
+    fetchAnimeDetailsById,
+    findClosestAnimeCandidates,
+    normalizeTitleForCompare,
+    searchAnimeList,
+} from '../../services/animeService';
 import { translateGenre } from '../../constants/animeData';
 
 function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList = [], bookmarkList = [] }) {
@@ -54,6 +62,8 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         notFound: [],
         alreadyAdded: []
     });
+    const [bulkOverflowInfo, setBulkOverflowInfo] = useState(null);
+    const [bulkMissAssist, setBulkMissAssist] = useState({});
     const [bulkTarget, setBulkTarget] = useState('mylist'); // mylist | bookmark
     const [bulkExecutionSummary, setBulkExecutionSummary] = useState({
         added: 0,
@@ -458,14 +468,34 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     // 3. Bulk Search Logic
     const handleBulkSearch = async (e) => {
         if (e) e.preventDefault();
-        const titles = bulkQuery.split('\n').map(t => t.trim()).filter(t => t.length > 0);
-        if (titles.length === 0) return;
-        if (titles.length > MAX_BULK_TITLES) {
-            setStatus({
-                type: 'error',
-                message: `一度に追加できるのは最大 ${MAX_BULK_TITLES} 件です（現在 ${titles.length} 件）。`
+        const inputTitles = bulkQuery.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+        if (inputTitles.length === 0) return;
+
+        let titles = inputTitles;
+        if (inputTitles.length > MAX_BULK_TITLES) {
+            const keptTitles = inputTitles.slice(0, MAX_BULK_TITLES);
+            const removedTitles = inputTitles.slice(MAX_BULK_TITLES);
+            titles = keptTitles;
+            setBulkQuery(keptTitles.join('\n'));
+            setBulkOverflowInfo({
+                removedTitles,
+                removedCount: removedTitles.length,
+                keptCount: keptTitles.length,
+                totalEntered: inputTitles.length,
+                cutoffTitle: removedTitles[0] || '',
+                rule: '末尾から除外'
             });
-            return;
+            setToast({
+                visible: true,
+                type: 'warning',
+                message: `上限超過のため ${removedTitles.length} 件を自動除外しました（末尾から）。`
+            });
+            setStatus({
+                type: 'info',
+                message: `上限 ${MAX_BULK_TITLES} 件を超えたため、末尾の ${removedTitles.length} 件を自動除外しました。`
+            });
+        } else {
+            setBulkOverflowInfo(null);
         }
 
         setIsSearching(true);
@@ -474,7 +504,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                 type: 'info',
                 message: `件数が多いため、安定性を優先した低速モードで処理します（${titles.length}件）。`
             });
-        } else {
+        } else if (inputTitles.length <= MAX_BULK_TITLES) {
             setStatus({ type: '', message: '' });
         }
         setBulkProgress({ current: 0, total: titles.length });
@@ -490,6 +520,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
         setBulkResults({ hits: [], notFound: [], alreadyAdded: [] });
+        setBulkMissAssist({});
         setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
 
         const hits = [];
@@ -503,9 +534,9 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         const seenIds = new Set(existingForTarget.map((a) => a.id));
         const existingTitleSet = new Set(
             existingForTarget.flatMap(a => [
-                (a.title?.native || '').toLowerCase(),
-                (a.title?.romaji || '').toLowerCase(),
-                (a.title?.english || '').toLowerCase()
+                normalizeTitleForCompare(a.title?.native || ''),
+                normalizeTitleForCompare(a.title?.romaji || ''),
+                normalizeTitleForCompare(a.title?.english || '')
             ].filter(Boolean))
         );
         const seenTitles = new Set();
@@ -514,7 +545,11 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
 
         for (let j = 0; j < titles.length; j++) {
             const title = titles[j];
-            const normalizedTitle = title.toLowerCase();
+            const normalizedTitle = normalizeTitleForCompare(title);
+            if (!normalizedTitle) {
+                alreadyAdded.push(title);
+                continue;
+            }
             if (seenTitles.has(normalizedTitle)) {
                 alreadyAdded.push(title);
                 continue;
@@ -627,9 +662,9 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                     maxRetryDelayMs: 1200,
                     adaptiveFallback: true,
                     adaptiveSkipPrimary: true,
-                    adaptiveMaxTerms: 2,
-                    adaptivePerPage: 8,
-                    adaptiveMinScore: 0.36,
+                    adaptiveMaxTerms: 4,
+                    adaptivePerPage: 10,
+                    adaptiveMinScore: 0.3,
                     adaptiveTimeoutMs: 2200,
                     adaptiveMaxAttempts: 1,
                     onProgress: ({ completed, hit, dataId, timedOut, title, adaptiveQuery }) => {
@@ -690,13 +725,18 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
             alreadyAdded: alreadyAdded.length,
             timedOut: liveTimedOut
         });
-        setBulkResults({ hits, notFound: [], alreadyAdded }); // notFound is now handled via pendingList
+        setBulkResults({ hits, notFound, alreadyAdded });
         setPendingList(prev => [...new Set([...prev, ...notFound])]); // Merge and unique
         setIsSearching(false);
         setBulkPhase('idle');
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
-        setStatus({ type: '', message: '' });
+        setStatus({
+            type: 'info',
+            message: notFound.length > 0
+                ? `一括検索が完了しました。未ヒット ${notFound.length} 件は「未ヒット（要確認）」から個別再検索できます。`
+                : '一括検索が完了しました。'
+        });
         setShowReview(true);
     };
 
@@ -780,6 +820,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
             skipped: skippedCount,
             target: bulkTarget
         });
+        setBulkOverflowInfo(null);
         setIsBulkComplete(true);
     };
 
@@ -792,14 +833,173 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         setPendingList(prev => [...new Set([...prev, hit.originalTitle])]);
     };
 
+    const mergeRecoveredHit = (originalTitle, animeData) => {
+        const data = animeData && typeof animeData.id === 'number' ? animeData : null;
+        if (!data) {
+            return { ok: false, reason: 'invalid' };
+        }
+
+        const isBookmarkTarget = bulkTarget === 'bookmark';
+        const existingForTarget = isBookmarkTarget
+            ? [...(animeList || []), ...(bookmarkList || [])]
+            : [...(animeList || [])];
+        const existingIdSet = new Set(existingForTarget.map((a) => a.id));
+
+        if (existingIdSet.has(data.id)) {
+            setBulkResults((prev) => ({
+                ...prev,
+                notFound: prev.notFound.filter((t) => t !== originalTitle),
+                alreadyAdded: prev.alreadyAdded.includes(originalTitle)
+                    ? prev.alreadyAdded
+                    : [...prev.alreadyAdded, originalTitle]
+            }));
+            setPendingList((prev) => prev.filter((t) => t !== originalTitle));
+            return { ok: false, reason: 'already-added' };
+        }
+
+        setBulkResults((prev) => {
+            const hitExists = prev.hits.some((h) => h?.data?.id === data.id);
+            const nextHits = hitExists ? prev.hits : [...prev.hits, { data, originalTitle }];
+            return {
+                ...prev,
+                hits: nextHits,
+                notFound: prev.notFound.filter((t) => t !== originalTitle)
+            };
+        });
+        setPendingList((prev) => prev.filter((t) => t !== originalTitle));
+        return { ok: true };
+    };
+
+    const handleRetryNotFoundTitle = async (title) => {
+        const key = normalizeTitleForCompare(title) || title;
+        setBulkMissAssist((prev) => ({
+            ...prev,
+            [key]: { ...(prev[key] || {}), loading: true, error: '' }
+        }));
+
+        const recovered = await fetchAnimeDetails(title, {
+            timeoutMs: 7000,
+            maxAttempts: 2,
+            baseDelayMs: 250,
+            maxRetryDelayMs: 900,
+            adaptiveFallback: true,
+            adaptiveSkipPrimary: true,
+            adaptiveMaxTerms: 4,
+            adaptivePerPage: 10,
+            adaptiveMinScore: 0.3,
+            adaptiveTimeoutMs: 2400,
+            adaptiveMaxAttempts: 1,
+        });
+
+        if (recovered) {
+            const result = mergeRecoveredHit(title, recovered);
+            setBulkMissAssist((prev) => ({
+                ...prev,
+                [key]: { ...(prev[key] || {}), loading: false, error: '' }
+            }));
+            if (result.ok) {
+                setToast({ visible: true, message: `「${title}」を再検索でヒットしました。`, type: 'success' });
+            } else if (result.reason === 'already-added') {
+                setToast({ visible: true, message: `「${title}」は登録済みのためスキップしました。`, type: 'warning' });
+            }
+            return;
+        }
+
+        setBulkMissAssist((prev) => ({
+            ...prev,
+            [key]: {
+                ...(prev[key] || {}),
+                loading: false,
+                error: '再検索でもヒットしませんでした。候補を表示してください。'
+            }
+        }));
+    };
+
+    const handleLoadNotFoundCandidates = async (title) => {
+        const key = normalizeTitleForCompare(title) || title;
+        setBulkMissAssist((prev) => ({
+            ...prev,
+            [key]: { ...(prev[key] || {}), loading: true, error: '' }
+        }));
+
+        const candidates = await findClosestAnimeCandidates(title, {
+            maxTerms: 4,
+            perPage: 12,
+            limit: 4,
+            minScore: 0.18,
+            timeoutMs: 5000,
+            maxAttempts: 1,
+        });
+
+        setBulkMissAssist((prev) => ({
+            ...prev,
+            [key]: {
+                ...(prev[key] || {}),
+                loading: false,
+                error: candidates.length === 0 ? '候補が見つかりませんでした。' : '',
+                candidates
+            }
+        }));
+    };
+
+    const handleAdoptNotFoundCandidate = async (originalTitle, candidate) => {
+        const candidateId = Number(candidate?.media?.id);
+        if (!Number.isFinite(candidateId)) return;
+
+        const data = await fetchAnimeDetailsById(candidateId, {
+            timeoutMs: 5000,
+            maxAttempts: 1,
+            baseDelayMs: 120,
+            maxRetryDelayMs: 500,
+        });
+        const merged = mergeRecoveredHit(originalTitle, data || candidate.media);
+        if (merged.ok) {
+            setToast({ visible: true, message: `「${originalTitle}」に候補を適用しました。`, type: 'success' });
+        } else if (merged.reason === 'already-added') {
+            setToast({ visible: true, message: `「${originalTitle}」は登録済みのためスキップしました。`, type: 'warning' });
+        }
+    };
+
     // 7. Pending List Handlers
     const handleRemoveFromPending = (titleToRemove) => {
         setPendingList(prev => prev.filter(title => title !== titleToRemove));
+        setBulkResults(prev => ({
+            ...prev,
+            notFound: prev.notFound.filter((title) => title !== titleToRemove)
+        }));
+        const key = normalizeTitleForCompare(titleToRemove) || titleToRemove;
+        setBulkMissAssist((prev) => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
     };
 
     const handleClearPending = () => {
         if (window.confirm('保留リストをすべて削除しますか？')) {
             setPendingList([]);
+            setBulkResults((prev) => ({ ...prev, notFound: [] }));
+            setBulkMissAssist({});
+        }
+    };
+
+    const handleCopyOverflowTitles = async () => {
+        if (!bulkOverflowInfo || !Array.isArray(bulkOverflowInfo.removedTitles) || bulkOverflowInfo.removedTitles.length === 0) return;
+        const text = bulkOverflowInfo.removedTitles.join('\n');
+        try {
+            await navigator.clipboard.writeText(text);
+            setToast({
+                visible: true,
+                type: 'success',
+                message: `除外された ${bulkOverflowInfo.removedTitles.length} 件をコピーしました。`
+            });
+        } catch (_) {
+            setToast({
+                visible: true,
+                type: 'warning',
+                message: 'コピーに失敗しました。ブラウザの権限設定をご確認ください。'
+            });
         }
     };
 
@@ -889,6 +1089,8 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
         setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
+        setBulkOverflowInfo(null);
+        setBulkMissAssist({});
     };
 
     const guideSummaryText = entryTab === 'search'
@@ -919,6 +1121,49 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     const bulkAlreadyAddedLabel = bulkTarget === 'bookmark'
         ? '登録済み・重複（視聴済み / ブックマーク済み）'
         : '登録済み・重複';
+    const renderBulkOverflowNotice = () => {
+        if (!bulkOverflowInfo) return null;
+        const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '';
+        return (
+            <div className="bulk-overflow-notice">
+                <div className="bulk-overflow-header">
+                    <strong>{`上限超過を検知: ${bulkOverflowInfo.totalEntered} 件入力 / ${bulkOverflowInfo.keptCount} 件を処理対象に維持`}</strong>
+                    <span>{`${bulkOverflowInfo.removedCount} 件を ${bulkOverflowInfo.rule}`}</span>
+                </div>
+                {cutoffTitle && (
+                    <div className="bulk-overflow-cutoff">
+                        {`除外開始作品: 「${cutoffTitle}」以降の作品は除外されています。`}
+                    </div>
+                )}
+                <div className="bulk-overflow-actions">
+                    <button
+                        type="button"
+                        className="bulk-mini-button subtle"
+                        onClick={handleCopyOverflowTitles}
+                        disabled={isSearching}
+                    >
+                        除外分をコピー
+                    </button>
+                    <button
+                        type="button"
+                        className="bulk-mini-button subtle"
+                        onClick={() => setBulkOverflowInfo(null)}
+                        disabled={isSearching}
+                    >
+                        表示を閉じる
+                    </button>
+                </div>
+                <details className="bulk-overflow-details">
+                    <summary>除外された作品一覧を表示</summary>
+                    <ul className="bulk-overflow-list">
+                        {bulkOverflowInfo.removedTitles.map((title, idx) => (
+                            <li key={`${title}-${idx}`}>{title}</li>
+                        ))}
+                    </ul>
+                </details>
+            </div>
+        );
+    };
 
     const handleBrowseScrollToTop = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1094,6 +1339,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                 )
             ) : (
                 <div className="bulk-add-section">
+                    {renderBulkOverflowNotice()}
                     {!showReview ? (
                         <form onSubmit={handleBulkSearch} className="add-form">
                             <div className="mode-switcher-block bulk-target-switcher">
@@ -1236,6 +1482,74 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+
+                                {!isBulkComplete && bulkResults.notFound.length > 0 && (
+                                    <div className="review-section warning">
+                                        <h4>未ヒット（要確認） ({bulkResults.notFound.length})</h4>
+                                        <ul className="bulk-notfound-list">
+                                            {bulkResults.notFound.map((title, idx) => {
+                                                const assistKey = normalizeTitleForCompare(title) || title;
+                                                const assist = bulkMissAssist[assistKey] || {};
+                                                return (
+                                                    <li key={`${title}-${idx}`} className="bulk-notfound-item">
+                                                        <div className="bulk-notfound-row">
+                                                            <span className="bulk-notfound-title">{title}</span>
+                                                            <div className="bulk-notfound-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    className="bulk-mini-button"
+                                                                    onClick={() => handleRetryNotFoundTitle(title)}
+                                                                    disabled={!!assist.loading}
+                                                                >
+                                                                    個別再検索
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="bulk-mini-button subtle"
+                                                                    onClick={() => handleLoadNotFoundCandidates(title)}
+                                                                    disabled={!!assist.loading}
+                                                                >
+                                                                    候補を表示
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        {assist.loading && (
+                                                            <div className="bulk-notfound-hint">候補を検索中...</div>
+                                                        )}
+                                                        {!assist.loading && assist.error && (
+                                                            <div className="bulk-notfound-hint warning">{assist.error}</div>
+                                                        )}
+                                                        {!assist.loading && Array.isArray(assist.candidates) && assist.candidates.length > 0 && (
+                                                            <div className="bulk-candidate-list">
+                                                                {assist.candidates.map((candidate) => {
+                                                                    const media = candidate?.media;
+                                                                    if (!media?.id) return null;
+                                                                    const displayTitle = media.title?.native || media.title?.romaji || media.title?.english || '不明な作品';
+                                                                    const subtitle = `${media.seasonYear || '年不明'}年 / 類似度 ${(candidate.score * 100).toFixed(0)}%`;
+                                                                    return (
+                                                                        <div key={`${title}-${media.id}`} className="bulk-candidate-item">
+                                                                            <div className="bulk-candidate-text">
+                                                                                <div className="bulk-candidate-title">もしかして: {displayTitle}</div>
+                                                                                <div className="bulk-candidate-meta">{subtitle}</div>
+                                                                            </div>
+                                                                            <button
+                                                                                type="button"
+                                                                                className="bulk-mini-button"
+                                                                                onClick={() => handleAdoptNotFoundCandidate(title, candidate)}
+                                                                            >
+                                                                                この候補を採用
+                                                                            </button>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
                                     </div>
                                 )}
 

@@ -227,6 +227,83 @@ const stripTitleNoise = (value = '') => {
     .replace(/[\s\p{P}\p{S}]/gu, '');
 };
 
+export const normalizeTitleForCompare = (value = '') => stripTitleNoise(value);
+
+const normalizeTitleSpacing = (value = '') =>
+  String(value)
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const stripCommonSeasonSuffix = (value = '') =>
+  String(value)
+    .replace(
+      /\s*(?:第\s*\d+\s*(?:期|部|章|シーズン)|season\s*\d+|s\s*\d+|part\s*\d+|cour\s*\d+|[0-9]+(?:st|nd|rd|th)\s*season|(?:2nd|3rd|4th)\s*season|final\s*season)\s*$/i,
+      ''
+    )
+    .trim();
+
+const stripCommonSubtitle = (value = '') =>
+  String(value)
+    .replace(/[「『【\[(（].*$/, '')
+    .replace(/\s*(?:映画|劇場版|総集編|完結編)\s*$/i, '')
+    .trim();
+
+const buildSearchTermVariants = (title, maxTerms = 6) => {
+  const baseRaw = String(title || '').trim();
+  if (!baseRaw) return [];
+
+  const pushUnique = (arr, term) => {
+    const t = normalizeTitleSpacing(term);
+    if (t.length < 2) return;
+    const normalized = stripTitleNoise(t);
+    if (!normalized) return;
+    if (!arr.some((x) => stripTitleNoise(x) === normalized)) arr.push(t);
+  };
+
+  const variants = [];
+  const base = normalizeTitleSpacing(baseRaw);
+
+  pushUnique(variants, baseRaw);
+  pushUnique(variants, base);
+
+  const noSeason = stripCommonSeasonSuffix(base);
+  pushUnique(variants, noSeason);
+  pushUnique(variants, stripCommonSubtitle(noSeason));
+
+  const noPunctuation = base
+    .replace(/[\p{P}\p{S}]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  pushUnique(variants, noPunctuation);
+
+  const delimiters = [
+    '\uFF1A', ':', '\uFF1B', ';', '\uFF5C', '|', '\uFF0F', '/', '\u301C', '\uFF5E',
+    '-', '\uFF0D', '\u2014', '\u30FB',
+  ];
+  for (const delimiter of delimiters) {
+    const idx = base.indexOf(delimiter);
+    if (idx >= 2) {
+      pushUnique(variants, base.slice(0, idx));
+    }
+  }
+
+  const spaceParts = noPunctuation.split(' ').filter(Boolean);
+  if (spaceParts.length >= 2) {
+    pushUnique(variants, spaceParts[0]);
+    pushUnique(variants, `${spaceParts[0]} ${spaceParts[1]}`);
+  }
+
+  for (const particle of ['\u306E', '\u306F']) {
+    const idx = base.indexOf(particle);
+    if (idx >= 2) {
+      pushUnique(variants, base.slice(0, idx));
+    }
+  }
+
+  return variants.slice(0, Math.max(2, Number(maxTerms) || 6));
+};
+
 const toBigrams = (value = '') => {
   const s = stripTitleNoise(value);
   const set = new Set();
@@ -293,56 +370,13 @@ const selectBestMediaCandidate = (originalTitle, mediaList, minScore = 0.36) => 
   return best.media;
 };
 
-const buildAdaptiveSearchTerms = (title, maxTerms = 2) => {
+const buildAdaptiveSearchTerms = (title, maxTerms = 4) => {
   const base = String(title || '').trim();
-  if (!base || base.length < 4) return [];
-
-  const pushUnique = (arr, term) => {
-    const t = String(term || '').trim();
-    if (t.length < 4) return;
-    const normalized = stripTitleNoise(t);
-    if (!normalized) return;
-    if (!arr.some((x) => stripTitleNoise(x) === normalized)) arr.push(t);
-  };
-
-  const terms = [];
-
-  const seasonStripped = base.replace(
-    /\s*(?:\u7B2C\s*\d+\u671F|season\s*\d+|[0-9]+(?:st|nd|rd|th)\s*season|part\s*\d+|2nd\s*season|3rd\s*season)\s*$/i,
-    ''
-  );
-  pushUnique(terms, seasonStripped);
-
-  const delimiters = [
-    '\uFF1A', ':', '\uFF5C', '|', '\uFF0F', '/', '\u301C', '\uFF5E',
-    '-', '\uFF0D', '\u2014', '\u300C', '\u300E', '\uFF08', '(',
-  ];
-  for (const delimiter of delimiters) {
-    const idx = base.indexOf(delimiter);
-    if (idx >= 4) {
-      pushUnique(terms, base.slice(0, idx));
-      break;
-    }
-  }
-
-  for (const particle of ['\u306F', '\u306E']) {
-    const idx = base.indexOf(particle);
-    if (idx >= 4 && (base.length - idx - 1) >= 4) {
-      pushUnique(terms, base.slice(0, idx));
-      break;
-    }
-  }
-
-  const splitBySpace = base.split(/\s+/).filter(Boolean);
-  if (splitBySpace.length >= 2) {
-    pushUnique(terms, splitBySpace[0]);
-    pushUnique(terms, `${splitBySpace[0]} ${splitBySpace[1]}`);
-  }
-
+  if (!base || base.length < 2) return [];
   const baseNormalized = stripTitleNoise(base);
-  return terms
+  return buildSearchTermVariants(base, Math.max(3, Number(maxTerms) || 4))
     .filter((t) => stripTitleNoise(t) !== baseNormalized)
-    .slice(0, Math.max(1, Number(maxTerms) || 2));
+    .slice(0, Math.max(1, Number(maxTerms) || 4));
 };
 
 const postAniListGraphQL = async (query, variables, options = {}) => {
@@ -473,8 +507,8 @@ export const fetchAnimeDetails = async (title, options = {}) => {
   const {
     adaptiveFallback = false,
     adaptiveSkipPrimary = false,
-    adaptiveMaxTerms = 2,
-    adaptivePerPage = 8,
+    adaptiveMaxTerms = 4,
+    adaptivePerPage = 10,
     adaptiveMinScore = 0.36,
     adaptiveTimeoutMs = 2200,
     adaptiveMaxAttempts = 1,
@@ -517,6 +551,10 @@ export const fetchAnimeDetails = async (title, options = {}) => {
 
   const fallbackTerms = buildAdaptiveSearchTerms(title, adaptiveMaxTerms);
   if (fallbackTerms.length === 0) return null;
+  const originalNormLength = stripTitleNoise(title).length;
+  const effectiveMinScore = originalNormLength <= 4
+    ? Math.min(0.3, Number(adaptiveMinScore) || 0.36)
+    : (Number(adaptiveMinScore) || 0.36);
 
   try {
     for (const fallbackQuery of fallbackTerms) {
@@ -533,7 +571,7 @@ export const fetchAnimeDetails = async (title, options = {}) => {
       const list = await searchAnimeListInternal(fallbackQuery, adaptivePerPage, fallbackRequestOptions);
       if (!Array.isArray(list) || list.length === 0) continue;
 
-      const selected = selectBestMediaCandidate(title, list, adaptiveMinScore);
+      const selected = selectBestMediaCandidate(title, list, effectiveMinScore);
       if (!selected?.id) continue;
 
       const details = await fetchAnimeDetailsById(selected.id, fallbackRequestOptions);
@@ -611,8 +649,8 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
     maxRetryDelayMs = 1800,
     adaptiveFallback = false,
     adaptiveSkipPrimary = false,
-    adaptiveMaxTerms = 2,
-    adaptivePerPage = 8,
+    adaptiveMaxTerms = 4,
+    adaptivePerPage = 10,
     adaptiveMinScore = 0.36,
     adaptiveTimeoutMs = 2200,
     adaptiveMaxAttempts = 1,
@@ -724,6 +762,54 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
   await Promise.all(workers);
 
   return results;
+};
+
+export const findClosestAnimeCandidates = async (title, options = {}) => {
+  const base = String(title || '').trim();
+  if (!base) return [];
+
+  const {
+    maxTerms = 4,
+    perPage = 10,
+    limit = 3,
+    minScore = 0.2,
+    timeoutMs = 5000,
+    maxAttempts = 1,
+    baseDelayMs = 120,
+    maxRetryDelayMs = 500,
+  } = options;
+
+  const terms = buildSearchTermVariants(base, Math.max(2, Number(maxTerms) || 4));
+  const rankedMap = new Map();
+
+  for (const term of terms) {
+    const list = await searchAnimeListInternal(term, perPage, {
+      timeoutMs,
+      maxAttempts,
+      baseDelayMs,
+      maxRetryDelayMs,
+    });
+
+    for (const media of list) {
+      const id = Number(media?.id);
+      if (!Number.isFinite(id)) continue;
+      const titles = [
+        media?.title?.native,
+        media?.title?.romaji,
+        media?.title?.english,
+      ].filter(Boolean);
+      const score = titles.reduce((best, t) => Math.max(best, titleSimilarity(base, t)), 0);
+      const prev = rankedMap.get(id);
+      if (!prev || score > prev.score) {
+        rankedMap.set(id, { media, score, matchedBy: term });
+      }
+    }
+  }
+
+  return Array.from(rankedMap.values())
+    .filter((item) => item.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(1, Number(limit) || 3));
 };
 
 export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
