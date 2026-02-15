@@ -1339,7 +1339,6 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                 )
             ) : (
                 <div className="bulk-add-section">
-                    {renderBulkOverflowNotice()}
                     {!showReview ? (
                         <form onSubmit={handleBulkSearch} className="add-form">
                             <div className="mode-switcher-block bulk-target-switcher">
@@ -1553,7 +1552,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                     </div>
                                 )}
 
-                                {bulkResults.alreadyAdded.length > 0 && (
+                                {!isBulkComplete && bulkResults.alreadyAdded.length > 0 && (
                                     <div className="review-section subtle">
                                         <h4>{bulkAlreadyAddedLabel} ({bulkResults.alreadyAdded.length})</h4>
                                         <ul className="simple-list">
@@ -1562,6 +1561,8 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                     </div>
                                 )}
                             </div>
+
+                            {!isBulkComplete && renderBulkOverflowNotice()}
 
                             <div className="bulk-actions grouped">
                                 {!isBulkComplete ? (
@@ -1846,7 +1847,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
             )}
 
             {/* Status Message */}
-            {entryTab === 'search' && status.message && !(mode === 'bulk' && isSearching) && !(mode === 'normal' && previewData) && (
+            {entryTab === 'search' && status.message && !(mode === 'bulk' && isSearching) && !(mode === 'bulk' && showReview) && !(mode === 'normal' && previewData) && (
                 <div className={`status-message-container ${status.type}`}>
                     <div className="status-text">{status.message}</div>
                 </div>
