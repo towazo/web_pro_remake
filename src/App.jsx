@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
 // Constants & Multi-language data
 import { WATCHED_TITLES, ANIME_DESCRIPTIONS, translateGenre } from './constants/animeData';
@@ -13,6 +13,13 @@ import AnimeCard from './components/Cards/AnimeCard';
 import StatsSection from './components/Stats/StatsSection';
 import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
 import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
+import LoginScreen from './components/Auth/LoginScreen';
+import {
+  fetchSession,
+  logoutSession,
+  saveLibraryToCloud,
+  syncLibraryAfterLogin,
+} from './services/authService';
 
 const APP_VIEW_HASHES = {
   home: '#/',
@@ -21,6 +28,7 @@ const APP_VIEW_HASHES = {
   addCurrent: '#/add/current-season',
   addNext: '#/add/next-season',
   bookmarks: '#/bookmarks',
+  login: '#/login',
 };
 
 const APP_VIEW_SET = new Set(Object.keys(APP_VIEW_HASHES));
@@ -63,12 +71,14 @@ const seasonToFilterKey = (season) => {
 
 const getViewFromLocation = (hash = '', pathname = '') => {
   const route = (hash || '').replace(/^#/, '');
+  if (route.startsWith('/login')) return 'login';
   if (route.startsWith('/add/current-season')) return 'addCurrent';
   if (route.startsWith('/add/next-season')) return 'addNext';
   if (route.startsWith('/bookmarks/add') || route.startsWith('/bookmark/add')) return 'add';
   if (route.startsWith('/mylist')) return 'mylist';
   if (route.startsWith('/bookmarks') || route.startsWith('/bookmark')) return 'bookmarks';
   if (route.startsWith('/add')) return 'add';
+  if (pathname.startsWith('/login')) return 'login';
   if (pathname.startsWith('/add/current-season')) return 'addCurrent';
   if (pathname.startsWith('/add/next-season')) return 'addNext';
   if (pathname.startsWith('/bookmarks/add') || pathname.startsWith('/bookmark/add')) return 'add';
@@ -78,6 +88,9 @@ const getViewFromLocation = (hash = '', pathname = '') => {
   return 'home';
 };
 
+const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
+const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
+
 /**
  * Main App Component
  * Responsible for routing, global state management, and data orchestration.
@@ -85,13 +98,21 @@ const getViewFromLocation = (hash = '', pathname = '') => {
 function App() {
   // Initialize state from localStorage if available
   const [animeList, setAnimeList] = useState(() => {
-    const saved = localStorage.getItem('myAnimeList');
+    const saved = localStorage.getItem(ANIME_LIST_STORAGE_KEY);
     return saved ? JSON.parse(saved) : [];
   });
   const [bookmarkList, setBookmarkList] = useState(() => {
-    const saved = localStorage.getItem('myAnimeBookmarkList');
+    const saved = localStorage.getItem(BOOKMARK_LIST_STORAGE_KEY);
     return saved ? JSON.parse(saved) : [];
   });
+  const [authState, setAuthState] = useState({ loading: true, user: null });
+  const [cloudSyncState, setCloudSyncState] = useState({
+    ready: false,
+    syncing: false,
+    error: '',
+  });
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [loginSwitchAccountMode, setLoginSwitchAccountMode] = useState(false);
 
   const [loadingStatus, setLoadingStatus] = useState({
     loaded: 0,
@@ -118,6 +139,8 @@ function App() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
   const navigationTypeRef = useRef('init');
+  const accountMenuRef = useRef(null);
+  const cloudSaveDebounceRef = useRef(null);
 
   const navigateTo = (nextView, options = {}) => {
     if (!APP_VIEW_SET.has(nextView)) return;
@@ -140,6 +163,9 @@ function App() {
       window.history.pushState(state, '', targetHash);
     }
     setView(nextView);
+    if (nextView !== 'login') {
+      setLoginSwitchAccountMode(false);
+    }
   };
 
   useEffect(() => {
@@ -159,28 +185,128 @@ function App() {
         : getViewFromLocation(window.location.hash, window.location.pathname);
       navigationTypeRef.current = 'pop';
       setView(nextView);
+      if (nextView !== 'login') {
+        setLoginSwitchAccountMode(false);
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  const performLoginSync = useCallback(async (localAnimeList, localBookmarkList) => {
+    const syncResult = await syncLibraryAfterLogin({
+      animeList: localAnimeList,
+      bookmarkList: localBookmarkList,
+    });
+    const cloudAnimeList = Array.isArray(syncResult?.data?.animeList) ? syncResult.data.animeList : [];
+    const cloudBookmarkList = Array.isArray(syncResult?.data?.bookmarkList) ? syncResult.data.bookmarkList : [];
+    setAnimeList(cloudAnimeList);
+    setBookmarkList(cloudBookmarkList);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const initializeSession = async () => {
+      try {
+        const session = await fetchSession();
+        if (cancelled) return;
+
+        if (session?.authenticated && session?.user) {
+          setAuthState({ loading: false, user: session.user });
+          setCloudSyncState({ ready: false, syncing: true, error: '' });
+          try {
+            await performLoginSync(animeList, bookmarkList);
+            if (cancelled) return;
+            setCloudSyncState({ ready: true, syncing: false, error: '' });
+          } catch (syncError) {
+            if (cancelled) return;
+            setCloudSyncState({
+              ready: false,
+              syncing: false,
+              error: syncError.message || 'クラウド同期に失敗しました。',
+            });
+          }
+        } else {
+          setAuthState({ loading: false, user: null });
+          setCloudSyncState({ ready: false, syncing: false, error: '' });
+        }
+      } catch (_) {
+        if (cancelled) return;
+        setAuthState({ loading: false, user: null });
+        setCloudSyncState({ ready: false, syncing: false, error: '' });
+      }
+    };
+
+    initializeSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [performLoginSync]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+
+    const handleClickOutside = (event) => {
+      if (!accountMenuRef.current?.contains(event.target)) {
+        setAccountMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [accountMenuOpen]);
+
+  useEffect(() => {
+    setAccountMenuOpen(false);
+    if (view !== 'login' && loginSwitchAccountMode) {
+      setLoginSwitchAccountMode(false);
+    }
+  }, [view, loginSwitchAccountMode]);
+
   // 1. Storage Persistence
   useEffect(() => {
     if (animeList.length > 0) {
-      localStorage.setItem('myAnimeList', JSON.stringify(animeList));
+      localStorage.setItem(ANIME_LIST_STORAGE_KEY, JSON.stringify(animeList));
     } else {
-      localStorage.removeItem('myAnimeList');
+      localStorage.removeItem(ANIME_LIST_STORAGE_KEY);
     }
   }, [animeList]);
 
   useEffect(() => {
     if (bookmarkList.length > 0) {
-      localStorage.setItem('myAnimeBookmarkList', JSON.stringify(bookmarkList));
+      localStorage.setItem(BOOKMARK_LIST_STORAGE_KEY, JSON.stringify(bookmarkList));
     } else {
-      localStorage.removeItem('myAnimeBookmarkList');
+      localStorage.removeItem(BOOKMARK_LIST_STORAGE_KEY);
     }
   }, [bookmarkList]);
+
+  useEffect(() => {
+    if (!authState.user || !cloudSyncState.ready) return;
+    if (cloudSaveDebounceRef.current) {
+      clearTimeout(cloudSaveDebounceRef.current);
+    }
+
+    cloudSaveDebounceRef.current = setTimeout(() => {
+      saveLibraryToCloud({ animeList, bookmarkList }).catch((syncError) => {
+        setCloudSyncState((prev) => ({
+          ...prev,
+          error: syncError.message || 'クラウドへの保存に失敗しました。',
+        }));
+      });
+    }, 450);
+
+    return () => {
+      if (cloudSaveDebounceRef.current) {
+        clearTimeout(cloudSaveDebounceRef.current);
+      }
+    };
+  }, [animeList, bookmarkList, authState.user, cloudSyncState.ready]);
 
   // 2. Featured Content Selection
   useEffect(() => {
@@ -298,7 +424,16 @@ function App() {
     window.scrollTo({ top: docH, behavior: 'smooth' });
   };
 
+  const ensureLoggedInForMutation = () => {
+    if (authState.user) return true;
+    handleOpenLogin(false);
+    return false;
+  };
+
   const handleAddAnime = (data) => {
+    if (!ensureLoggedInForMutation()) {
+      return { success: false, message: '追加操作はログイン後に利用できます。' };
+    }
     if (animeList.some(a => a.id === data.id)) {
       return { success: false, message: 'その作品は既に追加されています。' };
     }
@@ -310,16 +445,20 @@ function App() {
   };
 
   const handleRemoveAnime = (id) => {
+    if (!ensureLoggedInForMutation()) return;
     setAnimeList(prev => {
       const updated = prev.filter(anime => anime.id !== id);
       if (updated.length === 0) {
-        localStorage.removeItem('myAnimeList');
+        localStorage.removeItem(ANIME_LIST_STORAGE_KEY);
       }
       return updated;
     });
   };
 
   const handleToggleBookmark = (data) => {
+    if (!ensureLoggedInForMutation()) {
+      return { success: false, action: 'blocked', message: 'ブックマーク操作はログイン後に利用できます。' };
+    }
     if (!data || typeof data.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
     }
@@ -340,12 +479,16 @@ function App() {
   };
 
   const handleBulkRemoveBookmarks = (ids) => {
+    if (!ensureLoggedInForMutation()) return;
     if (!Array.isArray(ids) || ids.length === 0) return;
     const removeIdSet = new Set(ids);
     setBookmarkList((prev) => prev.filter((anime) => !removeIdSet.has(anime.id)));
   };
 
   const handleMarkBookmarkAsWatched = (anime) => {
+    if (!ensureLoggedInForMutation()) {
+      return { success: false, message: '追加操作はログイン後に利用できます。' };
+    }
     if (!anime || typeof anime.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
     }
@@ -370,6 +513,7 @@ function App() {
   };
 
   const handleBulkRemoveSelected = () => {
+    if (!ensureLoggedInForMutation()) return;
     if (selectedAnimeIds.length === 0) return;
 
     if (!window.confirm(`選択した ${selectedAnimeIds.length} 件の作品を削除しますか？`)) {
@@ -380,13 +524,53 @@ function App() {
       const selectedSet = new Set(selectedAnimeIds);
       const updated = prev.filter((anime) => !selectedSet.has(anime.id));
       if (updated.length === 0) {
-        localStorage.removeItem('myAnimeList');
+        localStorage.removeItem(ANIME_LIST_STORAGE_KEY);
       }
       return updated;
     });
 
     setIsSelectionMode(false);
     setSelectedAnimeIds([]);
+  };
+
+  const handleOpenLogin = (switchMode = false) => {
+    setLoginSwitchAccountMode(Boolean(switchMode));
+    navigateTo('login');
+  };
+
+  const handleLoginSuccess = async (user) => {
+    setAuthState({ loading: false, user: user || null });
+    setAccountMenuOpen(false);
+    setCloudSyncState({ ready: false, syncing: true, error: '' });
+    try {
+      await performLoginSync(animeList, bookmarkList);
+      setCloudSyncState({ ready: true, syncing: false, error: '' });
+      setLoginSwitchAccountMode(false);
+      navigateTo('home', { replace: true });
+    } catch (syncError) {
+      setCloudSyncState({
+        ready: false,
+        syncing: false,
+        error: syncError.message || 'クラウド同期に失敗しました。',
+      });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logoutSession();
+    } catch (_) {
+      // Ignore logout API failures and clear local auth state.
+    }
+    setAccountMenuOpen(false);
+    setLoginSwitchAccountMode(false);
+    setAuthState({ loading: false, user: null });
+    setCloudSyncState({ ready: false, syncing: false, error: '' });
+  };
+
+  const handleSwitchAccount = async () => {
+    await handleLogout();
+    handleOpenLogin(true);
   };
 
   // 5. Data Derived States (Filters/Computed)
@@ -483,6 +667,10 @@ function App() {
     : view === 'addNext'
       ? `${nextSeasonLabel}の放送予定作品を先に追加できます。`
       : 'マイリストやブックマークに追加する作品を探せます。';
+  const isLoggedIn = Boolean(authState.user);
+  const accountDisplayName = authState.user?.name || authState.user?.email || 'アカウント';
+  const accountInitial = accountDisplayName.charAt(0).toUpperCase();
+  const showCloudSyncMessage = isLoggedIn && (cloudSyncState.syncing || cloudSyncState.error);
 
   // 6. UI Render
   return (
@@ -500,8 +688,57 @@ function App() {
 
       {/* Navigation Header */}
       <header className="app-header">
-        <div className="logo" onClick={() => navigateTo('home')} style={{ cursor: 'pointer' }}>
-          <img src="/images/logo.png" alt="AniTrigger" style={{ height: '120px' }} />
+        <div className="app-header-inner">
+          <div className="logo" onClick={() => navigateTo('home')} style={{ cursor: 'pointer' }}>
+            <img src="/images/logo.png" alt="AniTrigger" style={{ height: '120px' }} />
+          </div>
+          <div className="header-auth-slot">
+            {authState.loading && (
+              <span className="header-auth-loading">セッション確認中...</span>
+            )}
+            {!authState.loading && isLoggedIn && (
+              <div className="header-account" ref={accountMenuRef}>
+                <button
+                  type="button"
+                  className="header-account-trigger"
+                  onClick={() => setAccountMenuOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={accountMenuOpen}
+                  title={accountDisplayName}
+                >
+                  {authState.user?.picture ? (
+                    <img
+                      src={authState.user.picture}
+                      alt=""
+                      className="header-account-avatar"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="header-account-avatar-fallback">{accountInitial}</span>
+                  )}
+                </button>
+                {accountMenuOpen && (
+                  <div className="header-account-menu" role="menu">
+                    <p className="header-account-name">{accountDisplayName}</p>
+                    <button
+                      type="button"
+                      className="header-account-menu-item"
+                      onClick={handleSwitchAccount}
+                    >
+                      アカウントを変更
+                    </button>
+                    <button
+                      type="button"
+                      className="header-account-menu-item danger"
+                      onClick={handleLogout}
+                    >
+                      ログアウト
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -536,8 +773,20 @@ function App() {
         </button>
       </nav>
 
+      {showCloudSyncMessage && (
+        <div className={`cloud-sync-status ${cloudSyncState.error ? 'error' : ''}`}>
+          {cloudSyncState.error ? cloudSyncState.error : 'クラウドデータを同期しています...'}
+        </div>
+      )}
+
       {/* Content Rendering Loop */}
-      {isAddView ? (
+      {view === 'login' ? (
+        <LoginScreen
+          onBackHome={() => navigateTo('home')}
+          onLoginSuccess={handleLoginSuccess}
+          switchAccountMode={loginSwitchAccountMode}
+        />
+      ) : isAddView ? (
         <main className="main-content">
           <AddAnimeScreen
             onAdd={handleAddAnime}
@@ -653,6 +902,24 @@ function App() {
           </main>
       ) : (
         <>
+          {!isLoggedIn && (
+            <section className="home-login-entry" aria-label="ログイン案内">
+              <div className="home-login-entry-text">
+                <p className="home-login-entry-title">ログインするとデータを端末間で同期できます</p>
+                <p className="home-login-entry-sub">
+                  閲覧はログイン不要です。追加・保存データをクラウドに保持したい場合はログインしてください。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="home-login-entry-button"
+                onClick={() => handleOpenLogin(false)}
+              >
+                ログイン
+              </button>
+            </section>
+          )}
+
           <HeroSlider slides={featuredSlides} />
 
           <main className="main-content">

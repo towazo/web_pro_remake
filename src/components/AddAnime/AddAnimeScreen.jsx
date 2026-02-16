@@ -357,7 +357,10 @@ function AddAnimeScreen({
             });
 
             if (error) {
-                setBrowseError('年代リストの取得に失敗しました。時間をおいて再試行してください。');
+                const debugMessage = (typeof import.meta !== 'undefined' && import.meta.env?.DEV)
+                    ? ` (${error.message || 'unknown error'})`
+                    : '';
+                setBrowseError(`年代リストの取得に失敗しました。時間をおいて再試行してください。${debugMessage}`);
             } else if (!safeItems || safeItems.length === 0) {
                 setBrowseError('');
             }

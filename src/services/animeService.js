@@ -100,6 +100,59 @@ const ANIME_BY_YEAR_QUERY = `
     $page: Int,
     $perPage: Int,
     $genreIn: [String],
+    $formatIn: [MediaFormat]
+  ) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo {
+        total
+        perPage
+        currentPage
+        lastPage
+        hasNextPage
+      }
+      media(
+        type: ANIME
+        seasonYear: $seasonYear
+        season: $season
+        genre_in: $genreIn
+        format_in: $formatIn
+        sort: [POPULARITY_DESC, START_DATE_DESC]
+      ) {
+        id
+        title {
+          native
+          romaji
+          english
+        }
+        coverImage {
+          extraLarge
+          large
+        }
+        bannerImage
+        season
+        seasonYear
+        status
+        averageScore
+        startDate {
+          year
+          month
+          day
+        }
+        episodes
+        genres
+        format
+      }
+    }
+  }
+`;
+
+const ANIME_BY_YEAR_WITH_STATUS_QUERY = `
+  query (
+    $seasonYear: Int,
+    $season: MediaSeason,
+    $page: Int,
+    $perPage: Int,
+    $genreIn: [String],
     $formatIn: [MediaFormat],
     $statusIn: [MediaStatus],
     $statusNot: MediaStatus
@@ -933,7 +986,7 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   const statusIn = statusInList.length > 0 ? statusInList : null;
   const statusNot = Object.prototype.hasOwnProperty.call(options, 'statusNot')
     ? options.statusNot
-    : 'NOT_YET_RELEASED';
+    : null;
 
   const emptyPageInfo = {
     total: 0,
@@ -948,17 +1001,25 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   }
 
   try {
-    const result = await postAniListGraphQL(
-      ANIME_BY_YEAR_QUERY,
-      { seasonYear: year, season, page, perPage, genreIn, formatIn, statusIn, statusNot },
-      {
-        timeoutMs: Math.max(4000, Number(options.timeoutMs) || 9000),
-        maxAttempts: Math.max(1, Number(options.maxAttempts) || 2),
-        baseDelayMs: Math.max(80, Number(options.baseDelayMs) || 250),
-        maxRetryDelayMs: Math.max(200, Number(options.maxRetryDelayMs) || 900),
-        signal: options.signal,
-      }
-    );
+    const requestOptions = {
+      timeoutMs: Math.max(4000, Number(options.timeoutMs) || 9000),
+      maxAttempts: Math.max(1, Number(options.maxAttempts) || 2),
+      baseDelayMs: Math.max(80, Number(options.baseDelayMs) || 250),
+      maxRetryDelayMs: Math.max(200, Number(options.maxRetryDelayMs) || 900),
+      signal: options.signal,
+    };
+    const baseVariables = { seasonYear: year, season, page, perPage, genreIn, formatIn };
+    const withStatusVariables = { ...baseVariables, statusIn, statusNot };
+    const hasStatusFilter = (statusIn && statusIn.length > 0) || Boolean(statusNot);
+
+    let result = hasStatusFilter
+      ? await postAniListGraphQL(ANIME_BY_YEAR_WITH_STATUS_QUERY, withStatusVariables, requestOptions)
+      : await postAniListGraphQL(ANIME_BY_YEAR_QUERY, baseVariables, requestOptions);
+
+    // AniList occasionally fails on status_* filters (500). Fallback to safe query.
+    if (!result?.ok && !result?.data?.Page && hasStatusFilter) {
+      result = await postAniListGraphQL(ANIME_BY_YEAR_QUERY, baseVariables, requestOptions);
+    }
 
     if (!result?.ok && !result?.data?.Page) {
       const graphQLErrorMessage = Array.isArray(result?.errors) && result.errors.length > 0
