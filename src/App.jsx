@@ -203,7 +203,7 @@ function App() {
         setServerSyncState({
           ready: true,
           syncing: false,
-          error: 'サーバー同期に失敗しました。端末内データで継続します。',
+          error: '',
         });
       }
     };
@@ -246,7 +246,7 @@ function App() {
           console.error('Failed to save server library:', syncError);
           setServerSyncState((prev) => ({
             ...prev,
-            error: 'サーバーへの保存に失敗しました。端末内データは保持されています。',
+            error: '',
           }));
         });
     }, 450);
@@ -559,7 +559,6 @@ function App() {
     : view === 'addNext'
       ? `${nextSeasonLabel}の放送予定作品を先に追加できます。`
       : 'マイリストやブックマークに追加する作品を探せます。';
-  const showServerSyncMessage = serverSyncState.syncing || Boolean(serverSyncState.error);
 
   // 6. UI Render
   return (
@@ -612,12 +611,6 @@ function App() {
           作品の追加
         </button>
       </nav>
-
-      {showServerSyncMessage && (
-        <div className={`cloud-sync-status ${serverSyncState.error ? 'error' : ''}`}>
-          {serverSyncState.error ? serverSyncState.error : '保存データを同期しています...'}
-        </div>
-      )}
 
       {/* Content Rendering Loop */}
       {isAddView ? (

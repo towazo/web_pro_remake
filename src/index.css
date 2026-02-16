@@ -124,22 +124,6 @@ body {
     background: #fff;
 }
 
-.cloud-sync-status {
-    margin: -8px 0 20px;
-    border: 1px solid #bbb;
-    background: #f8f8f8;
-    color: #333;
-    font-size: 0.78rem;
-    font-weight: 700;
-    padding: 8px 12px;
-}
-
-.cloud-sync-status.error {
-    border-color: #d7a3a3;
-    background: #fff4f4;
-    color: #8c1c1c;
-}
-
 .global-view-nav-button {
     min-height: 46px;
     border: none;
