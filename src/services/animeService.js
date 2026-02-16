@@ -17,7 +17,14 @@ const ANIME_QUERY = `
         extraLarge
         large
       }
+      season
       seasonYear
+      status
+      startDate {
+        year
+        month
+        day
+      }
       averageScore
       episodes
       genres
@@ -40,7 +47,14 @@ const ANIME_LIST_QUERY = `
         coverImage {
           large
         }
+        season
         seasonYear
+        status
+        startDate {
+          year
+          month
+          day
+        }
         averageScore
         episodes
         genres
@@ -62,7 +76,14 @@ const ANIME_BY_ID_QUERY = `
         extraLarge
         large
       }
+      season
       seasonYear
+      status
+      startDate {
+        year
+        month
+        day
+      }
       averageScore
       episodes
       genres
@@ -73,7 +94,16 @@ const ANIME_BY_ID_QUERY = `
 `;
 
 const ANIME_BY_YEAR_QUERY = `
-  query ($seasonYear: Int, $page: Int, $perPage: Int, $genreIn: [String], $formatIn: [MediaFormat]) {
+  query (
+    $seasonYear: Int,
+    $season: MediaSeason,
+    $page: Int,
+    $perPage: Int,
+    $genreIn: [String],
+    $formatIn: [MediaFormat],
+    $statusIn: [MediaStatus],
+    $statusNot: MediaStatus
+  ) {
     Page(page: $page, perPage: $perPage) {
       pageInfo {
         total
@@ -85,7 +115,9 @@ const ANIME_BY_YEAR_QUERY = `
       media(
         type: ANIME
         seasonYear: $seasonYear
-        status_not: NOT_YET_RELEASED
+        season: $season
+        status_in: $statusIn
+        status_not: $statusNot
         genre_in: $genreIn
         format_in: $formatIn
         sort: [POPULARITY_DESC, START_DATE_DESC]
@@ -101,7 +133,9 @@ const ANIME_BY_YEAR_QUERY = `
           large
         }
         bannerImage
+        season
         seasonYear
+        status
         averageScore
         startDate {
           year
@@ -821,7 +855,10 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
     'id',
     'title { native romaji english }',
     'coverImage { extraLarge large }',
+    'season',
     'seasonYear',
+    'status',
+    'startDate { year month day }',
     'averageScore',
     'episodes',
     'genres',
@@ -881,6 +918,8 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   const year = Number(seasonYear);
   const page = Math.max(1, Number(options.page) || 1);
   const perPage = Math.max(10, Math.min(50, Number(options.perPage) || 36));
+  const seasonRaw = String(options.season || '').toUpperCase();
+  const season = ['WINTER', 'SPRING', 'SUMMER', 'FALL'].includes(seasonRaw) ? seasonRaw : null;
   const genreList = Array.isArray(options.genreIn)
     ? options.genreIn.filter((g) => typeof g === 'string' && g.trim().length > 0)
     : [];
@@ -888,6 +927,13 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   const formatIn = Array.isArray(options.formatIn) && options.formatIn.length > 0
     ? options.formatIn
     : DEFAULT_YEAR_FORMATS;
+  const statusInList = Array.isArray(options.statusIn)
+    ? options.statusIn.filter((s) => typeof s === 'string' && s.trim().length > 0)
+    : [];
+  const statusIn = statusInList.length > 0 ? statusInList : null;
+  const statusNot = Object.prototype.hasOwnProperty.call(options, 'statusNot')
+    ? options.statusNot
+    : 'NOT_YET_RELEASED';
 
   const emptyPageInfo = {
     total: 0,
@@ -904,7 +950,7 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   try {
     const result = await postAniListGraphQL(
       ANIME_BY_YEAR_QUERY,
-      { seasonYear: year, page, perPage, genreIn, formatIn },
+      { seasonYear: year, season, page, perPage, genreIn, formatIn, statusIn, statusNot },
       {
         timeoutMs: Math.max(4000, Number(options.timeoutMs) || 9000),
         maxAttempts: Math.max(1, Number(options.maxAttempts) || 2),

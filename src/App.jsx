@@ -18,17 +18,59 @@ const APP_VIEW_HASHES = {
   home: '#/',
   mylist: '#/mylist',
   add: '#/add',
+  addCurrent: '#/add/current-season',
+  addNext: '#/add/next-season',
   bookmarks: '#/bookmarks',
 };
 
 const APP_VIEW_SET = new Set(Object.keys(APP_VIEW_HASHES));
 
+const SEASON_LABELS = {
+  WINTER: '冬',
+  SPRING: '春',
+  SUMMER: '夏',
+  FALL: '秋',
+};
+
+const getSeasonByMonth = (month) => {
+  if (month >= 1 && month <= 3) return 'WINTER';
+  if (month >= 4 && month <= 6) return 'SPRING';
+  if (month >= 7 && month <= 9) return 'SUMMER';
+  return 'FALL';
+};
+
+const getCurrentSeasonInfo = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  return { year, season: getSeasonByMonth(month) };
+};
+
+const getNextSeasonInfo = ({ year, season }) => {
+  if (season === 'WINTER') return { year, season: 'SPRING' };
+  if (season === 'SPRING') return { year, season: 'SUMMER' };
+  if (season === 'SUMMER') return { year, season: 'FALL' };
+  return { year: year + 1, season: 'WINTER' };
+};
+
+const seasonToFilterKey = (season) => {
+  if (season === 'WINTER') return 'winter';
+  if (season === 'SPRING') return 'spring';
+  if (season === 'SUMMER') return 'summer';
+  if (season === 'FALL') return 'autumn';
+  return '';
+};
+
 const getViewFromLocation = (hash = '', pathname = '') => {
   const route = (hash || '').replace(/^#/, '');
+  if (route.startsWith('/add/current-season')) return 'addCurrent';
+  if (route.startsWith('/add/next-season')) return 'addNext';
   if (route.startsWith('/bookmarks/add') || route.startsWith('/bookmark/add')) return 'add';
   if (route.startsWith('/mylist')) return 'mylist';
   if (route.startsWith('/bookmarks') || route.startsWith('/bookmark')) return 'bookmarks';
   if (route.startsWith('/add')) return 'add';
+  if (pathname.startsWith('/add/current-season')) return 'addCurrent';
+  if (pathname.startsWith('/add/next-season')) return 'addNext';
   if (pathname.startsWith('/bookmarks/add') || pathname.startsWith('/bookmark/add')) return 'add';
   if (pathname.startsWith('/mylist')) return 'mylist';
   if (pathname.startsWith('/bookmarks') || pathname.startsWith('/bookmark')) return 'bookmarks';
@@ -396,6 +438,52 @@ function App() {
     return result;
   }, [animeList, searchQuery, selectedGenre, sortKey, sortOrder]);
 
+  const currentSeasonInfo = useMemo(() => getCurrentSeasonInfo(), []);
+  const nextSeasonInfo = useMemo(() => getNextSeasonInfo(currentSeasonInfo), [currentSeasonInfo]);
+  const currentSeasonLabel = `${currentSeasonInfo.year}年${SEASON_LABELS[currentSeasonInfo.season] || ''}`;
+  const nextSeasonLabel = `${nextSeasonInfo.year}年${SEASON_LABELS[nextSeasonInfo.season] || ''}`;
+
+  const currentSeasonAddPreset = useMemo(() => ({
+    year: currentSeasonInfo.year,
+    mediaSeason: currentSeasonInfo.season,
+    seasonKey: seasonToFilterKey(currentSeasonInfo.season),
+    statusIn: ['RELEASING'],
+    statusNot: null,
+    title: `今期放送中アニメ (${currentSeasonLabel})`,
+    description: '今期に放送中の作品を表示しています。ブックマークやマイリストに追加できます。',
+    locked: true,
+  }), [currentSeasonInfo, currentSeasonLabel]);
+
+  const nextSeasonAddPreset = useMemo(() => ({
+    year: nextSeasonInfo.year,
+    mediaSeason: nextSeasonInfo.season,
+    seasonKey: seasonToFilterKey(nextSeasonInfo.season),
+    statusIn: ['NOT_YET_RELEASED'],
+    statusNot: null,
+    title: `来季放送予定アニメ (${nextSeasonLabel})`,
+    description: '来季に放送予定の作品を表示しています。気になる作品を先にブックマークできます。',
+    locked: true,
+  }), [nextSeasonInfo, nextSeasonLabel]);
+
+  const isAddView = view === 'add' || view === 'addCurrent' || view === 'addNext';
+  const activeBrowsePreset = view === 'addCurrent'
+    ? currentSeasonAddPreset
+    : view === 'addNext'
+      ? nextSeasonAddPreset
+      : null;
+  const addViewBackTarget = activeBrowsePreset ? 'bookmarks' : 'home';
+  const addViewBackLabel = activeBrowsePreset ? '← ブックマークへ戻る' : '← ホームへ戻る';
+  const addViewTitle = view === 'addCurrent'
+    ? '今期放送中作品の追加'
+    : view === 'addNext'
+      ? '来季放送予定作品の追加'
+      : '作品の追加';
+  const addViewSubtitle = view === 'addCurrent'
+    ? `${currentSeasonLabel}の作品を確認して追加できます。`
+    : view === 'addNext'
+      ? `${nextSeasonLabel}の放送予定作品を先に追加できます。`
+      : 'マイリストやブックマークに追加する作品を探せます。';
+
   // 6. UI Render
   return (
     <div className="app-container">
@@ -441,7 +529,7 @@ function App() {
         </button>
         <button
           type="button"
-          className={`global-view-nav-button ${view === 'add' ? 'active' : ''}`}
+          className={`global-view-nav-button ${isAddView ? 'active' : ''}`}
           onClick={() => navigateTo('add')}
         >
           作品の追加
@@ -449,15 +537,20 @@ function App() {
       </nav>
 
       {/* Content Rendering Loop */}
-      {view === 'add' ? (
+      {isAddView ? (
         <main className="main-content">
           <AddAnimeScreen
             onAdd={handleAddAnime}
             onRemove={handleRemoveAnime}
             onToggleBookmark={handleToggleBookmark}
             bookmarkList={bookmarkList}
-            onBack={() => navigateTo('home')}
+            onBack={() => navigateTo(addViewBackTarget)}
             animeList={animeList}
+            screenTitle={addViewTitle}
+            screenSubtitle={addViewSubtitle}
+            backButtonLabel={addViewBackLabel}
+            initialEntryTab={activeBrowsePreset ? 'browse' : 'search'}
+            browsePreset={activeBrowsePreset}
           />
         </main>
       ) : view === 'bookmarks' ? (
@@ -466,6 +559,8 @@ function App() {
             bookmarkList={bookmarkList}
             watchedAnimeList={animeList}
             onOpenBookmarkAdd={() => navigateTo('add')}
+            onOpenCurrentSeasonAdd={() => navigateTo('addCurrent')}
+            onOpenNextSeasonAdd={() => navigateTo('addNext')}
             onBackHome={() => navigateTo('home')}
             onToggleBookmark={handleToggleBookmark}
             onMarkWatched={handleMarkBookmarkAsWatched}

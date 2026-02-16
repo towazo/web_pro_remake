@@ -3,14 +3,31 @@ import {
     fetchAnimeByYear,
     fetchAnimeDetails,
     fetchAnimeDetailsBulk,
-    fetchAnimeDetailsById,
-    findClosestAnimeCandidates,
     normalizeTitleForCompare,
     searchAnimeList,
 } from '../../services/animeService';
 import { translateGenre } from '../../constants/animeData';
 
-function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList = [], bookmarkList = [] }) {
+const ANILIST_SEASON_TO_FILTER_KEY = {
+    WINTER: 'winter',
+    SPRING: 'spring',
+    SUMMER: 'summer',
+    FALL: 'autumn'
+};
+
+function AddAnimeScreen({
+    onAdd,
+    onRemove,
+    onToggleBookmark,
+    onBack,
+    animeList = [],
+    bookmarkList = [],
+    screenTitle = '作品の追加',
+    screenSubtitle = 'マイリストやブックマークに追加する作品を探せます。',
+    backButtonLabel = '← ホームへ戻る',
+    initialEntryTab = 'search',
+    browsePreset = null
+}) {
     const RECOMMENDED_BULK_TITLES = 20;
     const MAX_BULK_TITLES = 20;
     const YEAR_PER_PAGE = 36;
@@ -31,7 +48,39 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     const BULK_FAST_MAX_RETRY_ATTEMPTS = 1;
     const BULK_FAST_RETRY_BASE_DELAY_MS = 150;
     const BULK_FAST_RETRY_DELAY_CAP_MS = 450;
-    const [entryTab, setEntryTab] = useState('search'); // 'search' or 'browse'
+    const normalizedBrowsePreset = React.useMemo(() => {
+        const preset = browsePreset && typeof browsePreset === 'object' ? browsePreset : null;
+        const year = Number(preset?.year);
+        if (!preset || !Number.isFinite(year) || year < 1900) return null;
+
+        const mediaSeasonRaw = String(preset.mediaSeason || '').toUpperCase();
+        const mediaSeason = ['WINTER', 'SPRING', 'SUMMER', 'FALL'].includes(mediaSeasonRaw)
+            ? mediaSeasonRaw
+            : '';
+        const seasonKeyRaw = String(preset.seasonKey || '').toLowerCase();
+        const seasonKey = seasonKeyRaw
+            || (mediaSeason ? ANILIST_SEASON_TO_FILTER_KEY[mediaSeason] : '');
+        const statusIn = Array.isArray(preset.statusIn)
+            ? preset.statusIn.filter((item) => typeof item === 'string' && item.trim().length > 0)
+            : null;
+        const hasStatusNot = Object.prototype.hasOwnProperty.call(preset, 'statusNot');
+
+        return {
+            year,
+            mediaSeason: mediaSeason || null,
+            seasonKey: seasonKey || '',
+            statusIn: statusIn && statusIn.length > 0 ? statusIn : null,
+            statusNot: hasStatusNot ? preset.statusNot : null,
+            title: String(preset.title || '').trim(),
+            description: String(preset.description || '').trim(),
+            locked: preset.locked !== false
+        };
+    }, [browsePreset]);
+
+    const isBrowsePresetLocked = Boolean(normalizedBrowsePreset?.locked);
+    const [entryTab, setEntryTab] = useState(() => (
+        normalizedBrowsePreset ? 'browse' : (initialEntryTab === 'browse' ? 'browse' : 'search')
+    )); // 'search' or 'browse'
     const [showGuide, setShowGuide] = useState(false);
     const [mode, setMode] = useState('normal'); // 'normal' or 'bulk'
     const [query, setQuery] = useState('');
@@ -63,7 +112,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         alreadyAdded: []
     });
     const [bulkOverflowInfo, setBulkOverflowInfo] = useState(null);
-    const [bulkMissAssist, setBulkMissAssist] = useState({});
+    const [bulkNotFoundStatus, setBulkNotFoundStatus] = useState({});
     const [bulkTarget, setBulkTarget] = useState('mylist'); // mylist | bookmark
     const [bulkExecutionSummary, setBulkExecutionSummary] = useState({
         added: 0,
@@ -73,11 +122,17 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     const [showReview, setShowReview] = useState(false);
     const [isBulkComplete, setIsBulkComplete] = useState(false);
     const [pendingList, setPendingList] = useState([]);
-    const [browseYearDraft, setBrowseYearDraft] = useState('');
-    const [selectedBrowseYear, setSelectedBrowseYear] = useState(null);
+    const [browseYearDraft, setBrowseYearDraft] = useState(() => (
+        normalizedBrowsePreset ? String(normalizedBrowsePreset.year) : ''
+    ));
+    const [selectedBrowseYear, setSelectedBrowseYear] = useState(() => (
+        normalizedBrowsePreset ? normalizedBrowsePreset.year : null
+    ));
     const [browsePage, setBrowsePage] = useState(1);
     const [browseGenreFilters, setBrowseGenreFilters] = useState([]);
-    const [browseSeasonFilters, setBrowseSeasonFilters] = useState([]);
+    const [browseSeasonFilters, setBrowseSeasonFilters] = useState(() => (
+        normalizedBrowsePreset?.seasonKey ? [normalizedBrowsePreset.seasonKey] : []
+    ));
     const [browseResults, setBrowseResults] = useState([]);
     const [browsePageInfo, setBrowsePageInfo] = useState({
         total: 0,
@@ -236,6 +291,16 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     }, [toast.visible, toast.message]);
 
     useEffect(() => {
+        if (!normalizedBrowsePreset) return;
+        setEntryTab('browse');
+        setBrowseYearDraft(String(normalizedBrowsePreset.year));
+        setSelectedBrowseYear(normalizedBrowsePreset.year);
+        setBrowsePage(1);
+        setBrowseGenreFilters([]);
+        setBrowseSeasonFilters(normalizedBrowsePreset.seasonKey ? [normalizedBrowsePreset.seasonKey] : []);
+    }, [normalizedBrowsePreset]);
+
+    useEffect(() => {
         if (!selectedBrowseYear) return;
 
         const requestId = browseRequestIdRef.current + 1;
@@ -244,7 +309,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         setBrowseError('');
 
         const run = async () => {
-            const { items, pageInfo, error } = await fetchAnimeByYear(selectedBrowseYear, {
+            const requestOptions = {
                 page: browsePage,
                 perPage: YEAR_PER_PAGE,
                 genreIn: browseGenreFilters,
@@ -252,7 +317,15 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                 maxAttempts: 2,
                 baseDelayMs: 250,
                 maxRetryDelayMs: 900,
-            });
+            };
+
+            if (normalizedBrowsePreset) {
+                requestOptions.season = normalizedBrowsePreset.mediaSeason;
+                requestOptions.statusIn = normalizedBrowsePreset.statusIn;
+                requestOptions.statusNot = normalizedBrowsePreset.statusNot;
+            }
+
+            const { items, pageInfo, error } = await fetchAnimeByYear(selectedBrowseYear, requestOptions);
 
             if (browseRequestIdRef.current !== requestId) return;
 
@@ -293,7 +366,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         };
 
         run();
-    }, [selectedBrowseYear, browsePage, browseGenreFilters, YEAR_PER_PAGE]);
+    }, [selectedBrowseYear, browsePage, browseGenreFilters, YEAR_PER_PAGE, normalizedBrowsePreset]);
 
     useEffect(() => {
         if (entryTab !== 'browse') return;
@@ -338,12 +411,14 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     ), [browseResults, browseSeasonFilters]);
 
     const handleEntryTabChange = (nextTab) => {
+        if (isBrowsePresetLocked && nextTab !== 'browse') return;
         if (nextTab === entryTab) return;
         entryScrollPositionsRef.current[entryTab] = window.scrollY || window.pageYOffset || 0;
         setEntryTab(nextTab);
     };
 
     const handleBrowseYearApply = () => {
+        if (isBrowsePresetLocked) return;
         const year = Number(browseYearDraft);
         if (!Number.isFinite(year)) {
             setToast({ visible: true, message: '年を選択してください。', type: 'warning' });
@@ -520,7 +595,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
         setBulkResults({ hits: [], notFound: [], alreadyAdded: [] });
-        setBulkMissAssist({});
+        setBulkNotFoundStatus({});
         setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
 
         const hits = [];
@@ -872,7 +947,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
 
     const handleRetryNotFoundTitle = async (title) => {
         const key = normalizeTitleForCompare(title) || title;
-        setBulkMissAssist((prev) => ({
+        setBulkNotFoundStatus((prev) => ({
             ...prev,
             [key]: { ...(prev[key] || {}), loading: true, error: '' }
         }));
@@ -893,7 +968,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
 
         if (recovered) {
             const result = mergeRecoveredHit(title, recovered);
-            setBulkMissAssist((prev) => ({
+            setBulkNotFoundStatus((prev) => ({
                 ...prev,
                 [key]: { ...(prev[key] || {}), loading: false, error: '' }
             }));
@@ -905,59 +980,14 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
             return;
         }
 
-        setBulkMissAssist((prev) => ({
+        setBulkNotFoundStatus((prev) => ({
             ...prev,
             [key]: {
                 ...(prev[key] || {}),
                 loading: false,
-                error: '再検索でもヒットしませんでした。候補を表示してください。'
+                error: '再検索でもヒットしませんでした。タイトルを見直して再検索してください。'
             }
         }));
-    };
-
-    const handleLoadNotFoundCandidates = async (title) => {
-        const key = normalizeTitleForCompare(title) || title;
-        setBulkMissAssist((prev) => ({
-            ...prev,
-            [key]: { ...(prev[key] || {}), loading: true, error: '' }
-        }));
-
-        const candidates = await findClosestAnimeCandidates(title, {
-            maxTerms: 4,
-            perPage: 12,
-            limit: 4,
-            minScore: 0.18,
-            timeoutMs: 5000,
-            maxAttempts: 1,
-        });
-
-        setBulkMissAssist((prev) => ({
-            ...prev,
-            [key]: {
-                ...(prev[key] || {}),
-                loading: false,
-                error: candidates.length === 0 ? '候補が見つかりませんでした。' : '',
-                candidates
-            }
-        }));
-    };
-
-    const handleAdoptNotFoundCandidate = async (originalTitle, candidate) => {
-        const candidateId = Number(candidate?.media?.id);
-        if (!Number.isFinite(candidateId)) return;
-
-        const data = await fetchAnimeDetailsById(candidateId, {
-            timeoutMs: 5000,
-            maxAttempts: 1,
-            baseDelayMs: 120,
-            maxRetryDelayMs: 500,
-        });
-        const merged = mergeRecoveredHit(originalTitle, data || candidate.media);
-        if (merged.ok) {
-            setToast({ visible: true, message: `「${originalTitle}」に候補を適用しました。`, type: 'success' });
-        } else if (merged.reason === 'already-added') {
-            setToast({ visible: true, message: `「${originalTitle}」は登録済みのためスキップしました。`, type: 'warning' });
-        }
     };
 
     // 7. Pending List Handlers
@@ -968,7 +998,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
             notFound: prev.notFound.filter((title) => title !== titleToRemove)
         }));
         const key = normalizeTitleForCompare(titleToRemove) || titleToRemove;
-        setBulkMissAssist((prev) => {
+        setBulkNotFoundStatus((prev) => {
             if (!prev[key]) return prev;
             const next = { ...prev };
             delete next[key];
@@ -980,21 +1010,73 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         if (window.confirm('保留リストをすべて削除しますか？')) {
             setPendingList([]);
             setBulkResults((prev) => ({ ...prev, notFound: [] }));
-            setBulkMissAssist({});
+            setBulkNotFoundStatus({});
+        }
+    };
+
+    const copyTextToClipboard = async (text) => {
+        const content = String(text || '').trim();
+        if (!content) return false;
+
+        if (navigator?.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(content);
+                return true;
+            } catch (_) {
+                // Fallback below.
+            }
+        }
+
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = content;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            const copied = document.execCommand('copy');
+            document.body.removeChild(textarea);
+            return copied;
+        } catch (_) {
+            return false;
+        }
+    };
+
+    const handleCopyPendingTitle = async (title) => {
+        if (!title) return;
+        if (!window.confirm(`「${title}」をコピーしますか？`)) return;
+        const success = await copyTextToClipboard(title);
+        if (success) {
+            setToast({ visible: true, type: 'success', message: '作品名をコピーしました。' });
+        } else {
+            setToast({ visible: true, type: 'warning', message: 'コピーに失敗しました。ブラウザ権限をご確認ください。' });
+        }
+    };
+
+    const handleCopyAllPending = async () => {
+        if (pendingList.length === 0) return;
+        if (!window.confirm(`保留リスト ${pendingList.length} 件をコピーしますか？`)) return;
+        const success = await copyTextToClipboard(pendingList.join('\n'));
+        if (success) {
+            setToast({ visible: true, type: 'success', message: `保留リスト ${pendingList.length} 件をコピーしました。` });
+        } else {
+            setToast({ visible: true, type: 'warning', message: 'コピーに失敗しました。ブラウザ権限をご確認ください。' });
         }
     };
 
     const handleCopyOverflowTitles = async () => {
         if (!bulkOverflowInfo || !Array.isArray(bulkOverflowInfo.removedTitles) || bulkOverflowInfo.removedTitles.length === 0) return;
         const text = bulkOverflowInfo.removedTitles.join('\n');
-        try {
-            await navigator.clipboard.writeText(text);
+        const copied = await copyTextToClipboard(text);
+        if (copied) {
             setToast({
                 visible: true,
                 type: 'success',
                 message: `除外された ${bulkOverflowInfo.removedTitles.length} 件をコピーしました。`
             });
-        } catch (_) {
+        } else {
             setToast({
                 visible: true,
                 type: 'warning',
@@ -1090,14 +1172,16 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
         setBulkCurrentTitle('');
         setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
         setBulkOverflowInfo(null);
-        setBulkMissAssist({});
+        setBulkNotFoundStatus({});
     };
 
-    const guideSummaryText = entryTab === 'search'
-        ? (mode === 'bulk'
-            ? '複数作品をまとめて追加できます。必要時のみ詳細ガイドを確認してください。'
-            : '作品名を直接入力して追加する導線です。')
-        : '年とジャンルから思い出しながら探す導線です。';
+    const guideSummaryText = isBrowsePresetLocked
+        ? (normalizedBrowsePreset?.description || '対象シーズンの作品を追加できます。')
+        : entryTab === 'search'
+            ? (mode === 'bulk'
+                ? '複数作品をまとめて追加できます。必要時のみ詳細ガイドを確認してください。'
+                : '作品名を直接入力して追加する導線です。')
+            : '年とジャンルから思い出しながら探す導線です。';
     const browseGenreSummaryText = browseGenreFilters.length > 0
         ? `選択中: ${browseGenreFilters.map((genre) => translateGenre(genre)).join(' / ')}`
         : 'ジャンル未選択（表示中の作品をすべて表示）';
@@ -1121,6 +1205,8 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     const bulkAlreadyAddedLabel = bulkTarget === 'bookmark'
         ? '登録済み・重複（視聴済み / ブックマーク済み）'
         : '登録済み・重複';
+    const browseResultsTitle = normalizedBrowsePreset?.title || `${selectedBrowseYear}年の作品`;
+    const browsePaginationLabel = normalizedBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
     const renderBulkOverflowNotice = () => {
         if (!bulkOverflowInfo) return null;
         const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '';
@@ -1180,25 +1266,30 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
     return (
         <div className="add-screen-container page-shell has-bottom-home-nav">
             <div className="add-screen-header">
-                <h2 className="page-main-title">作品の追加</h2>
-                <p className="page-main-subtitle">マイリストやブックマークに追加する作品を探せます。</p>
+                <h2 className="page-main-title">{screenTitle}</h2>
+                <p className="page-main-subtitle">{screenSubtitle}</p>
+                {normalizedBrowsePreset?.title && (
+                    <div className="browse-preset-note">{normalizedBrowsePreset.title}</div>
+                )}
 
-                <div className="entry-tab-switcher">
-                    <button
-                        className={`entry-tab-button ${entryTab === 'search' ? 'active' : ''}`}
-                        onClick={() => handleEntryTabChange('search')}
-                        disabled={isSearching || browseLoading}
-                    >
-                        検索で追加
-                    </button>
-                    <button
-                        className={`entry-tab-button ${entryTab === 'browse' ? 'active' : ''}`}
-                        onClick={() => handleEntryTabChange('browse')}
-                        disabled={isSearching || browseLoading}
-                    >
-                        年代リストから追加
-                    </button>
-                </div>
+                {!isBrowsePresetLocked && (
+                    <div className="entry-tab-switcher">
+                        <button
+                            className={`entry-tab-button ${entryTab === 'search' ? 'active' : ''}`}
+                            onClick={() => handleEntryTabChange('search')}
+                            disabled={isSearching || browseLoading}
+                        >
+                            検索で追加
+                        </button>
+                        <button
+                            className={`entry-tab-button ${entryTab === 'browse' ? 'active' : ''}`}
+                            onClick={() => handleEntryTabChange('browse')}
+                            disabled={isSearching || browseLoading}
+                        >
+                            年代リストから追加
+                        </button>
+                    </div>
+                )}
 
                 <div className="entry-guide-inline">
                     <div className="entry-guide-summary-wrap">
@@ -1230,9 +1321,19 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                 </ul>
                             ) : (
                                 <ul>
-                                    <li>まず年を選択して「一覧を表示」を押してください</li>
-                                    <li>ジャンル・放送時期を複数選択すると OR 条件で絞り込めます</li>
-                                    <li>表示された一覧から作品を追加してください</li>
+                                    {isBrowsePresetLocked ? (
+                                        <>
+                                            <li>対象シーズンの作品が自動表示されます</li>
+                                            <li>各作品カードからブックマーク/マイリストへ追加できます</li>
+                                            <li>登録済み作品はボタン表示で状態を確認できます</li>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <li>まず年を選択して「一覧を表示」を押してください</li>
+                                            <li>ジャンル・放送時期を複数選択すると OR 条件で絞り込めます</li>
+                                            <li>表示された一覧から作品を追加してください</li>
+                                        </>
+                                    )}
                                 </ul>
                             )}
                         </div>
@@ -1247,7 +1348,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                 </ul>
                             ) : (
                                 <ul>
-                                    <li>ピンポイント検索は「検索で追加」をご利用ください</li>
+                                    <li>{isBrowsePresetLocked ? '対象シーズンの作品を一覧から選んで追加してください' : 'ピンポイント検索は「検索で追加」をご利用ください'}</li>
                                     <li>年代リストは思い出しながら探す用途に適しています</li>
                                     <li>ページは年全体で切り替わり、季節単位では分割しません</li>
                                 </ul>
@@ -1490,7 +1591,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                         <ul className="bulk-notfound-list">
                                             {bulkResults.notFound.map((title, idx) => {
                                                 const assistKey = normalizeTitleForCompare(title) || title;
-                                                const assist = bulkMissAssist[assistKey] || {};
+                                                const assist = bulkNotFoundStatus[assistKey] || {};
                                                 return (
                                                     <li key={`${title}-${idx}`} className="bulk-notfound-item">
                                                         <div className="bulk-notfound-row">
@@ -1504,46 +1605,13 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                                                 >
                                                                     個別再検索
                                                                 </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="bulk-mini-button subtle"
-                                                                    onClick={() => handleLoadNotFoundCandidates(title)}
-                                                                    disabled={!!assist.loading}
-                                                                >
-                                                                    候補を表示
-                                                                </button>
                                                             </div>
                                                         </div>
                                                         {assist.loading && (
-                                                            <div className="bulk-notfound-hint">候補を検索中...</div>
+                                                            <div className="bulk-notfound-hint">個別再検索中...</div>
                                                         )}
                                                         {!assist.loading && assist.error && (
                                                             <div className="bulk-notfound-hint warning">{assist.error}</div>
-                                                        )}
-                                                        {!assist.loading && Array.isArray(assist.candidates) && assist.candidates.length > 0 && (
-                                                            <div className="bulk-candidate-list">
-                                                                {assist.candidates.map((candidate) => {
-                                                                    const media = candidate?.media;
-                                                                    if (!media?.id) return null;
-                                                                    const displayTitle = media.title?.native || media.title?.romaji || media.title?.english || '不明な作品';
-                                                                    const subtitle = `${media.seasonYear || '年不明'}年 / 類似度 ${(candidate.score * 100).toFixed(0)}%`;
-                                                                    return (
-                                                                        <div key={`${title}-${media.id}`} className="bulk-candidate-item">
-                                                                            <div className="bulk-candidate-text">
-                                                                                <div className="bulk-candidate-title">もしかして: {displayTitle}</div>
-                                                                                <div className="bulk-candidate-meta">{subtitle}</div>
-                                                                            </div>
-                                                                            <button
-                                                                                type="button"
-                                                                                className="bulk-mini-button"
-                                                                                onClick={() => handleAdoptNotFoundCandidate(title, candidate)}
-                                                                            >
-                                                                                この候補を採用
-                                                                            </button>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
                                                         )}
                                                     </li>
                                                 );
@@ -1590,31 +1658,39 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
             {entryTab === 'browse' && (
                 <div className="entry-browse-section">
                     <div className="browse-control-panel">
-                        <div className="browse-year-controls">
-                            <select
-                                className="browse-year-select"
-                                value={browseYearDraft}
-                                onChange={(e) => setBrowseYearDraft(e.target.value)}
-                                disabled={browseLoading}
-                            >
-                                <option value="">年を選択してください</option>
-                                {browseYearOptions.map((year) => (
-                                    <option key={year} value={year}>{year}年</option>
-                                ))}
-                            </select>
-                            <button
-                                className="action-button primary-button browse-apply-button"
-                                onClick={handleBrowseYearApply}
-                                disabled={browseLoading}
-                                type="button"
-                            >
-                                一覧を表示
-                            </button>
-                        </div>
+                        {isBrowsePresetLocked ? (
+                            <div className="browse-guide-note">
+                                {normalizedBrowsePreset?.description || '対象シーズンの作品を表示しています。'}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="browse-year-controls">
+                                    <select
+                                        className="browse-year-select"
+                                        value={browseYearDraft}
+                                        onChange={(e) => setBrowseYearDraft(e.target.value)}
+                                        disabled={browseLoading}
+                                    >
+                                        <option value="">年を選択してください</option>
+                                        {browseYearOptions.map((year) => (
+                                            <option key={year} value={year}>{year}年</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        className="action-button primary-button browse-apply-button"
+                                        onClick={handleBrowseYearApply}
+                                        disabled={browseLoading}
+                                        type="button"
+                                    >
+                                        一覧を表示
+                                    </button>
+                                </div>
 
-                        <div className="browse-guide-note">
-                            ピンポイント検索は「検索で追加」をご利用ください。
-                        </div>
+                                <div className="browse-guide-note">
+                                    ピンポイント検索は「検索で追加」をご利用ください。
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {!selectedBrowseYear ? (
@@ -1622,7 +1698,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                     ) : (
                         <div className="browse-results-area" ref={browseResultsTopRef}>
                             <div className="browse-results-header">
-                                <div className="browse-results-title">{selectedBrowseYear}年の作品</div>
+                                <div className="browse-results-title">{browseResultsTitle}</div>
                                 <div className="browse-results-meta">
                                     {browsePageInfo.total > 0 ? (
                                         <>
@@ -1733,7 +1809,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                                 <>
                                     <div className="browse-pagination">
                                         <span className="browse-pagination-context">
-                                            {selectedBrowseYear}年内のページ
+                                            {browsePaginationLabel}
                                         </span>
                                         <div className="browse-pagination-controls">
                                             <button
@@ -1814,7 +1890,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
 
                                     <div className="browse-pagination browse-pagination-bottom">
                                         <span className="browse-pagination-context">
-                                            {selectedBrowseYear}年内のページ
+                                            {browsePaginationLabel}
                                         </span>
                                         <div className="browse-pagination-controls">
                                             <button
@@ -1910,9 +1986,14 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                 <div className="pending-list-container">
                     <div className="pending-list-header">
                         <h3>保留リスト({pendingList.length})</h3>
-                        <button className="clear-all-button" onClick={handleClearPending}>
-                            すべて削除
-                        </button>
+                        <div className="pending-list-actions">
+                            <button className="copy-pending-button" onClick={handleCopyAllPending}>
+                                リストをコピー
+                            </button>
+                            <button className="clear-all-button" onClick={handleClearPending}>
+                                すべて削除
+                            </button>
+                        </div>
                     </div>
                     <div className="pending-list-description">
                         一括追加で見つからなかった作品、または除外した作品です。必要に応じて再検索してください。
@@ -1921,6 +2002,14 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
                         {pendingList.map((title, index) => (
                             <li key={index} className="pending-item">
                                 <span className="pending-title">{title}</span>
+                                <button
+                                    type="button"
+                                    className="copy-pending-title-button"
+                                    onClick={() => handleCopyPendingTitle(title)}
+                                    title="作品名をコピー"
+                                >
+                                    コピー
+                                </button>
                                 <button
                                     className="remove-pending-button"
                                     onClick={() => handleRemoveFromPending(title)}
@@ -1942,7 +2031,7 @@ function AddAnimeScreen({ onAdd, onRemove, onToggleBookmark, onBack, animeList =
 
             <nav className="screen-bottom-home-nav" aria-label="画面移動">
                 <button type="button" className="screen-bottom-home-button" onClick={onBack}>
-                    ← ホームへ戻る
+                    {backButtonLabel}
                 </button>
             </nav>
 
