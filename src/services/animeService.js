@@ -1,13 +1,25 @@
 import { translateGenre } from '../constants/animeData';
-import { filterOutHentaiAnimeList, isHentaiAnime } from '../utils/contentFilters';
+import {
+  DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN,
+  DISPLAY_ALLOWED_MEDIA_FORMATS,
+  filterDisplayEligibleAnimeList,
+  filterOutHentaiAnimeList,
+  isDisplayEligibleAnime,
+  isHentaiAnime,
+} from '../utils/contentFilters';
 
 const ANILIST_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV)
   ? '/anilist/'
   : 'https://graphql.anilist.co';
 
 const ANIME_QUERY = `
-  query ($search: String) {
-    Media (search: $search, type: ANIME) {
+  query ($search: String, $formatIn: [MediaFormat], $countryOfOrigin: CountryCode) {
+    Media (
+      search: $search
+      type: ANIME
+      format_in: $formatIn
+      countryOfOrigin: $countryOfOrigin
+    ) {
       id
       title {
         native
@@ -29,6 +41,8 @@ const ANIME_QUERY = `
       averageScore
       episodes
       genres
+      format
+      countryOfOrigin
       bannerImage
       description
     }
@@ -36,9 +50,19 @@ const ANIME_QUERY = `
 `;
 
 const ANIME_LIST_QUERY = `
-  query ($search: String, $perPage: Int) {
+  query (
+    $search: String,
+    $perPage: Int,
+    $formatIn: [MediaFormat],
+    $countryOfOrigin: CountryCode
+  ) {
     Page (perPage: $perPage) {
-      media (search: $search, type: ANIME) {
+      media (
+        search: $search
+        type: ANIME
+        format_in: $formatIn
+        countryOfOrigin: $countryOfOrigin
+      ) {
         id
         title {
           native
@@ -59,6 +83,8 @@ const ANIME_LIST_QUERY = `
         averageScore
         episodes
         genres
+        format
+        countryOfOrigin
       }
     }
   }
@@ -88,6 +114,8 @@ const ANIME_BY_ID_QUERY = `
       averageScore
       episodes
       genres
+      format
+      countryOfOrigin
       bannerImage
       description
     }
@@ -101,7 +129,8 @@ const ANIME_BY_YEAR_QUERY = `
     $page: Int,
     $perPage: Int,
     $genreIn: [String],
-    $formatIn: [MediaFormat]
+    $formatIn: [MediaFormat],
+    $countryOfOrigin: CountryCode
   ) {
     Page(page: $page, perPage: $perPage) {
       pageInfo {
@@ -117,6 +146,7 @@ const ANIME_BY_YEAR_QUERY = `
         season: $season
         genre_in: $genreIn
         format_in: $formatIn
+        countryOfOrigin: $countryOfOrigin
         sort: [POPULARITY_DESC, START_DATE_DESC]
       ) {
         id
@@ -142,6 +172,7 @@ const ANIME_BY_YEAR_QUERY = `
         episodes
         genres
         format
+        countryOfOrigin
       }
     }
   }
@@ -154,7 +185,8 @@ const ANIME_BY_START_DATE_QUERY = `
     $page: Int,
     $perPage: Int,
     $genreIn: [String],
-    $formatIn: [MediaFormat]
+    $formatIn: [MediaFormat],
+    $countryOfOrigin: CountryCode
   ) {
     Page(page: $page, perPage: $perPage) {
       pageInfo {
@@ -170,6 +202,7 @@ const ANIME_BY_START_DATE_QUERY = `
         startDate_lesser: $startDateLesser
         genre_in: $genreIn
         format_in: $formatIn
+        countryOfOrigin: $countryOfOrigin
         sort: [START_DATE_DESC, POPULARITY_DESC]
       ) {
         id
@@ -195,12 +228,14 @@ const ANIME_BY_START_DATE_QUERY = `
         episodes
         genres
         format
+        countryOfOrigin
       }
     }
   }
 `;
 
-const DEFAULT_YEAR_FORMATS = ['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA', 'MUSIC'];
+const DEFAULT_YEAR_FORMATS = DISPLAY_ALLOWED_MEDIA_FORMATS;
+const DEFAULT_COUNTRY_OF_ORIGIN = DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN;
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -280,6 +315,22 @@ const parseRetryAfterMs = (response) => {
   return null;
 };
 
+const readHeaderValue = (response, name) => {
+  const value = response?.headers?.get?.(name);
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const extractRateLimitMeta = (response) => ({
+  retryAfter: readHeaderValue(response, 'Retry-After'),
+  retryAfterMs: parseRetryAfterMs(response),
+  remaining: readHeaderValue(response, 'X-RateLimit-Remaining'),
+  limit: readHeaderValue(response, 'X-RateLimit-Limit'),
+  reset: readHeaderValue(response, 'X-RateLimit-Reset'),
+  resetAfter: readHeaderValue(response, 'X-RateLimit-Reset-After'),
+});
+
 const isRetryableGraphQLError = (errors) => {
   if (!Array.isArray(errors) || errors.length === 0) return false;
   return errors.some((e) => {
@@ -303,6 +354,7 @@ const hasAnyGraphQLData = (data) => {
   if (!data || typeof data !== 'object') return false;
   return Object.values(data).some((value) => value !== null && value !== undefined);
 };
+const SUPPLEMENTAL_FORMAT_SET = new Set(['OVA', 'TV_SHORT']);
 
 const stripTitleNoise = (value = '') => {
   return String(value)
@@ -451,6 +503,28 @@ const selectBestMediaCandidate = (originalTitle, mediaList, minScore = 0.36) => 
   // Ambiguous low-score matches are likely false positives.
   if (second && best.score < 0.45 && (best.score - second.score) < 0.02) return null;
 
+  const bestFormat = String(best?.media?.format || '').toUpperCase();
+  const isSupplementalFormat = SUPPLEMENTAL_FORMAT_SET.has(bestFormat);
+  if (isSupplementalFormat) {
+    const effectiveMinScore = Math.max(minScore, 0.42);
+    if (best.score < effectiveMinScore) return null;
+
+    const originalNorm = stripTitleNoise(originalTitle);
+    const bestTitleList = [
+      best?.media?.title?.native,
+      best?.media?.title?.romaji,
+      best?.media?.title?.english,
+    ].filter(Boolean);
+    const hasContainment = bestTitleList.some((title) => {
+      const titleNorm = stripTitleNoise(title);
+      if (!originalNorm || !titleNorm) return false;
+      return titleNorm.includes(originalNorm) || originalNorm.includes(titleNorm);
+    });
+    if (!hasContainment && best.score < 0.55) return null;
+
+    if (second && best.score < 0.5 && (best.score - second.score) < 0.03) return null;
+  }
+
   return best.media;
 };
 
@@ -491,6 +565,10 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
         },
         timeoutMs
       );
+      const rateLimitMeta = extractRateLimitMeta(response);
+      const retryAfterMs = Number.isFinite(Number(rateLimitMeta.retryAfterMs))
+        ? Number(rateLimitMeta.retryAfterMs)
+        : null;
 
       if (response.ok) {
         const result = await response.json();
@@ -498,7 +576,6 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
           const retryable = isRetryableGraphQLError(result.errors);
           const hasData = hasAnyGraphQLData(result?.data);
           if (retryable && !hasData && attempt < maxAttempts) {
-            const retryAfterMs = parseRetryAfterMs(response);
             const backoff = baseDelayMs * Math.pow(2, attempt - 1);
             const jitter = Math.floor(Math.random() * 250);
             const rawWaitMs = retryAfterMs ?? (backoff + jitter);
@@ -513,6 +590,8 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
                   waitMs,
                   search: variables?.search,
                   errors: result.errors,
+                  retryAfterMs,
+                  rateLimit: rateLimitMeta,
                 });
               } catch (_) {
                 // ignore callback errors
@@ -523,18 +602,31 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
             continue;
           }
 
-          return { ok: hasData, status: 200, data: result?.data ?? null, errors: result.errors };
+          return {
+            ok: hasData,
+            status: 200,
+            data: result?.data ?? null,
+            errors: result.errors,
+            retryAfterMs,
+            rateLimit: rateLimitMeta,
+          };
         }
-        return { ok: true, status: 200, data: result?.data ?? null };
+        return { ok: true, status: 200, data: result?.data ?? null, retryAfterMs, rateLimit: rateLimitMeta };
       }
 
       const status = response.status;
       const retryable = status === 404 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
       if (!retryable || attempt === maxAttempts) {
-        return { ok: false, status, data: null, errors: null };
+        return {
+          ok: false,
+          status,
+          data: null,
+          errors: null,
+          retryAfterMs,
+          rateLimit: rateLimitMeta,
+        };
       }
 
-      const retryAfterMs = parseRetryAfterMs(response);
       const backoff = baseDelayMs * Math.pow(2, attempt - 1);
       const jitter = Math.floor(Math.random() * 250);
       const rawWaitMs = retryAfterMs ?? (backoff + jitter);
@@ -548,6 +640,8 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
             maxAttempts,
             waitMs,
             search: variables?.search,
+            retryAfterMs,
+            rateLimit: rateLimitMeta,
           });
         } catch (_) {
           // ignore callback errors
@@ -613,9 +707,23 @@ export const fetchAnimeDetails = async (title, options = {}) => {
 
   if (!adaptiveSkipPrimary) {
     try {
-      const result = await postAniListGraphQL(ANIME_QUERY, { search: title }, requestOptions);
+      const result = await postAniListGraphQL(
+        ANIME_QUERY,
+        {
+          search: title,
+          formatIn: DEFAULT_YEAR_FORMATS,
+          countryOfOrigin: DEFAULT_COUNTRY_OF_ORIGIN,
+        },
+        requestOptions
+      );
       if (result.ok && result.data?.Media) {
-        return isHentaiAnime(result.data.Media) ? null : result.data.Media;
+        const media = result.data.Media;
+        return isDisplayEligibleAnime(media, {
+          allowUnknownFormat: false,
+          allowUnknownCountry: false,
+        })
+          ? media
+          : null;
       }
     } catch (error) {
       primaryError = error;
@@ -697,7 +805,12 @@ export const fetchAnimeDetailsById = async (id, options = {}) => {
     const result = await postAniListGraphQL(ANIME_BY_ID_QUERY, { id: numericId }, options);
     if (!result.ok) return null;
     const media = result.data?.Media ?? null;
-    return isHentaiAnime(media) ? null : media;
+    return isDisplayEligibleAnime(media, {
+      allowUnknownFormat: false,
+      allowUnknownCountry: false,
+    })
+      ? media
+      : null;
   } catch (error) {
     if (!isAbortError(error)) {
       console.error(`Error fetching by id ${id}:`, error);
@@ -708,9 +821,21 @@ export const fetchAnimeDetailsById = async (id, options = {}) => {
 
 const searchAnimeListInternal = async (title, perPage = 8, options = {}) => {
   try {
-    const result = await postAniListGraphQL(ANIME_LIST_QUERY, { search: title, perPage }, options);
+    const result = await postAniListGraphQL(
+      ANIME_LIST_QUERY,
+      {
+        search: title,
+        perPage,
+        formatIn: DEFAULT_YEAR_FORMATS,
+        countryOfOrigin: DEFAULT_COUNTRY_OF_ORIGIN,
+      },
+      options
+    );
     if (!result.ok) return [];
-    return filterOutHentaiAnimeList(result.data?.Page?.media || []);
+    return filterDisplayEligibleAnimeList(result.data?.Page?.media || [], {
+      allowUnknownFormat: false,
+      allowUnknownCountry: false,
+    });
   } catch (error) {
     if (!isAbortError(error)) {
       console.error(`Error searching list for ${title}:`, error);
@@ -904,7 +1029,10 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
   const safeTitles = Array.isArray(titles) ? titles.filter((t) => typeof t === 'string' && t.trim().length > 0) : [];
   if (safeTitles.length === 0) return [];
 
-  const variables = {};
+  const variables = {
+    formatIn: DEFAULT_YEAR_FORMATS,
+    countryOfOrigin: DEFAULT_COUNTRY_OF_ORIGIN,
+  };
   const fields = [
     'id',
     'title { native romaji english }',
@@ -916,6 +1044,8 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
     'averageScore',
     'episodes',
     'genres',
+    'format',
+    'countryOfOrigin',
     'bannerImage',
     'description',
   ].join('\n');
@@ -923,10 +1053,10 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
   const parts = safeTitles.map((_, idx) => {
     const v = `s${idx}`;
     variables[v] = safeTitles[idx];
-    return `m${idx}: Media(search: $${v}, type: ANIME) {\n${fields}\n}`;
+    return `m${idx}: Media(search: $${v}, type: ANIME, format_in: $formatIn, countryOfOrigin: $countryOfOrigin) {\n${fields}\n}`;
   });
 
-  const query = `query(${safeTitles.map((_, idx) => `$s${idx}: String`).join(', ')}) {\n${parts.join('\n')}\n}`;
+  const query = `query(${safeTitles.map((_, idx) => `$s${idx}: String`).join(', ')}, $formatIn: [MediaFormat], $countryOfOrigin: CountryCode) {\n${parts.join('\n')}\n}`;
 
   const buildMappedResult = (data) => safeTitles.map((_, idx) => data?.[`m${idx}`] ?? null);
 
@@ -954,7 +1084,12 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
   try {
     const result = await postAniListGraphQL(query, variables, options);
     const mapped = buildMappedResult(result?.data || {}).map((item) => (
-      isHentaiAnime(item) ? null : item
+      isDisplayEligibleAnime(item, {
+        allowUnknownFormat: false,
+        allowUnknownCountry: false,
+      })
+        ? item
+        : null
     ));
     if (!result.ok || mapped.some((item) => item === null)) {
       return await fillMissingBySingleFetch(mapped);
@@ -983,6 +1118,8 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   const formatIn = Array.isArray(options.formatIn) && options.formatIn.length > 0
     ? options.formatIn
     : DEFAULT_YEAR_FORMATS;
+  const countryOfOriginRaw = String(options.countryOfOrigin || DEFAULT_COUNTRY_OF_ORIGIN).toUpperCase();
+  const countryOfOrigin = countryOfOriginRaw || DEFAULT_COUNTRY_OF_ORIGIN;
   const statusInList = Array.isArray(options.statusIn)
     ? options.statusIn.filter((s) => typeof s === 'string' && s.trim().length > 0)
     : [];
@@ -1021,8 +1158,8 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
     };
     const hasSeasonFilter = Boolean(season);
     const baseVariables = hasSeasonFilter
-      ? { seasonYear: year, season, page, perPage, genreIn, formatIn }
-      : { startDateGreater, startDateLesser, page, perPage, genreIn, formatIn };
+      ? { seasonYear: year, season, page, perPage, genreIn, formatIn, countryOfOrigin }
+      : { startDateGreater, startDateLesser, page, perPage, genreIn, formatIn, countryOfOrigin };
     const hasStatusFilter = (statusIn && statusIn.length > 0) || Boolean(statusNot);
     if (debugLog) {
       console.info(`[fetchAnimeByYear:${debugKey}] request`, {
@@ -1030,6 +1167,8 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
         page,
         limit: perPage,
         year,
+        formatIn,
+        countryOfOrigin,
       });
     }
     const result = await postAniListGraphQL(
@@ -1040,6 +1179,13 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
 
     if (!result?.ok && !result?.data?.Page) {
       const statusCode = Number(result?.status) || 0;
+      const retryAfterMsRaw = Number(result?.retryAfterMs);
+      const retryAfterMs = Number.isFinite(retryAfterMsRaw) && retryAfterMsRaw > 0
+        ? retryAfterMsRaw
+        : 0;
+      const rateLimit = (result?.rateLimit && typeof result.rateLimit === 'object')
+        ? result.rateLimit
+        : null;
       const graphQLErrorMessage = Array.isArray(result?.errors) && result.errors.length > 0
         ? (result.errors[0]?.message || 'GraphQL Error')
         : (
@@ -1050,9 +1196,11 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
               : statusCode > 0
                 ? `Request failed (${statusCode})`
                 : 'Failed to fetch yearly anime'
-        );
+      );
       const error = new Error(graphQLErrorMessage);
       if (statusCode > 0) error.status = statusCode;
+      if (retryAfterMs > 0) error.retryAfterMs = retryAfterMs;
+      if (rateLimit) error.rateLimit = rateLimit;
       if (debugLog) {
         console.info(`[fetchAnimeByYear:${debugKey}] response`, {
           total: null,
@@ -1062,6 +1210,15 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
           itemsLength: 0,
           error: graphQLErrorMessage,
           status: statusCode || null,
+          retryAfterMs: retryAfterMs || null,
+          rateLimit: rateLimit
+            ? {
+              retryAfter: rateLimit.retryAfter ?? null,
+              remaining: rateLimit.remaining ?? null,
+              limit: rateLimit.limit ?? null,
+              reset: rateLimit.reset ?? null,
+            }
+            : null,
         });
       }
       return { items: [], pageInfo: emptyPageInfo, error };
@@ -1079,6 +1236,8 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
       : null;
     const rawItems = Array.isArray(pageData?.media) ? pageData.media : [];
     const normalizedItems = rawItems.filter((item) => {
+      const itemCountryOfOrigin = String(item?.countryOfOrigin || '').toUpperCase();
+      if (itemCountryOfOrigin !== countryOfOrigin) return false;
       if (hasSeasonFilter) {
         const itemYear = Number(item?.seasonYear);
         const itemSeason = String(item?.season || '').toUpperCase();
@@ -1123,6 +1282,14 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
         limit: perPage,
         itemsLength: rawItems.length,
         matchedLength: normalizedItems.length,
+        rateLimit: result?.rateLimit
+          ? {
+            retryAfter: result.rateLimit.retryAfter ?? null,
+            remaining: result.rateLimit.remaining ?? null,
+            limit: result.rateLimit.limit ?? null,
+            reset: result.rateLimit.reset ?? null,
+          }
+          : null,
       });
     }
 
@@ -1146,6 +1313,10 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
 export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
   const perPage = Math.max(10, Math.min(50, Number(options.perPage) || 50));
   const maxPages = Math.max(1, Math.min(200, Number(options.maxPages) || 80));
+  const interPageDelayMs = Math.max(0, Number(options.interPageDelayMs) || 120);
+  const firstPage429Retries = Math.max(0, Math.min(5, Number(options.firstPage429Retries) || 2));
+  const firstPage429DelayMs = Math.max(400, Number(options.firstPage429DelayMs) || 1500);
+  const signal = options.signal;
   const mergedItems = [];
   const seenIds = new Set();
   let lastError = null;
@@ -1153,6 +1324,7 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
   let emptyMatchStreak = 0;
   let emptyRawStreak = 0;
   let pagesFetched = 0;
+  let firstPage429RetryCount = 0;
 
   for (let page = 1; page <= maxPages; page++) {
     const { items, pageInfo, error } = await fetchAnimeByYear(seasonYear, {
@@ -1163,6 +1335,27 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
 
     if (error) {
       lastError = error;
+      const statusCode = Number(error?.status) || 0;
+      const isRateLimited = statusCode === 429 || String(error?.message || '').includes('429');
+      if (page === 1 && isRateLimited && firstPage429RetryCount < firstPage429Retries) {
+        firstPage429RetryCount += 1;
+        const waitMs = Math.min(10000, firstPage429DelayMs * firstPage429RetryCount);
+        if (Boolean(options.debugLog)) {
+          const debugKey = String(options.debugKey || 'yearly');
+          console.info(`[fetchAnimeByYearAllPages:${debugKey}] retry`, {
+            reason: 'first_page_rate_limit',
+            retryCount: firstPage429RetryCount,
+            waitMs,
+          });
+        }
+        try {
+          await sleepWithSignal(waitMs, signal);
+        } catch (waitError) {
+          return { items: mergedItems, error: waitError };
+        }
+        page -= 1;
+        continue;
+      }
       if (page === 1) {
         return { items: [], error };
       }
@@ -1211,6 +1404,14 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
     // Stop runaway scans when API keeps claiming next page but no useful data comes back.
     if ((emptyRawStreak >= 2 && page >= 3) || (emptyMatchStreak >= 8 && page >= 10)) {
       break;
+    }
+
+    if (interPageDelayMs > 0) {
+      try {
+        await sleepWithSignal(interPageDelayMs, signal);
+      } catch (delayError) {
+        return { items: mergedItems, error: delayError };
+      }
     }
   }
 

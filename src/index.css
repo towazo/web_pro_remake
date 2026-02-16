@@ -3153,6 +3153,29 @@ body {
     margin-bottom: 10px;
 }
 
+.browse-error-text {
+    line-height: 1.6;
+}
+
+.browse-error-actions {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.browse-error-retry-button {
+    min-width: 120px;
+}
+
+.browse-retry-countdown {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #8b2d2d;
+}
+
 .browse-filter-empty {
     border: 1px dashed #ccc;
     background: #fafafa;

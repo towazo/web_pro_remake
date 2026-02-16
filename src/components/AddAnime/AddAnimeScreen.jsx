@@ -14,6 +14,9 @@ const ANILIST_SEASON_TO_FILTER_KEY = {
     SUMMER: 'summer',
     FALL: 'autumn'
 };
+const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA']);
+const BROWSE_RESULTS_CACHE = new Map();
+const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
 
 function AddAnimeScreen({
     onAdd,
@@ -144,6 +147,9 @@ function AddAnimeScreen({
     const [browseLoading, setBrowseLoading] = useState(false);
     const [browseError, setBrowseError] = useState('');
     const [browseReloadToken, setBrowseReloadToken] = useState(0);
+    const [browseRetryUntilTs, setBrowseRetryUntilTs] = useState(0);
+    const [browseRetryCountdownSec, setBrowseRetryCountdownSec] = useState(0);
+    const [browseAutoRetryPlan, setBrowseAutoRetryPlan] = useState(null);
     const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
     const [browseQuickNavState, setBrowseQuickNavState] = useState({
         visible: false,
@@ -155,9 +161,39 @@ function AddAnimeScreen({
     const browseRequestIdRef = React.useRef(0);
     const browseResultsTopRef = React.useRef(null);
     const pendingBrowseScrollPageRef = React.useRef(null);
+    const browseAutoRetryCountRef = React.useRef(new Map());
+    const browseInFlightRef = React.useRef(0);
     const isDevRuntime = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
 
     const currentYear = new Date().getFullYear();
+    const waitWithAbort = (ms, signal) => new Promise((resolve, reject) => {
+        const waitMs = Math.max(0, Number(ms) || 0);
+        if (waitMs === 0) {
+            resolve();
+            return;
+        }
+        if (signal?.aborted) {
+            const abortError = new Error('Aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+            return;
+        }
+        const timer = setTimeout(() => {
+            cleanup();
+            resolve();
+        }, waitMs);
+        const onAbort = () => {
+            clearTimeout(timer);
+            cleanup();
+            const abortError = new Error('Aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+        };
+        const cleanup = () => {
+            signal?.removeEventListener?.('abort', onAbort);
+        };
+        signal?.addEventListener?.('abort', onAbort, { once: true });
+    });
     const parseBrowseYear = (value) => {
         const raw = String(value ?? '').trim();
         if (!raw) return null;
@@ -181,6 +217,19 @@ function AddAnimeScreen({
         });
         return Array.from(genreSet).sort((a, b) => a.localeCompare(b));
     }, [browseResults, browseGenreFilters]);
+    const browseDataKey = React.useMemo(() => {
+        if (!Number.isFinite(Number(selectedBrowseYear))) return '';
+        if (!normalizedBrowsePreset) {
+            return `year:${selectedBrowseYear}`;
+        }
+        const statusInKey = Array.isArray(normalizedBrowsePreset.statusIn)
+            ? normalizedBrowsePreset.statusIn.join(',')
+            : '';
+        const statusNotKey = normalizedBrowsePreset.statusNot
+            ? String(normalizedBrowsePreset.statusNot)
+            : '';
+        return `preset:${selectedBrowseYear}:${normalizedBrowsePreset.mediaSeason || ''}:${statusInKey}:${statusNotKey}`;
+    }, [selectedBrowseYear, normalizedBrowsePreset]);
 
     // 1. Autocomplete Search Logic (Debounced)
     useEffect(() => {
@@ -303,6 +352,34 @@ function AddAnimeScreen({
     }, [toast.visible, toast.message]);
 
     useEffect(() => {
+        if (!browseRetryUntilTs || browseRetryUntilTs <= Date.now()) {
+            setBrowseRetryCountdownSec(0);
+            return;
+        }
+        const updateCountdown = () => {
+            const remainingMs = browseRetryUntilTs - Date.now();
+            const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+            setBrowseRetryCountdownSec(remainingSec);
+        };
+        updateCountdown();
+        const timer = setInterval(updateCountdown, 250);
+        return () => clearInterval(timer);
+    }, [browseRetryUntilTs]);
+
+    useEffect(() => {
+        if (!browseAutoRetryPlan || !browseAutoRetryPlan.key) return;
+        const delayMs = Math.max(0, Number(browseAutoRetryPlan.runAt) - Date.now());
+        const timer = setTimeout(() => {
+            const key = browseAutoRetryPlan.key;
+            const currentCount = Number(browseAutoRetryCountRef.current.get(key) || 0);
+            browseAutoRetryCountRef.current.set(key, currentCount + 1);
+            setBrowseAutoRetryPlan(null);
+            setBrowseReloadToken((prev) => prev + 1);
+        }, delayMs);
+        return () => clearTimeout(timer);
+    }, [browseAutoRetryPlan]);
+
+    useEffect(() => {
         if (normalizedBrowsePreset) {
             setEntryTab('browse');
             setBrowseYearDraft(String(normalizedBrowsePreset.year));
@@ -331,64 +408,212 @@ function AddAnimeScreen({
         setBrowseError('');
 
         const run = async () => {
-            const requestOptions = {
-                perPage: 50,
-                maxPages: 160,
-                timeoutMs: 9000,
-                maxAttempts: 3,
-                baseDelayMs: 250,
-                maxRetryDelayMs: 900,
-                signal: controller.signal,
-                debugLog: isDevRuntime,
-                uiPerPage: YEAR_PER_PAGE,
-                debugKey: normalizedBrowsePreset
-                    ? (normalizedBrowsePreset?.title || 'season-preset')
-                    : `year-${selectedBrowseYear}`,
-            };
+            browseInFlightRef.current += 1;
+            const inFlightNow = browseInFlightRef.current;
+            try {
+                if (isDevRuntime) {
+                    console.info('[AddAnimeScreen] browse fetch start', {
+                        key: browseDataKey,
+                        inFlight: inFlightNow,
+                        year: selectedBrowseYear,
+                        season: normalizedBrowsePreset?.mediaSeason || null
+                    });
+                }
 
-            if (normalizedBrowsePreset) {
-                requestOptions.season = normalizedBrowsePreset.mediaSeason;
-                requestOptions.statusIn = normalizedBrowsePreset.statusIn;
-                requestOptions.statusNot = normalizedBrowsePreset.statusNot;
-            }
+                const cacheEntry = browseDataKey ? BROWSE_RESULTS_CACHE.get(browseDataKey) : null;
+                const cachedItems = Array.isArray(cacheEntry?.items) ? cacheEntry.items : [];
+                const cacheAgeMs = Date.now() - Number(cacheEntry?.savedAt || 0);
+                const hasFreshCache = cachedItems.length > 0
+                    && Number.isFinite(cacheAgeMs)
+                    && cacheAgeMs >= 0
+                    && cacheAgeMs < BROWSE_RESULTS_CACHE_TTL_MS;
+                if (hasFreshCache) {
+                    setBrowseResults(cachedItems);
+                    setBrowsePage(1);
+                    setBrowseError('');
+                    if (normalizedBrowsePreset && browseReloadToken === 0) {
+                        if (isDevRuntime) {
+                            console.info('[AddAnimeScreen] browse cache hit', {
+                                key: browseDataKey,
+                                itemCount: cachedItems.length,
+                                cacheAgeMs
+                            });
+                        }
+                        return;
+                    }
+                }
 
-            const { items, error } = await fetchAnimeByYearAllPages(selectedBrowseYear, requestOptions);
-
-            if (browseRequestIdRef.current !== requestId) return;
-            if (controller.signal.aborted) return;
-
-            const safeItems = Array.isArray(items) ? items : [];
-            setBrowseResults(safeItems);
-            setBrowsePage(1);
-            if (isDevRuntime) {
-                const presetLabel = normalizedBrowsePreset?.title || '年代リスト';
-                const uiTotalPages = Math.max(1, Math.ceil(safeItems.length / YEAR_PER_PAGE));
-                console.info('[AddAnimeScreen] browse summary', {
-                    preset: presetLabel,
-                    year: selectedBrowseYear,
-                    season: normalizedBrowsePreset?.mediaSeason || null,
-                    itemCount: safeItems.length,
+                const isPresetMode = Boolean(normalizedBrowsePreset);
+                const requestOptions = {
+                    perPage: 50,
+                    maxPages: isPresetMode ? 36 : 140,
+                    formatIn: BROWSE_ALLOWED_MEDIA_FORMATS,
+                    timeoutMs: 10000,
+                    maxAttempts: isPresetMode ? 4 : 3,
+                    baseDelayMs: isPresetMode ? 400 : 250,
+                    maxRetryDelayMs: isPresetMode ? 3000 : 1200,
+                    interPageDelayMs: isPresetMode ? 140 : 100,
+                    firstPage429Retries: isPresetMode ? 3 : 2,
+                    firstPage429DelayMs: isPresetMode ? 1800 : 1400,
+                    signal: controller.signal,
+                    debugLog: isDevRuntime,
                     uiPerPage: YEAR_PER_PAGE,
-                    uiTotalPages,
-                    hasError: Boolean(error),
-                });
-            }
+                    debugKey: normalizedBrowsePreset
+                        ? (normalizedBrowsePreset?.title || 'season-preset')
+                        : `year-${selectedBrowseYear}`,
+                    onRetry: (info) => {
+                        if (!isDevRuntime) return;
+                        console.info('[AddAnimeScreen] upstream retry', {
+                            key: requestOptions.debugKey,
+                            ...info
+                        });
+                    }
+                };
 
-            if (error && safeItems.length === 0) {
-                const isAbort = error?.name === 'AbortError';
-                if (isAbort) return;
-                const sourceLabel = normalizedBrowsePreset ? '作品リスト' : '年代リスト';
-                const debugMessage = (typeof import.meta !== 'undefined' && import.meta.env?.DEV)
-                    ? ` (${error.message || 'unknown error'})`
-                    : '';
-                setBrowseError(`${sourceLabel}の取得に失敗しました。時間をおいて再試行してください。${debugMessage}`);
-            } else if (!safeItems || safeItems.length === 0) {
-                setBrowseError('');
-            } else {
-                setBrowseError('');
-            }
+                if (normalizedBrowsePreset) {
+                    requestOptions.season = normalizedBrowsePreset.mediaSeason;
+                    requestOptions.statusIn = normalizedBrowsePreset.statusIn;
+                    requestOptions.statusNot = normalizedBrowsePreset.statusNot;
+                }
 
-            setBrowseLoading(false);
+                let items = [];
+                let error = null;
+                const maxAutoRetry = 3;
+                for (let attempt = 1; attempt <= maxAutoRetry; attempt += 1) {
+                    const result = await fetchAnimeByYearAllPages(selectedBrowseYear, requestOptions);
+                    items = Array.isArray(result?.items) ? result.items : [];
+                    error = result?.error || null;
+                    if (browseRequestIdRef.current !== requestId || controller.signal.aborted) return;
+
+                    const statusCode = Number(error?.status) || 0;
+                    const hasError = Boolean(error);
+                    const hasItems = items.length > 0;
+                    const isAbort = error?.name === 'AbortError';
+                    const shouldRetry =
+                        !isAbort
+                        && hasError
+                        && !hasItems
+                        && attempt < maxAutoRetry
+                        && (statusCode === 429 || statusCode >= 500 || statusCode === 0);
+                    if (!shouldRetry) break;
+
+                    const waitMs = statusCode === 429
+                        ? (900 * attempt) + 900
+                        : 650 * attempt;
+                    if (isDevRuntime) {
+                        console.info('[AddAnimeScreen] auto retry', {
+                            key: requestOptions.debugKey,
+                            attempt,
+                            nextAttempt: attempt + 1,
+                            waitMs,
+                            statusCode: statusCode || null,
+                            message: error?.message || '',
+                        });
+                    }
+                    await waitWithAbort(waitMs, controller.signal);
+                }
+
+                if (browseRequestIdRef.current !== requestId) return;
+                if (controller.signal.aborted) return;
+
+                const safeItems = Array.isArray(items) ? items : [];
+
+                if (error && safeItems.length === 0) {
+                    const isAbort = error?.name === 'AbortError';
+                    if (isAbort) return;
+                    const sourceLabel = normalizedBrowsePreset ? '作品リスト' : '年代リスト';
+                    const statusCode = Number(error?.status) || 0;
+                    const isRateLimit = statusCode === 429 || String(error?.message || '').includes('429');
+                    const retryAfterMsRaw = Number(error?.retryAfterMs);
+                    const retryAfterMs = Number.isFinite(retryAfterMsRaw) && retryAfterMsRaw > 0
+                        ? retryAfterMsRaw
+                        : 0;
+                    const retryAfterSec = retryAfterMs > 0 ? Math.ceil(retryAfterMs / 1000) : 0;
+                    const baseMessage = isRateLimit
+                        ? `${sourceLabel}の取得が混み合っています。少し時間をおいて再試行してください。`
+                        : `${sourceLabel}の取得に失敗しました。時間をおいて再試行してください。`;
+                    const retryHint = retryAfterSec > 0 ? ` 約${retryAfterSec}秒後に再試行できます。` : '';
+                    const debugMessage = (typeof import.meta !== 'undefined' && import.meta.env?.DEV)
+                        ? ` (${error.message || 'unknown error'})`
+                        : '';
+                    const fallbackEntry = browseDataKey ? BROWSE_RESULTS_CACHE.get(browseDataKey) : null;
+                    const fallbackItems = Array.isArray(fallbackEntry?.items) ? fallbackEntry.items : [];
+                    if (retryAfterMs > 0) {
+                        const retryUntil = Date.now() + retryAfterMs;
+                        setBrowseRetryUntilTs(retryUntil);
+                        const key = browseDataKey || `year:${selectedBrowseYear}`;
+                        const autoRetryCount = Number(browseAutoRetryCountRef.current.get(key) || 0);
+                        if (autoRetryCount < 2) {
+                            setBrowseAutoRetryPlan({ key, runAt: retryUntil });
+                        } else {
+                            setBrowseAutoRetryPlan(null);
+                        }
+                    } else {
+                        setBrowseRetryUntilTs(0);
+                        setBrowseAutoRetryPlan(null);
+                    }
+                    if (fallbackItems.length > 0) {
+                        setBrowseResults(fallbackItems);
+                        setBrowsePage(1);
+                        setBrowseError(`${baseMessage}${retryHint} 前回取得した一覧を表示しています。${debugMessage}`);
+                    } else {
+                        setBrowseResults([]);
+                        setBrowsePage(1);
+                        setBrowseError(`${baseMessage}${retryHint}${debugMessage}`);
+                    }
+                } else if (!safeItems || safeItems.length === 0) {
+                    setBrowseResults([]);
+                    setBrowsePage(1);
+                    setBrowseError('');
+                    setBrowseRetryUntilTs(0);
+                    setBrowseAutoRetryPlan(null);
+                } else {
+                    setBrowseResults(safeItems);
+                    setBrowsePage(1);
+                    if (browseDataKey) {
+                        BROWSE_RESULTS_CACHE.set(browseDataKey, {
+                            items: safeItems,
+                            savedAt: Date.now()
+                        });
+                        browseAutoRetryCountRef.current.set(browseDataKey, 0);
+                    }
+                    setBrowseError('');
+                    setBrowseRetryUntilTs(0);
+                    setBrowseAutoRetryPlan(null);
+                }
+
+                if (isDevRuntime) {
+                    const presetLabel = normalizedBrowsePreset?.title || '年代リスト';
+                    const visibleCount = safeItems.length > 0
+                        ? safeItems.length
+                        : (Array.isArray(BROWSE_RESULTS_CACHE.get(browseDataKey)?.items)
+                            ? BROWSE_RESULTS_CACHE.get(browseDataKey).items.length
+                            : 0);
+                    const uiTotalPages = Math.max(1, Math.ceil(visibleCount / YEAR_PER_PAGE));
+                    console.info('[AddAnimeScreen] browse summary', {
+                        preset: presetLabel,
+                        year: selectedBrowseYear,
+                        season: normalizedBrowsePreset?.mediaSeason || null,
+                        itemCount: visibleCount,
+                        uiPerPage: YEAR_PER_PAGE,
+                        uiTotalPages,
+                        hasError: Boolean(error),
+                        retryCountdownSec: browseRetryCountdownSec,
+                        inFlight: browseInFlightRef.current,
+                    });
+                }
+            } finally {
+                browseInFlightRef.current = Math.max(0, browseInFlightRef.current - 1);
+                if (browseRequestIdRef.current === requestId && !controller.signal.aborted) {
+                    setBrowseLoading(false);
+                }
+                if (isDevRuntime) {
+                    console.info('[AddAnimeScreen] browse fetch end', {
+                        key: browseDataKey,
+                        inFlight: browseInFlightRef.current
+                    });
+                }
+            }
         };
 
         run();
@@ -398,7 +623,8 @@ function AddAnimeScreen({
     }, [
         selectedBrowseYear,
         normalizedBrowsePreset,
-        browseReloadToken
+        browseReloadToken,
+        browseDataKey
     ]);
 
     useEffect(() => {
@@ -530,6 +756,13 @@ function AddAnimeScreen({
         if (isBrowsePresetLocked) return;
         setBrowseSeasonFilters([]);
         setBrowsePage(1);
+    };
+    const handleBrowseRetry = () => {
+        if (browseLoading) return;
+        setBrowseRetryUntilTs(0);
+        setBrowseRetryCountdownSec(0);
+        setBrowseAutoRetryPlan(null);
+        setBrowseReloadToken((prev) => prev + 1);
     };
 
     const handleBrowseToggle = (anime, isAdded) => {
@@ -1916,7 +2149,24 @@ function AddAnimeScreen({
                                     </div>
 
                                     {browseError && (
-                                        <div className="browse-error-message">{browseError}</div>
+                                        <div className="browse-error-message" role="alert" aria-live="polite">
+                                            <div className="browse-error-text">{browseError}</div>
+                                            <div className="browse-error-actions">
+                                                {browseRetryCountdownSec > 0 && (
+                                                    <span className="browse-retry-countdown">
+                                                        再試行まで: {browseRetryCountdownSec}秒
+                                                    </span>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="browse-page-button browse-error-retry-button"
+                                                    onClick={handleBrowseRetry}
+                                                    disabled={browseLoading || browseRetryCountdownSec > 0}
+                                                >
+                                                    再試行
+                                                </button>
+                                            </div>
+                                        </div>
                                     )}
 
                                     {browseVisibleResults.length === 0 ? (

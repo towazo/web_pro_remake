@@ -1,6 +1,19 @@
 const HENTAI_GENRE_KEY = 'hentai';
+export const DISPLAY_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA']);
+export const DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN = 'JP';
+const DISPLAY_ALLOWED_MEDIA_FORMAT_SET = new Set(DISPLAY_ALLOWED_MEDIA_FORMATS);
+const SUPPLEMENTAL_FORMAT_SET = new Set(['OVA', 'TV_SHORT']);
+const PROMOTIONAL_KEYWORD_PATTERNS = [
+  /\b(?:pv|cm|mv|teaser|trailer|promo|promotional|commercial)\b/i,
+  /(?:music\s*video|ミュージック\s*ビデオ|音楽\s*映像|楽曲\s*映像)/i,
+  /(?:non[-\s]?credit|creditless|ノンクレジット|ノンテロップ)/i,
+  /(?:web\s*cm|番宣|特報|予告|告知(?:映像)?)/i,
+];
 
 const normalizeGenre = (genre) => String(genre || '').trim().toLowerCase();
+const normalizeMediaFormat = (format) => String(format || '').trim().toUpperCase();
+const normalizeCountryOfOrigin = (country) => String(country || '').trim().toUpperCase();
+const normalizeText = (value) => String(value || '').normalize('NFKC').toLowerCase();
 
 export const isHentaiGenre = (genre) => normalizeGenre(genre) === HENTAI_GENRE_KEY;
 
@@ -21,6 +34,69 @@ export const isHentaiAnime = (anime) => {
 export const filterOutHentaiAnimeList = (list) => {
   if (!Array.isArray(list)) return [];
   return list.filter((anime) => !isHentaiAnime(anime));
+};
+
+const createAllowedMediaFormatSet = (allowedFormats) => {
+  if (!Array.isArray(allowedFormats) || allowedFormats.length === 0) {
+    return DISPLAY_ALLOWED_MEDIA_FORMAT_SET;
+  }
+  const normalized = allowedFormats
+    .map((item) => normalizeMediaFormat(item))
+    .filter((item) => item.length > 0);
+  if (normalized.length === 0) return DISPLAY_ALLOWED_MEDIA_FORMAT_SET;
+  return new Set(normalized);
+};
+
+export const isAllowedAnimeFormat = (anime, options = {}) => {
+  if (!anime || typeof anime !== 'object') return false;
+  const { allowUnknownFormat = false, allowedFormats } = options || {};
+  const mediaFormat = normalizeMediaFormat(anime.format);
+  if (!mediaFormat) return Boolean(allowUnknownFormat);
+  const allowedSet = createAllowedMediaFormatSet(allowedFormats);
+  return allowedSet.has(mediaFormat);
+};
+
+export const isAllowedCountryOfOrigin = (anime, options = {}) => {
+  if (!anime || typeof anime !== 'object') return false;
+  const {
+    allowUnknownCountry = false,
+    countryOfOrigin = DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN,
+  } = options || {};
+  const requiredCountry = normalizeCountryOfOrigin(countryOfOrigin || DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN);
+  const actualCountry = normalizeCountryOfOrigin(anime.countryOfOrigin);
+  if (!actualCountry) return Boolean(allowUnknownCountry);
+  return actualCountry === requiredCountry;
+};
+
+const isLikelyPromotionalEntry = (anime) => {
+  if (!anime || typeof anime !== 'object') return false;
+  const mediaFormat = normalizeMediaFormat(anime.format);
+  if (!SUPPLEMENTAL_FORMAT_SET.has(mediaFormat)) return false;
+
+  const titleNative = normalizeText(anime?.title?.native);
+  const titleRomaji = normalizeText(anime?.title?.romaji);
+  const titleEnglish = normalizeText(anime?.title?.english);
+  const description = normalizeText(anime?.description);
+  const text = [titleNative, titleRomaji, titleEnglish, description]
+    .filter((chunk) => chunk.length > 0)
+    .join(' ');
+
+  if (!text) return false;
+  return PROMOTIONAL_KEYWORD_PATTERNS.some((pattern) => pattern.test(text));
+};
+
+export const isDisplayEligibleAnime = (anime, options = {}) => {
+  if (!anime || typeof anime !== 'object') return false;
+  if (isHentaiAnime(anime)) return false;
+  if (!isAllowedAnimeFormat(anime, options)) return false;
+  if (!isAllowedCountryOfOrigin(anime, options)) return false;
+  if (isLikelyPromotionalEntry(anime)) return false;
+  return true;
+};
+
+export const filterDisplayEligibleAnimeList = (list, options = {}) => {
+  if (!Array.isArray(list)) return [];
+  return list.filter((anime) => isDisplayEligibleAnime(anime, options));
 };
 
 // Backward-compatible exports for existing imports.

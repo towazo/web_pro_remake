@@ -20,8 +20,8 @@ import {
   writeListToStorage,
 } from './utils/storage';
 import {
-  filterOutHentaiAnimeList,
-  isHentaiAnime,
+  filterDisplayEligibleAnimeList,
+  isDisplayEligibleAnime,
 } from './utils/contentFilters';
 
 // Components
@@ -36,7 +36,11 @@ import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
  * Responsible for routing, global state management, and data orchestration.
  */
 function App() {
-  const sanitizeAnimeList = (list) => filterOutHentaiAnimeList(Array.isArray(list) ? list : []);
+  const sanitizeAnimeList = (list) => filterDisplayEligibleAnimeList(Array.isArray(list) ? list : [], {
+    // Keep legacy items that do not include format/country metadata.
+    allowUnknownFormat: true,
+    allowUnknownCountry: true,
+  });
 
   // Initialize state from localStorage if available
   const [animeList, setAnimeList] = useState(() => sanitizeAnimeList(readListFromStorage(ANIME_LIST_STORAGE_KEY)));
@@ -297,7 +301,7 @@ function App() {
   };
 
   const handleAddAnime = (data) => {
-    if (isHentaiAnime(data)) {
+    if (!isDisplayEligibleAnime(data, { allowUnknownFormat: true, allowUnknownCountry: true })) {
       return { success: false, message: 'この作品は表示対象外です。' };
     }
     if (animeList.some(a => a.id === data.id)) {
@@ -320,7 +324,7 @@ function App() {
     if (!data || typeof data.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
     }
-    if (isHentaiAnime(data)) {
+    if (!isDisplayEligibleAnime(data, { allowUnknownFormat: true, allowUnknownCountry: true })) {
       return { success: false, action: 'blocked', message: 'この作品は表示対象外です。' };
     }
 
