@@ -1,5 +1,3 @@
-export const WATCHED_TITLES = [];
-
 export const ANIME_DESCRIPTIONS = {};
 
 export const GENRE_TRANSLATIONS = {

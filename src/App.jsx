@@ -1,113 +1,52 @@
 ﻿import { useState, useEffect, useMemo, useRef } from 'react';
 
 // Constants & Multi-language data
-import { WATCHED_TITLES, ANIME_DESCRIPTIONS, translateGenre } from './constants/animeData';
+import { translateGenre } from './constants/animeData';
 
 // Services
 import { selectFeaturedAnimes } from './services/animeService';
 import { fetchLibrarySnapshot, saveLibrarySnapshot } from './services/libraryService';
+import { APP_VIEW_HASHES, APP_VIEW_SET, getViewFromLocation } from './utils/appView';
+import {
+  getCurrentSeasonInfo,
+  getNextSeasonInfo,
+  seasonToFilterKey,
+  SEASON_LABELS,
+} from './utils/season';
+import {
+  ANIME_LIST_STORAGE_KEY,
+  BOOKMARK_LIST_STORAGE_KEY,
+  readListFromStorage,
+  writeListToStorage,
+} from './utils/storage';
+import {
+  filterOutHentaiAnimeList,
+  isHentaiAnime,
+} from './utils/contentFilters';
 
 // Components
-import LoadingOverlay from './components/Common/LoadingOverlay';
 import HeroSlider from './components/Hero/HeroSlider';
 import AnimeCard from './components/Cards/AnimeCard';
 import StatsSection from './components/Stats/StatsSection';
 import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
 import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
 
-const APP_VIEW_HASHES = {
-  home: '#/',
-  mylist: '#/mylist',
-  add: '#/add',
-  addCurrent: '#/add/current-season',
-  addNext: '#/add/next-season',
-  bookmarks: '#/bookmarks',
-};
-
-const APP_VIEW_SET = new Set(Object.keys(APP_VIEW_HASHES));
-const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
-const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
-
-const SEASON_LABELS = {
-  WINTER: '冬',
-  SPRING: '春',
-  SUMMER: '夏',
-  FALL: '秋',
-};
-
-const getSeasonByMonth = (month) => {
-  if (month >= 1 && month <= 3) return 'WINTER';
-  if (month >= 4 && month <= 6) return 'SPRING';
-  if (month >= 7 && month <= 9) return 'SUMMER';
-  return 'FALL';
-};
-
-const getCurrentSeasonInfo = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return { year, season: getSeasonByMonth(month) };
-};
-
-const getNextSeasonInfo = ({ year, season }) => {
-  if (season === 'WINTER') return { year, season: 'SPRING' };
-  if (season === 'SPRING') return { year, season: 'SUMMER' };
-  if (season === 'SUMMER') return { year, season: 'FALL' };
-  return { year: year + 1, season: 'WINTER' };
-};
-
-const seasonToFilterKey = (season) => {
-  if (season === 'WINTER') return 'winter';
-  if (season === 'SPRING') return 'spring';
-  if (season === 'SUMMER') return 'summer';
-  if (season === 'FALL') return 'autumn';
-  return '';
-};
-
-const getViewFromLocation = (hash = '', pathname = '') => {
-  const route = (hash || '').replace(/^#/, '');
-  if (route.startsWith('/add/current-season')) return 'addCurrent';
-  if (route.startsWith('/add/next-season')) return 'addNext';
-  if (route.startsWith('/bookmarks/add') || route.startsWith('/bookmark/add')) return 'add';
-  if (route.startsWith('/mylist')) return 'mylist';
-  if (route.startsWith('/bookmarks') || route.startsWith('/bookmark')) return 'bookmarks';
-  if (route.startsWith('/add')) return 'add';
-  if (pathname.startsWith('/add/current-season')) return 'addCurrent';
-  if (pathname.startsWith('/add/next-season')) return 'addNext';
-  if (pathname.startsWith('/bookmarks/add') || pathname.startsWith('/bookmark/add')) return 'add';
-  if (pathname.startsWith('/mylist')) return 'mylist';
-  if (pathname.startsWith('/bookmarks') || pathname.startsWith('/bookmark')) return 'bookmarks';
-  if (pathname.startsWith('/add')) return 'add';
-  return 'home';
-};
-
 /**
  * Main App Component
  * Responsible for routing, global state management, and data orchestration.
  */
 function App() {
-  // Initialize state from localStorage if available
-  const [animeList, setAnimeList] = useState(() => {
-    const saved = localStorage.getItem(ANIME_LIST_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [bookmarkList, setBookmarkList] = useState(() => {
-    const saved = localStorage.getItem(BOOKMARK_LIST_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const sanitizeAnimeList = (list) => filterOutHentaiAnimeList(Array.isArray(list) ? list : []);
 
-  const [loadingStatus, setLoadingStatus] = useState({
-    loaded: 0,
-    total: 0,
-    active: false
-  });
+  // Initialize state from localStorage if available
+  const [animeList, setAnimeList] = useState(() => sanitizeAnimeList(readListFromStorage(ANIME_LIST_STORAGE_KEY)));
+  const [bookmarkList, setBookmarkList] = useState(() => sanitizeAnimeList(readListFromStorage(BOOKMARK_LIST_STORAGE_KEY)));
 
   const [view, setView] = useState(() => {
     if (typeof window === 'undefined') return 'home';
     return getViewFromLocation(window.location.hash, window.location.pathname);
   });
   const [featuredSlides, setFeaturedSlides] = useState([]);
-  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("All");
   const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year'
@@ -120,11 +59,7 @@ function App() {
   });
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
-  const [serverSyncState, setServerSyncState] = useState({
-    ready: false,
-    syncing: false,
-    error: '',
-  });
+  const [isServerLibraryReady, setIsServerLibraryReady] = useState(false);
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
 
@@ -178,13 +113,13 @@ function App() {
     let cancelled = false;
 
     const initializeServerLibrary = async () => {
-      setServerSyncState({ ready: false, syncing: true, error: '' });
+      setIsServerLibraryReady(false);
       try {
         const payload = await fetchLibrarySnapshot();
         if (cancelled) return;
 
-        const remoteAnimeList = Array.isArray(payload?.animeList) ? payload.animeList : [];
-        const remoteBookmarkList = Array.isArray(payload?.bookmarkList) ? payload.bookmarkList : [];
+        const remoteAnimeList = sanitizeAnimeList(payload?.animeList);
+        const remoteBookmarkList = sanitizeAnimeList(payload?.bookmarkList);
         const hasRemoteData = remoteAnimeList.length > 0 || remoteBookmarkList.length > 0;
         const hasLocalData = animeList.length > 0 || bookmarkList.length > 0;
 
@@ -192,19 +127,18 @@ function App() {
           setAnimeList(remoteAnimeList);
           setBookmarkList(remoteBookmarkList);
         } else if (hasLocalData) {
-          await saveLibrarySnapshot({ animeList, bookmarkList });
+          await saveLibrarySnapshot({
+            animeList: sanitizeAnimeList(animeList),
+            bookmarkList: sanitizeAnimeList(bookmarkList),
+          });
           if (cancelled) return;
         }
 
-        setServerSyncState({ ready: true, syncing: false, error: '' });
+        setIsServerLibraryReady(true);
       } catch (syncError) {
         if (cancelled) return;
         console.error('Failed to initialize server library:', syncError);
-        setServerSyncState({
-          ready: true,
-          syncing: false,
-          error: '',
-        });
+        setIsServerLibraryReady(true);
       }
     };
 
@@ -216,38 +150,26 @@ function App() {
 
   // 1. Storage Persistence
   useEffect(() => {
-    if (animeList.length > 0) {
-      localStorage.setItem(ANIME_LIST_STORAGE_KEY, JSON.stringify(animeList));
-    } else {
-      localStorage.removeItem(ANIME_LIST_STORAGE_KEY);
-    }
+    writeListToStorage(ANIME_LIST_STORAGE_KEY, animeList);
   }, [animeList]);
 
   useEffect(() => {
-    if (bookmarkList.length > 0) {
-      localStorage.setItem(BOOKMARK_LIST_STORAGE_KEY, JSON.stringify(bookmarkList));
-    } else {
-      localStorage.removeItem(BOOKMARK_LIST_STORAGE_KEY);
-    }
+    writeListToStorage(BOOKMARK_LIST_STORAGE_KEY, bookmarkList);
   }, [bookmarkList]);
 
   useEffect(() => {
-    if (!serverSyncState.ready) return;
+    if (!isServerLibraryReady) return;
     if (serverSaveDebounceRef.current) {
       clearTimeout(serverSaveDebounceRef.current);
     }
 
     serverSaveDebounceRef.current = setTimeout(() => {
-      saveLibrarySnapshot({ animeList, bookmarkList })
-        .then(() => {
-          setServerSyncState((prev) => (prev.error ? { ...prev, error: '' } : prev));
-        })
+      saveLibrarySnapshot({
+        animeList: sanitizeAnimeList(animeList),
+        bookmarkList: sanitizeAnimeList(bookmarkList),
+      })
         .catch((syncError) => {
           console.error('Failed to save server library:', syncError);
-          setServerSyncState((prev) => ({
-            ...prev,
-            error: '',
-          }));
         });
     }, 450);
 
@@ -256,7 +178,7 @@ function App() {
         clearTimeout(serverSaveDebounceRef.current);
       }
     };
-  }, [animeList, bookmarkList, serverSyncState.ready]);
+  }, [animeList, bookmarkList, isServerLibraryReady]);
 
   // 2. Featured Content Selection
   useEffect(() => {
@@ -375,29 +297,31 @@ function App() {
   };
 
   const handleAddAnime = (data) => {
+    if (isHentaiAnime(data)) {
+      return { success: false, message: 'この作品は表示対象外です。' };
+    }
     if (animeList.some(a => a.id === data.id)) {
       return { success: false, message: 'その作品は既に追加されています。' };
     }
     // Add timestamp for "added" sort
     const animeWithDate = { ...data, addedAt: Date.now() };
-    setAnimeList(prev => [animeWithDate, ...prev]);
-    setBookmarkList(prev => prev.filter((anime) => anime.id !== data.id));
+    setAnimeList(prev => sanitizeAnimeList([animeWithDate, ...prev]));
+    setBookmarkList(prev => sanitizeAnimeList(prev.filter((anime) => anime.id !== data.id)));
     return { success: true };
   };
 
   const handleRemoveAnime = (id) => {
     setAnimeList(prev => {
-      const updated = prev.filter(anime => anime.id !== id);
-      if (updated.length === 0) {
-        localStorage.removeItem(ANIME_LIST_STORAGE_KEY);
-      }
-      return updated;
+      return prev.filter(anime => anime.id !== id);
     });
   };
 
   const handleToggleBookmark = (data) => {
     if (!data || typeof data.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
+    }
+    if (isHentaiAnime(data)) {
+      return { success: false, action: 'blocked', message: 'この作品は表示対象外です。' };
     }
 
     if (animeList.some((anime) => anime.id === data.id)) {
@@ -406,12 +330,12 @@ function App() {
 
     const exists = bookmarkList.some((anime) => anime.id === data.id);
     if (exists) {
-      setBookmarkList((prev) => prev.filter((anime) => anime.id !== data.id));
+      setBookmarkList((prev) => sanitizeAnimeList(prev.filter((anime) => anime.id !== data.id)));
       return { success: true, action: 'removed' };
     }
 
     const bookmarkItem = { ...data, bookmarkedAt: Date.now() };
-    setBookmarkList((prev) => [bookmarkItem, ...prev.filter((anime) => anime.id !== data.id)]);
+    setBookmarkList((prev) => sanitizeAnimeList([bookmarkItem, ...prev.filter((anime) => anime.id !== data.id)]));
     return { success: true, action: 'added' };
   };
 
@@ -454,11 +378,7 @@ function App() {
 
     setAnimeList((prev) => {
       const selectedSet = new Set(selectedAnimeIds);
-      const updated = prev.filter((anime) => !selectedSet.has(anime.id));
-      if (updated.length === 0) {
-        localStorage.removeItem(ANIME_LIST_STORAGE_KEY);
-      }
-      return updated;
+      return prev.filter((anime) => !selectedSet.has(anime.id));
     });
 
     setIsSelectionMode(false);
@@ -563,17 +483,6 @@ function App() {
   // 6. UI Render
   return (
     <div className="app-container">
-      {/* Overlay UI */}
-      {loadingStatus.active && !error && (
-        <LoadingOverlay loaded={loadingStatus.loaded} total={loadingStatus.total} />
-      )}
-
-      {error && (
-        <div className="error-banner">
-          ⚠️ {error}
-        </div>
-      )}
-
       {/* Navigation Header */}
       <header className="app-header">
         <div className="logo" onClick={() => navigateTo('home')} style={{ cursor: 'pointer' }}>
@@ -616,6 +525,7 @@ function App() {
       {isAddView ? (
         <main className="main-content">
           <AddAnimeScreen
+            key={view}
             onAdd={handleAddAnime}
             onRemove={handleRemoveAnime}
             onToggleBookmark={handleToggleBookmark}
@@ -723,7 +633,7 @@ function App() {
               ))}
             </div>
 
-            {filteredList.length === 0 && !loadingStatus.active && (
+            {filteredList.length === 0 && (
               <div className="empty-state">該当する作品がありません</div>
             )}
           </main>

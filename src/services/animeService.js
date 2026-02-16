@@ -1,4 +1,5 @@
 import { translateGenre } from '../constants/animeData';
+import { filterOutHentaiAnimeList, isHentaiAnime } from '../utils/contentFilters';
 
 const ANILIST_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV)
   ? '/anilist/'
@@ -146,16 +147,14 @@ const ANIME_BY_YEAR_QUERY = `
   }
 `;
 
-const ANIME_BY_YEAR_WITH_STATUS_QUERY = `
+const ANIME_BY_START_DATE_QUERY = `
   query (
-    $seasonYear: Int,
-    $season: MediaSeason,
+    $startDateGreater: FuzzyDateInt,
+    $startDateLesser: FuzzyDateInt,
     $page: Int,
     $perPage: Int,
     $genreIn: [String],
-    $formatIn: [MediaFormat],
-    $statusIn: [MediaStatus],
-    $statusNot: MediaStatus
+    $formatIn: [MediaFormat]
   ) {
     Page(page: $page, perPage: $perPage) {
       pageInfo {
@@ -167,13 +166,11 @@ const ANIME_BY_YEAR_WITH_STATUS_QUERY = `
       }
       media(
         type: ANIME
-        seasonYear: $seasonYear
-        season: $season
-        status_in: $statusIn
-        status_not: $statusNot
+        startDate_greater: $startDateGreater
+        startDate_lesser: $startDateLesser
         genre_in: $genreIn
         format_in: $formatIn
-        sort: [POPULARITY_DESC, START_DATE_DESC]
+        sort: [START_DATE_DESC, POPULARITY_DESC]
       ) {
         id
         title {
@@ -484,6 +481,7 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
         ANILIST_ENDPOINT,
         {
           method: 'POST',
+          cache: 'no-store',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -617,7 +615,7 @@ export const fetchAnimeDetails = async (title, options = {}) => {
     try {
       const result = await postAniListGraphQL(ANIME_QUERY, { search: title }, requestOptions);
       if (result.ok && result.data?.Media) {
-        return result.data.Media;
+        return isHentaiAnime(result.data.Media) ? null : result.data.Media;
       }
     } catch (error) {
       primaryError = error;
@@ -697,7 +695,9 @@ export const fetchAnimeDetailsById = async (id, options = {}) => {
 
   try {
     const result = await postAniListGraphQL(ANIME_BY_ID_QUERY, { id: numericId }, options);
-    return result.ok ? (result.data?.Media ?? null) : null;
+    if (!result.ok) return null;
+    const media = result.data?.Media ?? null;
+    return isHentaiAnime(media) ? null : media;
   } catch (error) {
     if (!isAbortError(error)) {
       console.error(`Error fetching by id ${id}:`, error);
@@ -709,7 +709,8 @@ export const fetchAnimeDetailsById = async (id, options = {}) => {
 const searchAnimeListInternal = async (title, perPage = 8, options = {}) => {
   try {
     const result = await postAniListGraphQL(ANIME_LIST_QUERY, { search: title, perPage }, options);
-    return result.ok ? (result.data?.Page?.media || []) : [];
+    if (!result.ok) return [];
+    return filterOutHentaiAnimeList(result.data?.Page?.media || []);
   } catch (error) {
     if (!isAbortError(error)) {
       console.error(`Error searching list for ${title}:`, error);
@@ -952,7 +953,9 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
 
   try {
     const result = await postAniListGraphQL(query, variables, options);
-    const mapped = buildMappedResult(result?.data || {});
+    const mapped = buildMappedResult(result?.data || {}).map((item) => (
+      isHentaiAnime(item) ? null : item
+    ));
     if (!result.ok || mapped.some((item) => item === null)) {
       return await fillMissingBySingleFetch(mapped);
     }
@@ -984,16 +987,24 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
     ? options.statusIn.filter((s) => typeof s === 'string' && s.trim().length > 0)
     : [];
   const statusIn = statusInList.length > 0 ? statusInList : null;
-  const statusNot = Object.prototype.hasOwnProperty.call(options, 'statusNot')
+  const statusNotRaw = Object.prototype.hasOwnProperty.call(options, 'statusNot')
     ? options.statusNot
     : null;
+  const statusNot = (typeof statusNotRaw === 'string' && statusNotRaw.trim().length > 0)
+    ? statusNotRaw
+    : null;
+  const startDateGreater = (year * 10000) - 1;
+  const startDateLesser = (year + 1) * 10000;
+  const debugLog = Boolean(options.debugLog);
+  const debugKey = String(options.debugKey || 'yearly');
 
   const emptyPageInfo = {
-    total: 0,
+    total: null,
     perPage,
     currentPage: page,
-    lastPage: 1,
+    lastPage: page,
     hasNextPage: false,
+    hasKnownLastPage: true,
   };
 
   if (!Number.isFinite(year)) {
@@ -1008,30 +1019,122 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
       maxRetryDelayMs: Math.max(200, Number(options.maxRetryDelayMs) || 900),
       signal: options.signal,
     };
-    const baseVariables = { seasonYear: year, season, page, perPage, genreIn, formatIn };
-    const withStatusVariables = { ...baseVariables, statusIn, statusNot };
+    const hasSeasonFilter = Boolean(season);
+    const baseVariables = hasSeasonFilter
+      ? { seasonYear: year, season, page, perPage, genreIn, formatIn }
+      : { startDateGreater, startDateLesser, page, perPage, genreIn, formatIn };
     const hasStatusFilter = (statusIn && statusIn.length > 0) || Boolean(statusNot);
-
-    let result = hasStatusFilter
-      ? await postAniListGraphQL(ANIME_BY_YEAR_WITH_STATUS_QUERY, withStatusVariables, requestOptions)
-      : await postAniListGraphQL(ANIME_BY_YEAR_QUERY, baseVariables, requestOptions);
-
-    // AniList occasionally fails on status_* filters (500). Fallback to safe query.
-    if (!result?.ok && !result?.data?.Page && hasStatusFilter) {
-      result = await postAniListGraphQL(ANIME_BY_YEAR_QUERY, baseVariables, requestOptions);
+    if (debugLog) {
+      console.info(`[fetchAnimeByYear:${debugKey}] request`, {
+        season: season || null,
+        page,
+        limit: perPage,
+        year,
+      });
     }
+    const result = await postAniListGraphQL(
+      hasSeasonFilter ? ANIME_BY_YEAR_QUERY : ANIME_BY_START_DATE_QUERY,
+      baseVariables,
+      requestOptions
+    );
 
     if (!result?.ok && !result?.data?.Page) {
+      const statusCode = Number(result?.status) || 0;
       const graphQLErrorMessage = Array.isArray(result?.errors) && result.errors.length > 0
         ? (result.errors[0]?.message || 'GraphQL Error')
-        : 'Failed to fetch yearly anime';
-      return { items: [], pageInfo: emptyPageInfo, error: new Error(graphQLErrorMessage) };
+        : (
+          statusCode === 429
+            ? 'Rate limit exceeded (429)'
+            : statusCode >= 500
+              ? `Upstream error (${statusCode})`
+              : statusCode > 0
+                ? `Request failed (${statusCode})`
+                : 'Failed to fetch yearly anime'
+        );
+      const error = new Error(graphQLErrorMessage);
+      if (statusCode > 0) error.status = statusCode;
+      if (debugLog) {
+        console.info(`[fetchAnimeByYear:${debugKey}] response`, {
+          total: null,
+          totalPages: null,
+          page,
+          limit: perPage,
+          itemsLength: 0,
+          error: graphQLErrorMessage,
+          status: statusCode || null,
+        });
+      }
+      return { items: [], pageInfo: emptyPageInfo, error };
     }
 
     const pageData = result?.data?.Page || {};
-    const pageInfo = pageData?.pageInfo || emptyPageInfo;
-    const items = Array.isArray(pageData?.media) ? pageData.media : [];
-    return { items, pageInfo, error: null };
+    const pageInfoRaw = pageData?.pageInfo || emptyPageInfo;
+    const currentPage = Math.max(1, Number(pageInfoRaw?.currentPage) || page);
+    const apiTotal = Number(pageInfoRaw?.total);
+    const hasApiTotal = Number.isFinite(apiTotal) && apiTotal >= 0;
+    const apiLastPage = Number(pageInfoRaw?.lastPage);
+    const hasApiLastPage = Number.isFinite(apiLastPage) && apiLastPage >= currentPage;
+    const hasNextPageRaw = typeof pageInfoRaw?.hasNextPage === 'boolean'
+      ? pageInfoRaw.hasNextPage
+      : null;
+    const rawItems = Array.isArray(pageData?.media) ? pageData.media : [];
+    const normalizedItems = rawItems.filter((item) => {
+      if (hasSeasonFilter) {
+        const itemYear = Number(item?.seasonYear);
+        const itemSeason = String(item?.season || '').toUpperCase();
+        if (itemYear !== year || itemSeason !== season || isHentaiAnime(item)) return false;
+        if (hasStatusFilter) {
+          const itemStatus = String(item?.status || '').trim();
+          if (statusIn && !statusIn.includes(itemStatus)) return false;
+          if (statusNot && itemStatus === statusNot) return false;
+        }
+        return true;
+      }
+      if (Number(item?.startDate?.year) !== year || isHentaiAnime(item)) return false;
+      if (hasStatusFilter) {
+        const itemStatus = String(item?.status || '').trim();
+        if (statusIn && !statusIn.includes(itemStatus)) return false;
+        if (statusNot && itemStatus === statusNot) return false;
+      }
+      return true;
+    });
+    const hasNextPage = hasNextPageRaw ?? (hasApiLastPage ? currentPage < apiLastPage : normalizedItems.length >= perPage);
+    const hasKnownLastPage = hasApiLastPage || !hasNextPage;
+    const computedLastPage = hasApiLastPage
+      ? apiLastPage
+      : (hasNextPage ? currentPage + 1 : currentPage);
+    const pageInfo = {
+      ...emptyPageInfo,
+      total: hasApiTotal ? apiTotal : null,
+      perPage,
+      currentPage,
+      lastPage: computedLastPage,
+      hasNextPage,
+      hasKnownLastPage,
+      rawCount: rawItems.length,
+      matchedCount: normalizedItems.length,
+    };
+    if (debugLog) {
+      const totalPagesRaw = Number(pageInfoRaw?.lastPage);
+      console.info(`[fetchAnimeByYear:${debugKey}] response`, {
+        total: hasApiTotal ? apiTotal : null,
+        totalPages: Number.isFinite(totalPagesRaw) ? totalPagesRaw : null,
+        page: currentPage,
+        limit: perPage,
+        itemsLength: rawItems.length,
+        matchedLength: normalizedItems.length,
+      });
+    }
+
+    const hasLikelyUnexpectedZero =
+      page > 1
+      && normalizedItems.length === 0
+      && hasSeasonFilter
+      && !hasNextPage;
+    if (hasLikelyUnexpectedZero) {
+      return { items: [], pageInfo: { ...pageInfo, lastPage: Math.max(1, currentPage - 1), hasKnownLastPage: true }, error: null };
+    }
+    return { items: normalizedItems, pageInfo, error: null };
   } catch (error) {
     if (!isAbortError(error)) {
       console.error(`Error fetching yearly anime for ${year}:`, error);
@@ -1040,9 +1143,100 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   }
 };
 
+export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
+  const perPage = Math.max(10, Math.min(50, Number(options.perPage) || 50));
+  const maxPages = Math.max(1, Math.min(200, Number(options.maxPages) || 80));
+  const mergedItems = [];
+  const seenIds = new Set();
+  let lastError = null;
+  let knownLastPage = null;
+  let emptyMatchStreak = 0;
+  let emptyRawStreak = 0;
+  let pagesFetched = 0;
+
+  for (let page = 1; page <= maxPages; page++) {
+    const { items, pageInfo, error } = await fetchAnimeByYear(seasonYear, {
+      ...options,
+      page,
+      perPage,
+    });
+
+    if (error) {
+      lastError = error;
+      if (page === 1) {
+        return { items: [], error };
+      }
+      break;
+    }
+    pagesFetched += 1;
+
+    const chunk = Array.isArray(items) ? items : [];
+    let addedCount = 0;
+    for (const anime of chunk) {
+      const id = Number(anime?.id);
+      if (Number.isFinite(id)) {
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+      }
+      mergedItems.push(anime);
+      addedCount += 1;
+    }
+
+    if (addedCount === 0) {
+      emptyMatchStreak += 1;
+    } else {
+      emptyMatchStreak = 0;
+    }
+
+    const rawCount = Math.max(0, Number(pageInfo?.rawCount) || 0);
+    if (rawCount === 0) {
+      emptyRawStreak += 1;
+    } else {
+      emptyRawStreak = 0;
+    }
+
+    const pageLastPage = Number(pageInfo?.lastPage);
+    if (Number.isFinite(pageLastPage) && pageLastPage >= 1) {
+      knownLastPage = Number.isFinite(knownLastPage)
+        ? Math.max(knownLastPage, pageLastPage)
+        : pageLastPage;
+    }
+
+    const hasMoreByLastPage = Number.isFinite(knownLastPage) && page < knownLastPage;
+    const hasNextPage = Boolean(pageInfo?.hasNextPage) || hasMoreByLastPage;
+    if (!hasNextPage) {
+      break;
+    }
+
+    // Stop runaway scans when API keeps claiming next page but no useful data comes back.
+    if ((emptyRawStreak >= 2 && page >= 3) || (emptyMatchStreak >= 8 && page >= 10)) {
+      break;
+    }
+  }
+
+  if (Boolean(options.debugLog)) {
+    const uiPerPage = Math.max(1, Number(options.uiPerPage) || 0);
+    const uiTotalPages = uiPerPage > 0
+      ? Math.max(1, Math.ceil(mergedItems.length / uiPerPage))
+      : null;
+    const debugKey = String(options.debugKey || 'yearly');
+    console.info(`[fetchAnimeByYearAllPages:${debugKey}] summary`, {
+      year: Number(seasonYear),
+      pagesFetched,
+      mergedItemsLength: mergedItems.length,
+      uiPerPage: uiPerPage > 0 ? uiPerPage : null,
+      uiTotalPages,
+      error: lastError?.message || null,
+    });
+  }
+
+  return { items: mergedItems, error: lastError };
+};
+
 export const selectFeaturedAnimes = (allAnimes) => {
+  const safeAnimes = filterOutHentaiAnimeList(allAnimes);
   // Case 0: Tutorial / Zero State
-  if (!allAnimes || allAnimes.length === 0) {
+  if (!safeAnimes || safeAnimes.length === 0) {
     return [
       {
         isTutorial: true,
@@ -1070,8 +1264,8 @@ export const selectFeaturedAnimes = (allAnimes) => {
   }
 
   // Case 1: Few items, show all
-  if (allAnimes.length <= 2) {
-    return allAnimes.map(a => ({
+  if (safeAnimes.length <= 2) {
+    return safeAnimes.map(a => ({
       ...a,
       selectionReason: "コレクション",
       uniqueId: `all-${a.id}`
@@ -1079,7 +1273,7 @@ export const selectFeaturedAnimes = (allAnimes) => {
   }
 
   // Case 2: Many items, pick random via genres
-  const allGenres = [...new Set(allAnimes.flatMap(a => a.genres))];
+  const allGenres = [...new Set(safeAnimes.flatMap(a => a.genres))];
   const shuffledGenres = allGenres.sort(() => 0.5 - Math.random());
   const targetGenres = shuffledGenres.slice(0, 3);
 
@@ -1087,7 +1281,7 @@ export const selectFeaturedAnimes = (allAnimes) => {
   const selectedIds = new Set();
 
   targetGenres.forEach(genre => {
-    const candidates = allAnimes.filter(a =>
+    const candidates = safeAnimes.filter(a =>
       a.genres.includes(genre) && !selectedIds.has(a.id)
     );
 
@@ -1102,8 +1296,8 @@ export const selectFeaturedAnimes = (allAnimes) => {
     }
   });
 
-  while (selected.length < 3 && selected.length < allAnimes.length) {
-    const remaining = allAnimes.filter(a => !selectedIds.has(a.id));
+  while (selected.length < 3 && selected.length < safeAnimes.length) {
+    const remaining = safeAnimes.filter(a => !selectedIds.has(a.id));
     if (remaining.length === 0) break;
 
     const picked = remaining[Math.floor(Math.random() * remaining.length)];

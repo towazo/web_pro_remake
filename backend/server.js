@@ -1,8 +1,8 @@
 require('dotenv').config();
 
-const fs = require('node:fs/promises');
 const path = require('node:path');
 const express = require('express');
+const { createLibraryStore } = require('./libraryStore');
 
 const app = express();
 
@@ -19,15 +19,14 @@ const ALLOWED_ORIGINS = (
 const ALLOWED_ORIGIN_SET = new Set(ALLOWED_ORIGINS);
 
 const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'library.json');
-const LEGACY_USERS_FILE = path.join(DATA_DIR, 'users.json');
-const WRITE_JSON_SPACES = 2;
-const EMPTY_LIBRARY = {
-  version: 1,
-  animeList: [],
-  bookmarkList: [],
-  updatedAt: null,
-};
+const libraryStore = createLibraryStore({
+  dataDir: DATA_DIR,
+  dataFile: path.join(DATA_DIR, 'library.json'),
+  legacyUsersFile: path.join(DATA_DIR, 'users.json'),
+  onLegacyMigrated: (payload) => {
+    logInfo('legacy_migrated', payload);
+  },
+});
 
 const nowIso = () => new Date().toISOString();
 
@@ -50,153 +49,6 @@ const parseOriginFromReferer = (referer) => {
   } catch (_) {
     return '';
   }
-};
-
-const sanitizeAnimeCollection = (list) => {
-  if (!Array.isArray(list)) return [];
-  const unique = new Set();
-  const output = [];
-
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
-    const id = Number(item.id);
-    if (!Number.isFinite(id) || unique.has(id)) continue;
-    unique.add(id);
-    output.push({ ...item, id });
-    if (output.length >= 5000) break;
-  }
-
-  return output;
-};
-
-const normalizeLibraryPayload = (animeList, bookmarkList) => {
-  const safeAnimeList = sanitizeAnimeCollection(animeList);
-  const watchedIds = new Set(safeAnimeList.map((item) => item.id));
-  const safeBookmarkList = sanitizeAnimeCollection(bookmarkList)
-    .filter((item) => !watchedIds.has(item.id));
-  return { animeList: safeAnimeList, bookmarkList: safeBookmarkList };
-};
-
-const pickNewestLegacyRecord = (users) => {
-  const records = Object.values(users || {}).filter((record) => record && typeof record === 'object');
-  if (records.length === 0) return null;
-
-  const toTime = (value) => {
-    if (typeof value !== 'string' || !value.trim()) return 0;
-    const time = Date.parse(value);
-    return Number.isNaN(time) ? 0 : time;
-  };
-
-  let selected = null;
-  let selectedTime = 0;
-  for (const record of records) {
-    const currentTime = Math.max(
-      toTime(record.updatedAt),
-      toTime(record.cloudInitializedAt),
-      toTime(record.lastLoginAt)
-    );
-    const hasData = (Array.isArray(record.animeList) && record.animeList.length > 0)
-      || (Array.isArray(record.bookmarkList) && record.bookmarkList.length > 0);
-    if (!hasData) continue;
-
-    if (!selected || currentTime >= selectedTime) {
-      selected = record;
-      selectedTime = currentTime;
-    }
-  }
-
-  return selected;
-};
-
-const readLegacyLibraryStore = async () => {
-  try {
-    const raw = await fs.readFile(LEGACY_USERS_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || !parsed.users || typeof parsed.users !== 'object') {
-      return null;
-    }
-
-    const latestRecord = pickNewestLegacyRecord(parsed.users);
-    if (!latestRecord) return null;
-
-    const normalized = normalizeLibraryPayload(latestRecord.animeList, latestRecord.bookmarkList);
-    if (normalized.animeList.length === 0 && normalized.bookmarkList.length === 0) {
-      return null;
-    }
-
-    return {
-      animeList: normalized.animeList,
-      bookmarkList: normalized.bookmarkList,
-      updatedAt: typeof latestRecord.updatedAt === 'string' ? latestRecord.updatedAt : nowIso(),
-    };
-  } catch (_) {
-    return null;
-  }
-};
-
-const ensureDataFile = async () => {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(DATA_FILE);
-  } catch (_) {
-    await fs.writeFile(DATA_FILE, JSON.stringify(EMPTY_LIBRARY, null, WRITE_JSON_SPACES), 'utf8');
-  }
-};
-
-const readLibraryStore = async () => {
-  await ensureDataFile();
-  try {
-    const raw = await fs.readFile(DATA_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return { ...EMPTY_LIBRARY };
-
-    const normalizedStore = {
-      version: Number(parsed.version) || 1,
-      animeList: sanitizeAnimeCollection(parsed.animeList),
-      bookmarkList: sanitizeAnimeCollection(parsed.bookmarkList),
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null,
-    };
-
-    const hasLibraryData = normalizedStore.animeList.length > 0 || normalizedStore.bookmarkList.length > 0;
-    if (!hasLibraryData) {
-      const legacy = await readLegacyLibraryStore();
-      if (legacy) {
-        const migrated = {
-          ...normalizedStore,
-          animeList: legacy.animeList,
-          bookmarkList: legacy.bookmarkList,
-          updatedAt: legacy.updatedAt,
-        };
-        await writeLibraryStore(migrated);
-        logInfo('legacy_migrated', {
-          animeCount: migrated.animeList.length,
-          bookmarkCount: migrated.bookmarkList.length,
-        });
-        return migrated;
-      }
-    }
-
-    return normalizedStore;
-  } catch (_) {
-    return { ...EMPTY_LIBRARY };
-  }
-};
-
-const writeLibraryStore = async (store) => {
-  await ensureDataFile();
-  await fs.writeFile(DATA_FILE, JSON.stringify(store, null, WRITE_JSON_SPACES), 'utf8');
-};
-
-let mutationQueue = Promise.resolve();
-const mutateStore = (mutator) => {
-  const operation = mutationQueue.then(async () => {
-    const store = await readLibraryStore();
-    const result = await mutator(store);
-    await writeLibraryStore(store);
-    return result;
-  });
-  mutationQueue = operation.then(() => undefined, () => undefined);
-  return operation;
 };
 
 app.use(express.json({ limit: '1mb' }));
@@ -254,7 +106,7 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/library', async (_req, res, next) => {
   try {
-    const store = await readLibraryStore();
+    const store = await libraryStore.readLibraryStore();
     res.json({
       animeList: store.animeList,
       bookmarkList: store.bookmarkList,
@@ -271,8 +123,8 @@ app.put('/api/library', async (req, res, next) => {
     const bookmarkList = req.body?.bookmarkList;
     const now = nowIso();
 
-    const result = await mutateStore((store) => {
-      const normalized = normalizeLibraryPayload(animeList, bookmarkList);
+    const result = await libraryStore.mutateStore((store) => {
+      const normalized = libraryStore.normalizeLibraryPayload(animeList, bookmarkList);
       store.animeList = normalized.animeList;
       store.bookmarkList = normalized.bookmarkList;
       store.updatedAt = now;
@@ -304,6 +156,6 @@ app.listen(PORT, () => {
     port: PORT,
     nodeEnv: NODE_ENV,
     allowedOrigins: ALLOWED_ORIGINS,
-    dataFile: DATA_FILE,
+    dataFile: libraryStore.dataFile,
   });
 });
