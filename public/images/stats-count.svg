@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="登録作品数">
+  <circle cx="50" cy="50" r="42" fill="none" stroke="#111" stroke-width="8"/>
+  <circle cx="50" cy="50" r="17" fill="none" stroke="#111" stroke-width="7"/>
+  <circle cx="50" cy="50" r="7.5" fill="#111"/>
+  <path d="M30 22l14 8-7 12-14-8z" fill="#111"/>
+  <path d="M43 20l9 6-5 9-9-6z" fill="#111"/>
+</svg>

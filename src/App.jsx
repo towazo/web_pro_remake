@@ -599,9 +599,11 @@ function App() {
                   <option value="year">放送年順</option>
                 </select>
                 <button
+                  type="button"
                   className="sort-order-button"
                   onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
                   title={sortOrder === 'asc' ? '昇順' : '降順'}
+                  aria-label={sortOrder === 'asc' ? '昇順で並び替え' : '降順で並び替え'}
                 >
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>

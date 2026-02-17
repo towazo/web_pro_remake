@@ -1500,6 +1500,7 @@ body {
     align-items: center;
     gap: 16px;
     min-width: 0;
+    min-height: 126px;
     transition: all 0.2s ease;
 }
 
@@ -1507,6 +1508,7 @@ body {
     .stat-card {
         padding: 16px;
         gap: 12px;
+        min-height: 112px;
     }
 }
 
@@ -1517,8 +1519,9 @@ body {
 
 .stat-icon {
     background: #ffffff;
-    width: 64px;
-    height: 64px;
+    width: 80px;
+    height: 80px;
+    flex: 0 0 80px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1526,15 +1529,17 @@ body {
     color: black;
     border: 1px solid #000;
     overflow: hidden;
-    padding: 4px;
+    padding: 0;
     position: relative;
-    /* Reduced from 12px for larger icons */
 }
 
 .stat-icon img {
-    width: 100%;
-    height: 100%;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
     object-fit: contain;
+    display: block;
     position: relative;
     z-index: 2;
 }
@@ -1556,13 +1561,15 @@ body {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    justify-content: center;
+    gap: 4px;
 }
 
 .stat-value {
     font-size: clamp(1.05rem, 2.1vw, 1.5rem);
     font-weight: 950;
     color: black;
-    line-height: 1.2;
+    line-height: 1.15;
     letter-spacing: -0.01em;
     white-space: nowrap;
     overflow: hidden;
@@ -1574,10 +1581,19 @@ body {
     color: #888;
     font-weight: 700;
     letter-spacing: 0.03em;
-    margin-top: 6px;
+    line-height: 1.35;
+    margin-top: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+@media (max-width: 480px) {
+    .stat-icon {
+        width: 72px;
+        height: 72px;
+        flex-basis: 72px;
+    }
 }
 
 .stat-card:last-child .stat-value {
@@ -4418,12 +4434,14 @@ body {
 /* Sort Controls */
 .sort-box {
     display: flex;
+    align-items: stretch;
     gap: 0;
     border: 1px solid var(--border-strong);
     background: #fff;
     flex: 0 0 auto;
     width: fit-content;
     min-width: unset;
+    overflow: visible;
 }
 
 .sort-box select {
@@ -4444,6 +4462,8 @@ body {
     background-size: 16px;
     padding-right: 34px;
     outline: none;
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .sort-box select option {
@@ -4451,12 +4471,14 @@ body {
 }
 
 .sort-order-button {
-    width: 40px;
+    width: 52px;
+    min-width: 52px;
+    min-height: 52px;
     height: 52px;
     border: none;
     border-left: 1px solid var(--border-strong);
     background: transparent;
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     font-weight: bold;
     cursor: pointer;
     transition: all 0.2s;
@@ -4464,9 +4486,15 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    padding: 0;
+    padding: 0 12px;
     line-height: 1;
     color: #000 !important;
+    box-sizing: border-box;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+    z-index: 1;
 }
 
 .sort-order-button:hover {
