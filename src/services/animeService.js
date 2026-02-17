@@ -85,6 +85,7 @@ const ANIME_LIST_QUERY = `
         genres
         format
         countryOfOrigin
+        description
       }
     }
   }
@@ -130,7 +131,9 @@ const ANIME_BY_YEAR_QUERY = `
     $perPage: Int,
     $genreIn: [String],
     $formatIn: [MediaFormat],
-    $countryOfOrigin: CountryCode
+    $countryOfOrigin: CountryCode,
+    $statusIn: [MediaStatus],
+    $statusNot: MediaStatus
   ) {
     Page(page: $page, perPage: $perPage) {
       pageInfo {
@@ -147,6 +150,8 @@ const ANIME_BY_YEAR_QUERY = `
         genre_in: $genreIn
         format_in: $formatIn
         countryOfOrigin: $countryOfOrigin
+        status_in: $statusIn
+        status_not: $statusNot
         sort: [POPULARITY_DESC, START_DATE_DESC]
       ) {
         id
@@ -173,6 +178,7 @@ const ANIME_BY_YEAR_QUERY = `
         genres
         format
         countryOfOrigin
+        description
       }
     }
   }
@@ -229,6 +235,7 @@ const ANIME_BY_START_DATE_QUERY = `
         genres
         format
         countryOfOrigin
+        description
       }
     }
   }
@@ -236,6 +243,30 @@ const ANIME_BY_START_DATE_QUERY = `
 
 const DEFAULT_YEAR_FORMATS = DISPLAY_ALLOWED_MEDIA_FORMATS;
 const DEFAULT_COUNTRY_OF_ORIGIN = DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN;
+const normalizeMediaFormatValue = (value) => String(value || '').trim().toUpperCase();
+const normalizeCountryValue = (value) => String(value || '').trim().toUpperCase();
+
+const resolveAllowedFormats = (value, fallback = DEFAULT_YEAR_FORMATS) => {
+  const source = Array.isArray(value) && value.length > 0 ? value : fallback;
+  const normalized = source
+    .map((item) => normalizeMediaFormatValue(item))
+    .filter((item) => item.length > 0);
+  return normalized.length > 0 ? normalized : [...DEFAULT_YEAR_FORMATS];
+};
+
+const resolveCountryPreference = (options = {}, fallback = DEFAULT_COUNTRY_OF_ORIGIN) => {
+  const hasCountryOverride = (
+    Object.prototype.hasOwnProperty.call(options, 'countryOfOrigin')
+    && options.countryOfOrigin !== undefined
+  );
+  const raw = hasCountryOverride
+    ? normalizeCountryValue(options.countryOfOrigin)
+    : normalizeCountryValue(fallback);
+  return {
+    hasCountryOverride,
+    country: raw || null,
+  };
+};
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -402,6 +433,14 @@ const buildSearchTermVariants = (title, maxTerms = 6) => {
 
   pushUnique(variants, baseRaw);
   pushUnique(variants, base);
+
+  const hasTerminalPunctuation = /[!?！？]$/u.test(base);
+  if (!hasTerminalPunctuation) {
+    pushUnique(variants, `${base}!?`);
+    pushUnique(variants, `${base}！？`);
+  } else {
+    pushUnique(variants, base.replace(/[!?！？]+$/gu, '').trim());
+  }
 
   const noSeason = stripCommonSeasonSuffix(base);
   pushUnique(variants, noSeason);
@@ -692,11 +731,28 @@ export const fetchAnimeDetails = async (title, options = {}) => {
     adaptiveTimeoutMs = 2200,
     adaptiveMaxAttempts = 1,
     onAdaptiveQuery,
+    allowUnknownFormat = true,
+    allowUnknownCountry = true,
+    allowedFormats: allowedFormatsOption,
+    formatIn: formatInOption,
+    countryOfOrigin: countryOfOriginOption,
     ...requestOptions
   } = options || {};
+  const allowedFormats = resolveAllowedFormats(allowedFormatsOption || formatInOption, DEFAULT_YEAR_FORMATS);
+  const countryPreferenceInfo = resolveCountryPreference(
+    { countryOfOrigin: countryOfOriginOption },
+    DEFAULT_COUNTRY_OF_ORIGIN
+  );
+  const countryPreference = countryPreferenceInfo.country;
+  const queryFormatIn = allowUnknownFormat ? null : allowedFormats;
+  const queryCountryOfOrigin = allowUnknownCountry ? null : countryPreference;
 
   const fallbackRequestOptions = {
     ...requestOptions,
+    allowUnknownFormat,
+    allowUnknownCountry,
+    allowedFormats,
+    countryOfOrigin: countryPreference || '',
     timeoutMs: Math.min(3200, Math.max(1000, Number(adaptiveTimeoutMs) || 2200)),
     maxAttempts: Math.min(2, Math.max(1, Number(adaptiveMaxAttempts) || 1)),
     baseDelayMs: Math.min(300, Math.max(50, Number(requestOptions.baseDelayMs) || 200)),
@@ -711,16 +767,18 @@ export const fetchAnimeDetails = async (title, options = {}) => {
         ANIME_QUERY,
         {
           search: title,
-          formatIn: DEFAULT_YEAR_FORMATS,
-          countryOfOrigin: DEFAULT_COUNTRY_OF_ORIGIN,
+          formatIn: queryFormatIn,
+          countryOfOrigin: queryCountryOfOrigin,
         },
         requestOptions
       );
       if (result.ok && result.data?.Media) {
         const media = result.data.Media;
         return isDisplayEligibleAnime(media, {
-          allowUnknownFormat: false,
-          allowUnknownCountry: false,
+          allowUnknownFormat,
+          allowUnknownCountry,
+          allowedFormats,
+          countryOfOrigin: countryPreference || undefined,
         })
           ? media
           : null;
@@ -798,16 +856,31 @@ export const fetchAnimeDetails = async (title, options = {}) => {
 };
 
 export const fetchAnimeDetailsById = async (id, options = {}) => {
+  const {
+    allowUnknownFormat = true,
+    allowUnknownCountry = true,
+    allowedFormats: allowedFormatsOption,
+    formatIn: formatInOption,
+    countryOfOrigin: countryOfOriginOption,
+    ...requestOptions
+  } = options || {};
+  const allowedFormats = resolveAllowedFormats(allowedFormatsOption || formatInOption, DEFAULT_YEAR_FORMATS);
+  const { country: countryPreference } = resolveCountryPreference(
+    { countryOfOrigin: countryOfOriginOption },
+    DEFAULT_COUNTRY_OF_ORIGIN
+  );
   const numericId = Number(id);
   if (!Number.isFinite(numericId)) return null;
 
   try {
-    const result = await postAniListGraphQL(ANIME_BY_ID_QUERY, { id: numericId }, options);
+    const result = await postAniListGraphQL(ANIME_BY_ID_QUERY, { id: numericId }, requestOptions);
     if (!result.ok) return null;
     const media = result.data?.Media ?? null;
     return isDisplayEligibleAnime(media, {
-      allowUnknownFormat: false,
-      allowUnknownCountry: false,
+      allowUnknownFormat,
+      allowUnknownCountry,
+      allowedFormats,
+      countryOfOrigin: countryPreference || undefined,
     })
       ? media
       : null;
@@ -820,27 +893,92 @@ export const fetchAnimeDetailsById = async (id, options = {}) => {
 };
 
 const searchAnimeListInternal = async (title, perPage = 8, options = {}) => {
+  const { allowUnknownFormat = true, allowUnknownCountry = true } = options || {};
+  const allowedFormats = resolveAllowedFormats(options?.allowedFormats || options?.formatIn, DEFAULT_YEAR_FORMATS);
+  const { country: countryPreference } = resolveCountryPreference(options, DEFAULT_COUNTRY_OF_ORIGIN);
+  const queryFormatIn = allowUnknownFormat ? null : allowedFormats;
+  const queryCountryOfOrigin = allowUnknownCountry ? null : countryPreference;
   try {
     const result = await postAniListGraphQL(
       ANIME_LIST_QUERY,
       {
         search: title,
         perPage,
-        formatIn: DEFAULT_YEAR_FORMATS,
-        countryOfOrigin: DEFAULT_COUNTRY_OF_ORIGIN,
+        formatIn: queryFormatIn,
+        countryOfOrigin: queryCountryOfOrigin,
       },
       options
     );
     if (!result.ok) return [];
     return filterDisplayEligibleAnimeList(result.data?.Page?.media || [], {
-      allowUnknownFormat: false,
-      allowUnknownCountry: false,
+      allowUnknownFormat,
+      allowUnknownCountry,
+      allowedFormats,
+      countryOfOrigin: countryPreference || undefined,
     });
   } catch (error) {
     if (!isAbortError(error)) {
       console.error(`Error searching list for ${title}:`, error);
     }
     return [];
+  }
+};
+
+const scoreSearchCandidate = (query, media) => {
+  const titles = [
+    media?.title?.native,
+    media?.title?.romaji,
+    media?.title?.english,
+  ].filter(Boolean);
+  if (titles.length === 0) return 0;
+
+  const queryNormalized = stripTitleNoise(query);
+  const queryReadable = normalizeTitleSpacing(query).toLowerCase();
+
+  let bestScore = 0;
+  for (const title of titles) {
+    const titleNormalized = stripTitleNoise(title);
+    const titleReadable = normalizeTitleSpacing(title).toLowerCase();
+    let score = titleSimilarity(query, title);
+
+    if (queryNormalized && titleNormalized === queryNormalized) {
+      score += 1.1;
+    } else if (
+      queryNormalized
+      && titleNormalized
+      && (titleNormalized.includes(queryNormalized) || queryNormalized.includes(titleNormalized))
+    ) {
+      score += 0.35;
+    }
+
+    if (queryReadable && titleReadable && titleReadable.startsWith(queryReadable)) {
+      score += 0.08;
+    }
+
+    if (score > bestScore) bestScore = score;
+  }
+
+  return bestScore;
+};
+
+const buildSearchCandidateKey = (media) => {
+  const id = Number(media?.id);
+  if (Number.isFinite(id)) return `id:${id}`;
+  const fallbackTitle = media?.title?.native || media?.title?.romaji || media?.title?.english || '';
+  const fallbackKey = stripTitleNoise(fallbackTitle);
+  return fallbackKey ? `title:${fallbackKey}` : '';
+};
+
+const mergeSearchCandidates = (bucket, query, list) => {
+  if (!(bucket instanceof Map) || !Array.isArray(list)) return;
+  for (const media of list) {
+    const key = buildSearchCandidateKey(media);
+    if (!key) continue;
+    const score = scoreSearchCandidate(query, media);
+    const existing = bucket.get(key);
+    if (!existing || score > existing.score) {
+      bucket.set(key, { media, score });
+    }
   }
 };
 
@@ -1028,10 +1166,21 @@ export const findClosestAnimeCandidates = async (title, options = {}) => {
 export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
   const safeTitles = Array.isArray(titles) ? titles.filter((t) => typeof t === 'string' && t.trim().length > 0) : [];
   if (safeTitles.length === 0) return [];
+  const {
+    allowUnknownFormat = true,
+    allowUnknownCountry = true,
+    allowedFormats: allowedFormatsOption,
+    formatIn: formatInOption,
+    ...requestOptions
+  } = options || {};
+  const allowedFormats = resolveAllowedFormats(allowedFormatsOption || formatInOption, DEFAULT_YEAR_FORMATS);
+  const { country: countryPreference } = resolveCountryPreference(options, DEFAULT_COUNTRY_OF_ORIGIN);
+  const queryFormatIn = allowUnknownFormat ? null : allowedFormats;
+  const queryCountryOfOrigin = allowUnknownCountry ? null : countryPreference;
 
   const variables = {
-    formatIn: DEFAULT_YEAR_FORMATS,
-    countryOfOrigin: DEFAULT_COUNTRY_OF_ORIGIN,
+    formatIn: queryFormatIn,
+    countryOfOrigin: queryCountryOfOrigin,
   };
   const fields = [
     'id',
@@ -1062,12 +1211,16 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
 
   const fillMissingBySingleFetch = async (mapped) => {
     const next = Array.isArray(mapped) ? [...mapped] : safeTitles.map(() => null);
-    const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 12000;
+    const timeoutMs = Number(requestOptions.timeoutMs) > 0 ? Number(requestOptions.timeoutMs) : 12000;
     const singleOptions = {
       timeoutMs,
       maxAttempts: 3,
       baseDelayMs: 800,
-      onRetry: options.onRetry,
+      onRetry: requestOptions.onRetry,
+      allowUnknownFormat,
+      allowUnknownCountry,
+      allowedFormats,
+      countryOfOrigin: countryPreference || '',
     };
 
     for (let i = 0; i < next.length; i++) {
@@ -1082,11 +1235,13 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
   };
 
   try {
-    const result = await postAniListGraphQL(query, variables, options);
+    const result = await postAniListGraphQL(query, variables, requestOptions);
     const mapped = buildMappedResult(result?.data || {}).map((item) => (
       isDisplayEligibleAnime(item, {
-        allowUnknownFormat: false,
-        allowUnknownCountry: false,
+        allowUnknownFormat,
+        allowUnknownCountry,
+        allowedFormats,
+        countryOfOrigin: countryPreference || undefined,
       })
         ? item
         : null
@@ -1102,7 +1257,34 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
 };
 
 export const searchAnimeList = async (title, perPage = 8, options = {}) => {
-  return await searchAnimeListInternal(title, perPage, options);
+  const query = normalizeTitleSpacing(title);
+  if (!query) return [];
+
+  const requestedCount = Math.max(1, Math.min(30, Number(perPage) || 8));
+  const fetchPerTerm = Math.max(requestedCount, 12);
+  const rankedMap = new Map();
+
+  const primaryList = await searchAnimeListInternal(query, fetchPerTerm, options);
+  mergeSearchCandidates(rankedMap, query, primaryList);
+
+  const hasStrongPrimary = Array.from(rankedMap.values()).some((entry) => entry.score >= 1);
+  if (rankedMap.size < requestedCount || !hasStrongPrimary) {
+    const variantTerms = buildSearchTermVariants(query, Math.max(4, Number(options.maxTerms) || 6))
+      .filter((term) => stripTitleNoise(term) !== stripTitleNoise(query))
+      .slice(0, 4);
+
+    for (const term of variantTerms) {
+      const list = await searchAnimeListInternal(term, fetchPerTerm, options);
+      mergeSearchCandidates(rankedMap, query, list);
+      const hasStrongMatch = Array.from(rankedMap.values()).some((entry) => entry.score >= 1);
+      if (rankedMap.size >= requestedCount * 2 && hasStrongMatch) break;
+    }
+  }
+
+  return Array.from(rankedMap.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, requestedCount)
+    .map((entry) => entry.media);
 };
 
 export const fetchAnimeByYear = async (seasonYear, options = {}) => {
@@ -1115,11 +1297,13 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
     ? options.genreIn.filter((g) => typeof g === 'string' && g.trim().length > 0)
     : [];
   const genreIn = genreList.length > 0 ? genreList : null;
-  const formatIn = Array.isArray(options.formatIn) && options.formatIn.length > 0
-    ? options.formatIn
-    : DEFAULT_YEAR_FORMATS;
-  const countryOfOriginRaw = String(options.countryOfOrigin || DEFAULT_COUNTRY_OF_ORIGIN).toUpperCase();
-  const countryOfOrigin = countryOfOriginRaw || DEFAULT_COUNTRY_OF_ORIGIN;
+  const allowUnknownFormat = options.allowUnknownFormat !== false;
+  const allowUnknownCountry = options.allowUnknownCountry !== false;
+  const formatIn = resolveAllowedFormats(options.formatIn, DEFAULT_YEAR_FORMATS);
+  const formatInSet = new Set(formatIn);
+  const { country: countryOfOrigin } = resolveCountryPreference(options, DEFAULT_COUNTRY_OF_ORIGIN);
+  const queryFormatIn = formatIn;
+  const queryCountryOfOrigin = countryOfOrigin;
   const statusInList = Array.isArray(options.statusIn)
     ? options.statusIn.filter((s) => typeof s === 'string' && s.trim().length > 0)
     : [];
@@ -1158,9 +1342,27 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
     };
     const hasSeasonFilter = Boolean(season);
     const baseVariables = hasSeasonFilter
-      ? { seasonYear: year, season, page, perPage, genreIn, formatIn, countryOfOrigin }
-      : { startDateGreater, startDateLesser, page, perPage, genreIn, formatIn, countryOfOrigin };
-    const hasStatusFilter = (statusIn && statusIn.length > 0) || Boolean(statusNot);
+      ? {
+        seasonYear: year,
+        season,
+        page,
+        perPage,
+        genreIn,
+        formatIn: queryFormatIn,
+        countryOfOrigin: queryCountryOfOrigin,
+        statusIn,
+        statusNot,
+      }
+      : {
+        startDateGreater,
+        startDateLesser,
+        page,
+        perPage,
+        genreIn,
+        formatIn: queryFormatIn,
+        countryOfOrigin: queryCountryOfOrigin,
+      };
+    const hasStatusFilter = hasSeasonFilter && ((statusIn && statusIn.length > 0) || Boolean(statusNot));
     if (debugLog) {
       console.info(`[fetchAnimeByYear:${debugKey}] request`, {
         season: season || null,
@@ -1168,7 +1370,13 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
         limit: perPage,
         year,
         formatIn,
-        countryOfOrigin,
+        queryFormatIn: queryFormatIn || null,
+        countryOfOrigin: countryOfOrigin || null,
+        queryCountryOfOrigin: queryCountryOfOrigin || null,
+        allowUnknownFormat,
+        allowUnknownCountry,
+        statusIn,
+        statusNot,
       });
     }
     const result = await postAniListGraphQL(
@@ -1236,8 +1444,22 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
       : null;
     const rawItems = Array.isArray(pageData?.media) ? pageData.media : [];
     const normalizedItems = rawItems.filter((item) => {
-      const itemCountryOfOrigin = String(item?.countryOfOrigin || '').toUpperCase();
-      if (itemCountryOfOrigin !== countryOfOrigin) return false;
+      const itemCountryOfOrigin = normalizeCountryValue(item?.countryOfOrigin);
+      if (countryOfOrigin) {
+        if (itemCountryOfOrigin) {
+          if (itemCountryOfOrigin !== countryOfOrigin) return false;
+        } else if (!allowUnknownCountry) {
+          return false;
+        }
+      }
+
+      const itemFormat = normalizeMediaFormatValue(item?.format);
+      if (itemFormat) {
+        if (formatInSet.size > 0 && !formatInSet.has(itemFormat)) return false;
+      } else if (!allowUnknownFormat) {
+        return false;
+      }
+
       if (hasSeasonFilter) {
         const itemYear = Number(item?.seasonYear);
         const itemSeason = String(item?.season || '').toUpperCase();
@@ -1276,6 +1498,7 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
     if (debugLog) {
       const totalPagesRaw = Number(pageInfoRaw?.lastPage);
       console.info(`[fetchAnimeByYear:${debugKey}] response`, {
+        status: Number(result?.status) || null,
         total: hasApiTotal ? apiTotal : null,
         totalPages: Number.isFinite(totalPagesRaw) ? totalPagesRaw : null,
         page: currentPage,
@@ -1402,7 +1625,8 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
     }
 
     // Stop runaway scans when API keeps claiming next page but no useful data comes back.
-    if ((emptyRawStreak >= 2 && page >= 3) || (emptyMatchStreak >= 8 && page >= 10)) {
+    const shouldStopForEmptyMatches = emptyMatchStreak >= 20 && page >= 30;
+    if ((emptyRawStreak >= 2 && page >= 3) || shouldStopForEmptyMatches) {
       break;
     }
 
@@ -1420,11 +1644,33 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
     const uiTotalPages = uiPerPage > 0
       ? Math.max(1, Math.ceil(mergedItems.length / uiPerPage))
       : null;
+    const formatCounts = mergedItems.reduce((acc, anime) => {
+      const key = String(anime?.format || 'UNKNOWN');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    const statusCounts = mergedItems.reduce((acc, anime) => {
+      const key = String(anime?.status || 'UNKNOWN');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
     const debugKey = String(options.debugKey || 'yearly');
     console.info(`[fetchAnimeByYearAllPages:${debugKey}] summary`, {
       year: Number(seasonYear),
+      season: String(options.season || '').toUpperCase() || null,
+      statusIn: Array.isArray(options.statusIn) ? options.statusIn : null,
+      statusNot: options.statusNot || null,
+      formatIn: Array.isArray(options.formatIn) ? options.formatIn : null,
+      allowUnknownFormat: options.allowUnknownFormat !== false,
+      allowUnknownCountry: options.allowUnknownCountry !== false,
+      countryOfOrigin: Object.prototype.hasOwnProperty.call(options, 'countryOfOrigin')
+        ? (options.countryOfOrigin || null)
+        : DEFAULT_COUNTRY_OF_ORIGIN,
       pagesFetched,
+      knownLastPage: Number.isFinite(knownLastPage) ? knownLastPage : null,
       mergedItemsLength: mergedItems.length,
+      formatCounts,
+      statusCounts,
       uiPerPage: uiPerPage > 0 ? uiPerPage : null,
       uiTotalPages,
       error: lastError?.message || null,

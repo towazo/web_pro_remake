@@ -1,19 +1,28 @@
 const HENTAI_GENRE_KEY = 'hentai';
-export const DISPLAY_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA']);
+export const DISPLAY_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA', 'ONA', 'SPECIAL']);
 export const DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN = 'JP';
 const DISPLAY_ALLOWED_MEDIA_FORMAT_SET = new Set(DISPLAY_ALLOWED_MEDIA_FORMATS);
-const SUPPLEMENTAL_FORMAT_SET = new Set(['OVA', 'TV_SHORT']);
+const SUPPLEMENTAL_FORMAT_SET = new Set(['OVA', 'TV_SHORT', 'ONA', 'SPECIAL']);
+const ONA_LIKE_FORMAT_SET = new Set(['ONA', 'SPECIAL']);
 const PROMOTIONAL_KEYWORD_PATTERNS = [
   /\b(?:pv|cm|mv|teaser|trailer|promo|promotional|commercial)\b/i,
   /(?:music\s*video|ミュージック\s*ビデオ|音楽\s*映像|楽曲\s*映像)/i,
   /(?:non[-\s]?credit|creditless|ノンクレジット|ノンテロップ)/i,
   /(?:web\s*cm|番宣|特報|予告|告知(?:映像)?)/i,
 ];
+const ANCILLARY_KEYWORD_PATTERNS = [
+  /\b(?:bonus|extra|omake|digest|recap|web\s*special|special\s*program|behind[-\s]?the[-\s]?scenes|making[-\s]?of)\b/i,
+  /(?:映像特典|特典映像|おまけ|番外編|総集編|ダイジェスト|メイキング|特別番組|ミニアニメ|短編|予告編)/i,
+];
 
 const normalizeGenre = (genre) => String(genre || '').trim().toLowerCase();
 const normalizeMediaFormat = (format) => String(format || '').trim().toUpperCase();
 const normalizeCountryOfOrigin = (country) => String(country || '').trim().toUpperCase();
 const normalizeText = (value) => String(value || '').normalize('NFKC').toLowerCase();
+const toFiniteNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
 
 export const isHentaiGenre = (genre) => normalizeGenre(genre) === HENTAI_GENRE_KEY;
 
@@ -82,7 +91,39 @@ const isLikelyPromotionalEntry = (anime) => {
     .join(' ');
 
   if (!text) return false;
-  return PROMOTIONAL_KEYWORD_PATTERNS.some((pattern) => pattern.test(text));
+  const hasPromotionalKeyword = PROMOTIONAL_KEYWORD_PATTERNS.some((pattern) => pattern.test(text));
+  if (hasPromotionalKeyword) return true;
+
+  const hasAncillaryKeyword = ANCILLARY_KEYWORD_PATTERNS.some((pattern) => pattern.test(text));
+  if (!hasAncillaryKeyword) return false;
+
+  const episodes = toFiniteNumber(anime?.episodes);
+  if (episodes === null) return true;
+  return episodes <= 1;
+};
+
+const isLikelyAncillaryMusicClip = (anime) => {
+  if (!anime || typeof anime !== 'object') return false;
+  const mediaFormat = normalizeMediaFormat(anime.format);
+  if (!ONA_LIKE_FORMAT_SET.has(mediaFormat)) return false;
+  const episodes = toFiniteNumber(anime?.episodes);
+  if (episodes !== 1) return false;
+  const genres = Array.isArray(anime?.genres) ? anime.genres.map((genre) => normalizeGenre(genre)) : [];
+  if (genres.length === 0) return false;
+  return genres.every((genre) => genre === 'music');
+};
+
+const isMainlineSupplementalAnime = (anime) => {
+  if (!anime || typeof anime !== 'object') return false;
+  const mediaFormat = normalizeMediaFormat(anime.format);
+  if (!SUPPLEMENTAL_FORMAT_SET.has(mediaFormat)) return true;
+
+  if (isLikelyPromotionalEntry(anime)) return false;
+  if (isLikelyAncillaryMusicClip(anime)) return false;
+
+  const episodes = toFiniteNumber(anime?.episodes);
+  if (episodes !== null && episodes <= 0) return false;
+  return true;
 };
 
 export const isDisplayEligibleAnime = (anime, options = {}) => {
@@ -90,7 +131,7 @@ export const isDisplayEligibleAnime = (anime, options = {}) => {
   if (isHentaiAnime(anime)) return false;
   if (!isAllowedAnimeFormat(anime, options)) return false;
   if (!isAllowedCountryOfOrigin(anime, options)) return false;
-  if (isLikelyPromotionalEntry(anime)) return false;
+  if (!isMainlineSupplementalAnime(anime)) return false;
   return true;
 };
 

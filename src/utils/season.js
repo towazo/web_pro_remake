@@ -12,10 +12,23 @@ const getSeasonByMonth = (month) => {
   return 'FALL';
 };
 
+const getNowInJst = () => {
+  const formatter = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  return {
+    year: Number.isFinite(year) ? year : new Date().getFullYear(),
+    month: Number.isFinite(month) ? month : (new Date().getMonth() + 1),
+  };
+};
+
 export const getCurrentSeasonInfo = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  const { year, month } = getNowInJst();
   return { year, season: getSeasonByMonth(month) };
 };
 

@@ -14,7 +14,7 @@ const ANILIST_SEASON_TO_FILTER_KEY = {
     SUMMER: 'summer',
     FALL: 'autumn'
 };
-const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA']);
+const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA', 'ONA', 'SPECIAL']);
 const BROWSE_RESULTS_CACHE = new Map();
 const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -332,7 +332,7 @@ function AddAnimeScreen({
             setShowSuggestions(true);
             setIsSuggesting(true);
             try {
-                const results = await searchAnimeList(normalizedQuery, 8);
+                const results = await searchAnimeList(normalizedQuery, 8, { maxTerms: 4 });
                 if (autocompleteRequestIdRef.current !== requestId) return;
                 setSuggestions(results);
                 setShowSuggestions(true);
@@ -588,7 +588,7 @@ function AddAnimeScreen({
                 const isPresetMode = Boolean(normalizedBrowsePreset);
                 const requestOptions = {
                     perPage: 50,
-                    maxPages: isPresetMode ? 36 : 140,
+                    maxPages: 140,
                     formatIn: BROWSE_ALLOWED_MEDIA_FORMATS,
                     timeoutMs: 10000,
                     maxAttempts: isPresetMode ? 4 : 3,
@@ -731,12 +731,32 @@ function AddAnimeScreen({
                         : (Array.isArray(BROWSE_RESULTS_CACHE.get(browseDataKey)?.items)
                             ? BROWSE_RESULTS_CACHE.get(browseDataKey).items.length
                             : 0);
+                    const sourceItems = safeItems.length > 0
+                        ? safeItems
+                        : (Array.isArray(BROWSE_RESULTS_CACHE.get(browseDataKey)?.items)
+                            ? BROWSE_RESULTS_CACHE.get(browseDataKey).items
+                            : []);
+                    const formatCounts = sourceItems.reduce((acc, anime) => {
+                        const key = String(anime?.format || 'UNKNOWN');
+                        acc[key] = (acc[key] || 0) + 1;
+                        return acc;
+                    }, {});
+                    const statusCounts = sourceItems.reduce((acc, anime) => {
+                        const key = String(anime?.status || 'UNKNOWN');
+                        acc[key] = (acc[key] || 0) + 1;
+                        return acc;
+                    }, {});
                     const uiTotalPages = Math.max(1, Math.ceil(visibleCount / YEAR_PER_PAGE));
                     console.info('[AddAnimeScreen] browse summary', {
                         preset: presetLabel,
                         year: selectedBrowseYear,
                         season: normalizedBrowsePreset?.mediaSeason || null,
+                        statusIn: normalizedBrowsePreset?.statusIn || null,
+                        statusNot: normalizedBrowsePreset?.statusNot || null,
+                        formatIn: requestOptions.formatIn,
                         itemCount: visibleCount,
+                        formatCounts,
+                        statusCounts,
                         uiPerPage: YEAR_PER_PAGE,
                         uiTotalPages,
                         hasError: Boolean(error),
@@ -996,7 +1016,12 @@ function AddAnimeScreen({
         setPreviewData(null); // Clear previous preview
         setStatus({ type: 'info', message: '検索中...' });
 
-        const data = await fetchAnimeDetails(query);
+        const data = await fetchAnimeDetails(query, {
+            adaptiveFallback: true,
+            adaptiveMaxTerms: 6,
+            adaptivePerPage: 12,
+            adaptiveMinScore: 0.28
+        });
         setIsSearching(false);
 
         if (data) {

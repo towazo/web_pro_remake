@@ -3,14 +3,14 @@ import { translateGenre } from '../../constants/animeData';
 
 function StatIcon({ src, alt, fallback }) {
     const [hasError, setHasError] = React.useState(false);
+    const resolvedSrc = `${import.meta.env.BASE_URL}${String(src || '').replace(/^\/+/, '')}`;
 
     return (
         <div className="stat-icon">
-            {hasError ? (
-                <span className="stat-icon-fallback" aria-hidden="true">{fallback}</span>
-            ) : (
+            <span className="stat-icon-fallback" aria-hidden="true">{fallback}</span>
+            {!hasError && (
                 <img
-                    src={src}
+                    src={resolvedSrc}
                     alt={alt}
                     loading="eager"
                     decoding="async"
@@ -39,21 +39,21 @@ function StatsSection({ animeList }) {
     return (
         <div className="stats-container">
             <div className="stat-card">
-                <StatIcon src="/images/picture_1.png" alt="Anime Count" fallback="1" />
+                <StatIcon src="/images/picture_1.png" alt="Anime Count" fallback="◎" />
                 <div className="stat-info">
                     <span className="stat-value">{totalAnime} 作品</span>
                     <span className="stat-label">登録作品数</span>
                 </div>
             </div>
             <div className="stat-card">
-                <StatIcon src="/images/picture_2.png" alt="Episodes Count" fallback="E" />
+                <StatIcon src="/images/picture_2.png" alt="Episodes Count" fallback="▶" />
                 <div className="stat-info">
                     <span className="stat-value">{totalEpisodes} 話</span>
                     <span className="stat-label">総エピソード</span>
                 </div>
             </div>
             <div className="stat-card">
-                <StatIcon src="/images/picture_3.png" alt="Top Genre" fallback="G" />
+                <StatIcon src="/images/picture_3.png" alt="Top Genre" fallback="★" />
                 <div className="stat-info">
                     <span className="stat-value">{topGenre !== 'なし' ? translateGenre(topGenre) : 'なし'}</span>
                     <span className="stat-label">最も見たジャンル</span>
