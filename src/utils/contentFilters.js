@@ -20,6 +20,8 @@ const normalizeMediaFormat = (format) => String(format || '').trim().toUpperCase
 const normalizeCountryOfOrigin = (country) => String(country || '').trim().toUpperCase();
 const normalizeText = (value) => String(value || '').normalize('NFKC').toLowerCase();
 const toFiniteNumber = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string' && value.trim().length === 0) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 };
@@ -98,7 +100,10 @@ const isLikelyPromotionalEntry = (anime) => {
   if (!hasAncillaryKeyword) return false;
 
   const episodes = toFiniteNumber(anime?.episodes);
-  if (episodes === null) return true;
+  // Upcoming ONA/SPECIAL titles often have unknown episode counts.
+  // Treat unknown episodes as undecidable (allow), and only block when
+  // ancillary keywords are present with a concrete short length.
+  if (episodes === null) return false;
   return episodes <= 1;
 };
 
