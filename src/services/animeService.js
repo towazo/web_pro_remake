@@ -744,8 +744,11 @@ export const fetchAnimeDetails = async (title, options = {}) => {
     DEFAULT_COUNTRY_OF_ORIGIN
   );
   const countryPreference = countryPreferenceInfo.country;
-  const queryFormatIn = allowUnknownFormat ? null : allowedFormats;
-  const queryCountryOfOrigin = allowUnknownCountry ? null : countryPreference;
+  // NOTE:
+  // AniList can intermittently respond with 500 when optional enum variables are explicitly sent as null.
+  // Omit those variables instead of sending null.
+  const queryFormatIn = allowUnknownFormat ? undefined : allowedFormats;
+  const queryCountryOfOrigin = allowUnknownCountry ? undefined : countryPreference;
 
   const fallbackRequestOptions = {
     ...requestOptions,
@@ -896,8 +899,8 @@ const searchAnimeListInternal = async (title, perPage = 8, options = {}) => {
   const { allowUnknownFormat = true, allowUnknownCountry = true } = options || {};
   const allowedFormats = resolveAllowedFormats(options?.allowedFormats || options?.formatIn, DEFAULT_YEAR_FORMATS);
   const { country: countryPreference } = resolveCountryPreference(options, DEFAULT_COUNTRY_OF_ORIGIN);
-  const queryFormatIn = allowUnknownFormat ? null : allowedFormats;
-  const queryCountryOfOrigin = allowUnknownCountry ? null : countryPreference;
+  const queryFormatIn = allowUnknownFormat ? undefined : allowedFormats;
+  const queryCountryOfOrigin = allowUnknownCountry ? undefined : countryPreference;
   try {
     const result = await postAniListGraphQL(
       ANIME_LIST_QUERY,
@@ -1175,8 +1178,8 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
   } = options || {};
   const allowedFormats = resolveAllowedFormats(allowedFormatsOption || formatInOption, DEFAULT_YEAR_FORMATS);
   const { country: countryPreference } = resolveCountryPreference(options, DEFAULT_COUNTRY_OF_ORIGIN);
-  const queryFormatIn = allowUnknownFormat ? null : allowedFormats;
-  const queryCountryOfOrigin = allowUnknownCountry ? null : countryPreference;
+  const queryFormatIn = allowUnknownFormat ? undefined : allowedFormats;
+  const queryCountryOfOrigin = allowUnknownCountry ? undefined : countryPreference;
 
   const variables = {
     formatIn: queryFormatIn,

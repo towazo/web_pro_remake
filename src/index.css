@@ -2618,6 +2618,9 @@ body {
 .status-message-container {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
     padding: 24px 30px;
     border: 1px solid #000;
     margin-top: 40px;
@@ -2638,6 +2641,37 @@ body {
     font-weight: 700;
     line-height: 1.6;
     color: #000;
+}
+
+.status-message-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.status-retry-button {
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    min-height: 38px;
+    min-width: 108px;
+    padding: 0 14px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.status-retry-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.status-retry-countdown {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #8b2d2d;
 }
 
 /* Preview Confirmation Card Redesign */
@@ -2812,6 +2846,47 @@ body {
     font-size: 0.85rem;
     font-weight: 700;
     color: #333;
+}
+
+.suggestions-status {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #000;
+    border-top: none;
+    z-index: 2305;
+    padding: 12px 15px;
+}
+
+.suggestions-status.empty {
+    background: #fafafa;
+    border-color: #d8d8d8;
+}
+
+.suggestions-status.warning {
+    background: #fff6f0;
+    border-color: #efc9ad;
+}
+
+.suggestions-status.error {
+    background: #fff2f2;
+    border-color: #f1c6c6;
+}
+
+.suggestions-status-text {
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1.55;
+    color: #222;
+}
+
+.suggestions-status-meta {
+    margin-top: 7px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #8b2d2d;
 }
 
 .suggestions-dropdown {

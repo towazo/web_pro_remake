@@ -2,6 +2,7 @@
 import {
     fetchAnimeByYearAllPages,
     fetchAnimeDetails,
+    fetchAnimeDetailsById,
     fetchAnimeDetailsBulk,
     normalizeTitleForCompare,
     searchAnimeList,
@@ -17,6 +18,43 @@ const ANILIST_SEASON_TO_FILTER_KEY = {
 const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA', 'ONA', 'SPECIAL']);
 const BROWSE_RESULTS_CACHE = new Map();
 const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
+const RATE_LIMIT_MESSAGE_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
+
+const createRequestIssueState = () => ({
+    rateLimited: false,
+    upstreamError: false,
+    retryAfterMs: 0
+});
+
+const collectRequestIssue = (bucket, info) => {
+    if (!bucket || !info) return;
+    const statusCode = Number(info?.status);
+    const errorText = [
+        info?.error?.message || '',
+        Array.isArray(info?.errors)
+            ? info.errors.map((item) => item?.message || '').join(' ')
+            : ''
+    ].join(' ');
+    const hasRateLimitText = RATE_LIMIT_MESSAGE_PATTERN.test(String(errorText));
+
+    if (statusCode === 429 || hasRateLimitText) {
+        bucket.rateLimited = true;
+    }
+    if (!Number.isFinite(statusCode) || statusCode === 0 || statusCode >= 500) {
+        bucket.upstreamError = true;
+    }
+    const retryAfterMs = Number(info?.retryAfterMs);
+    if (Number.isFinite(retryAfterMs) && retryAfterMs > bucket.retryAfterMs) {
+        bucket.retryAfterMs = retryAfterMs;
+    }
+};
+
+const buildRateLimitMessage = (retryAfterMs = 0, baseMessage = '短時間にアクセスが集中したため一時的に取得できません。しばらくしてから再試行してください。') => {
+    const waitMs = Number(retryAfterMs);
+    if (!Number.isFinite(waitMs) || waitMs <= 0) return baseMessage;
+    const retryAfterSec = Math.max(1, Math.ceil(waitMs / 1000));
+    return `${baseMessage} 約${retryAfterSec}秒後に再試行できます。`;
+};
 
 function AddAnimeScreen({
     onAdd,
@@ -95,10 +133,16 @@ function AddAnimeScreen({
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isSuggesting, setIsSuggesting] = useState(false);
+    const [suggestionFeedback, setSuggestionFeedback] = useState({ type: '', message: '' });
+    const [suggestionRetryUntilTs, setSuggestionRetryUntilTs] = useState(0);
+    const [suggestionRetryCountdownSec, setSuggestionRetryCountdownSec] = useState(0);
     const [suggestionsMaxHeight, setSuggestionsMaxHeight] = useState(320);
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
     const [isSearching, setIsSearching] = useState(false);
+    const [searchRetryUntilTs, setSearchRetryUntilTs] = useState(0);
+    const [searchRetryCountdownSec, setSearchRetryCountdownSec] = useState(0);
+    const [searchErrorCanRetry, setSearchErrorCanRetry] = useState(false);
     const autocompleteRequestIdRef = React.useRef(0);
     const searchFieldWrapperRef = React.useRef(null);
     const bottomHomeNavRef = React.useRef(null);
@@ -244,7 +288,7 @@ function AddAnimeScreen({
         && mode === 'normal'
         && showSuggestions
         && !previewData
-        && (isSuggesting || suggestions.length > 0);
+        && (isSuggesting || suggestions.length > 0 || Boolean(suggestionFeedback.message));
     const suggestionsDropdownStyle = React.useMemo(() => ({
         maxHeight: `${suggestionsMaxHeight}px`,
         top: 'calc(100% + 2px)',
@@ -311,7 +355,12 @@ function AddAnimeScreen({
     useEffect(() => {
         if (entryTab !== 'search' || mode !== 'normal') {
             autocompleteRequestIdRef.current += 1;
+            setSuggestions([]);
+            setShowSuggestions(false);
             setIsSuggesting(false);
+            setSuggestionFeedback({ type: '', message: '' });
+            setSuggestionRetryUntilTs(0);
+            setSuggestionRetryCountdownSec(0);
             return;
         }
 
@@ -321,6 +370,9 @@ function AddAnimeScreen({
             setSuggestions([]);
             setShowSuggestions(false);
             setIsSuggesting(false);
+            setSuggestionFeedback({ type: '', message: '' });
+            setSuggestionRetryUntilTs(0);
+            setSuggestionRetryCountdownSec(0);
             return;
         }
 
@@ -331,14 +383,52 @@ function AddAnimeScreen({
             setSuggestions([]);
             setShowSuggestions(true);
             setIsSuggesting(true);
+            setSuggestionFeedback({ type: '', message: '' });
+            setSuggestionRetryUntilTs(0);
+            setSuggestionRetryCountdownSec(0);
+            const requestIssue = createRequestIssueState();
             try {
-                const results = await searchAnimeList(normalizedQuery, 8, { maxTerms: 4 });
+                const results = await searchAnimeList(normalizedQuery, 8, {
+                    maxTerms: 4,
+                    onRetry: (info) => {
+                        collectRequestIssue(requestIssue, info);
+                    }
+                });
                 if (autocompleteRequestIdRef.current !== requestId) return;
                 setSuggestions(results);
                 setShowSuggestions(true);
+                if (results.length === 0) {
+                    if (requestIssue.rateLimited) {
+                        const retryAfterMs = Number(requestIssue.retryAfterMs) || 0;
+                        if (retryAfterMs > 0) {
+                            setSuggestionRetryUntilTs(Date.now() + retryAfterMs);
+                        }
+                        setSuggestionFeedback({
+                            type: 'warning',
+                            message: '短時間にアクセスが集中したため候補を取得できません。しばらくしてから再入力してください。'
+                        });
+                    } else if (requestIssue.upstreamError) {
+                        setSuggestionFeedback({
+                            type: 'error',
+                            message: '候補の取得に失敗しました。時間をおいて再入力してください。'
+                        });
+                    } else {
+                        setSuggestionFeedback({
+                            type: 'empty',
+                            message: '候補が見つかりませんでした。タイトルを調整して再入力してください。'
+                        });
+                    }
+                } else {
+                    setSuggestionFeedback({ type: '', message: '' });
+                }
             } catch (_) {
                 if (autocompleteRequestIdRef.current !== requestId) return;
                 setSuggestions([]);
+                setShowSuggestions(true);
+                setSuggestionFeedback({
+                    type: 'error',
+                    message: '候補の取得に失敗しました。時間をおいて再入力してください。'
+                });
             } finally {
                 if (autocompleteRequestIdRef.current === requestId) {
                     setIsSuggesting(false);
@@ -376,7 +466,7 @@ function AddAnimeScreen({
             window.visualViewport?.removeEventListener?.('resize', requestUpdate);
             window.visualViewport?.removeEventListener?.('scroll', requestUpdate);
         };
-    }, [showSuggestions, suggestions.length, isSuggesting, updateSuggestionsLayout]);
+    }, [showSuggestions, suggestions.length, isSuggesting, suggestionFeedback.message, updateSuggestionsLayout]);
 
     useEffect(() => {
         if (!showSuggestions) return;
@@ -491,6 +581,36 @@ function AddAnimeScreen({
         const timer = setInterval(updateCountdown, 250);
         return () => clearInterval(timer);
     }, [browseRetryUntilTs]);
+
+    useEffect(() => {
+        if (!suggestionRetryUntilTs || suggestionRetryUntilTs <= Date.now()) {
+            setSuggestionRetryCountdownSec(0);
+            return;
+        }
+        const updateCountdown = () => {
+            const remainingMs = suggestionRetryUntilTs - Date.now();
+            const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+            setSuggestionRetryCountdownSec(remainingSec);
+        };
+        updateCountdown();
+        const timer = setInterval(updateCountdown, 250);
+        return () => clearInterval(timer);
+    }, [suggestionRetryUntilTs]);
+
+    useEffect(() => {
+        if (!searchRetryUntilTs || searchRetryUntilTs <= Date.now()) {
+            setSearchRetryCountdownSec(0);
+            return;
+        }
+        const updateCountdown = () => {
+            const remainingMs = searchRetryUntilTs - Date.now();
+            const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+            setSearchRetryCountdownSec(remainingSec);
+        };
+        updateCountdown();
+        const timer = setInterval(updateCountdown, 250);
+        return () => clearInterval(timer);
+    }, [searchRetryUntilTs]);
 
     useEffect(() => () => {
         if (browsePageSwitchTimerRef.current) {
@@ -1007,33 +1127,129 @@ function AddAnimeScreen({
     // 2. Search Logic (Manual Search)
     const handleSearch = async (e) => {
         if (e) e.preventDefault();
-        if (!query.trim()) return;
+        const normalizedQuery = query.trim();
+        if (!normalizedQuery || isSearching) return;
+        if (searchRetryUntilTs > Date.now()) return;
 
         setIsSearching(true);
         autocompleteRequestIdRef.current += 1;
         setIsSuggesting(false);
         setShowSuggestions(false);
+        setSuggestions([]);
+        setSuggestionFeedback({ type: '', message: '' });
+        setSuggestionRetryUntilTs(0);
+        setSuggestionRetryCountdownSec(0);
         setPreviewData(null); // Clear previous preview
-        setStatus({ type: 'info', message: '検索中...' });
+        setStatus({ type: '', message: '' });
+        setSearchRetryUntilTs(0);
+        setSearchRetryCountdownSec(0);
+        setSearchErrorCanRetry(false);
+        const requestIssue = createRequestIssueState();
+        const collectIssue = (info) => {
+            collectRequestIssue(requestIssue, info);
+        };
 
-        const data = await fetchAnimeDetails(query, {
-            adaptiveFallback: true,
-            adaptiveMaxTerms: 6,
-            adaptivePerPage: 12,
-            adaptiveMinScore: 0.28
-        });
-        setIsSearching(false);
+        try {
+            let data = await fetchAnimeDetails(normalizedQuery, {
+                adaptiveFallback: true,
+                adaptiveMaxTerms: 6,
+                adaptivePerPage: 12,
+                adaptiveMinScore: 0.28,
+                onRetry: collectIssue
+            });
 
-        if (data) {
-            setPreviewData(data);
-            setStatus({ type: 'info', message: '作品が見つかりました。内容を確認してください。' });
-        } else {
-            setPreviewData(null);
+            if (!data) {
+                const fallbackCandidates = await searchAnimeList(normalizedQuery, 8, {
+                    maxTerms: 6,
+                    onRetry: collectIssue
+                });
+                if (Array.isArray(fallbackCandidates) && fallbackCandidates.length > 0) {
+                    const primaryCandidate = fallbackCandidates[0];
+                    const detail = primaryCandidate?.id
+                        ? await fetchAnimeDetailsById(primaryCandidate.id, { onRetry: collectIssue })
+                        : null;
+                    data = detail || primaryCandidate;
+                }
+            }
+
+            if (data) {
+                setPreviewData(data);
+                setSearchErrorCanRetry(false);
+                setStatus({ type: 'info', message: '作品が見つかりました。内容を確認してください。' });
+                return;
+            }
+
+            const retryAfterMs = Number(requestIssue.retryAfterMs) || 0;
+            if (requestIssue.rateLimited) {
+                if (retryAfterMs > 0) {
+                    setSearchRetryUntilTs(Date.now() + retryAfterMs);
+                }
+                setSearchErrorCanRetry(true);
+                setStatus({
+                    type: 'error',
+                    message: buildRateLimitMessage(
+                        retryAfterMs,
+                        '短時間にアクセスが集中したため一時的に検索できません。しばらくしてから再試行してください。'
+                    )
+                });
+                return;
+            }
+
+            if (requestIssue.upstreamError) {
+                setSearchErrorCanRetry(true);
+                setStatus({
+                    type: 'error',
+                    message: '作品の取得に失敗しました。時間をおいて再試行してください。'
+                });
+                return;
+            }
+
+            setSearchErrorCanRetry(false);
             setStatus({
                 type: 'error',
                 message: '作品が見つかりませんでした。タイトルを確認して再検索してください。'
             });
+        } catch (error) {
+            const statusCode = Number(error?.status) || 0;
+            const retryAfterMsRaw = Number(error?.retryAfterMs);
+            const fallbackRetryAfterMs = Number(requestIssue.retryAfterMs) || 0;
+            const retryAfterMs = Number.isFinite(retryAfterMsRaw) && retryAfterMsRaw > 0
+                ? retryAfterMsRaw
+                : fallbackRetryAfterMs;
+            const isRateLimit = statusCode === 429
+                || requestIssue.rateLimited
+                || RATE_LIMIT_MESSAGE_PATTERN.test(String(error?.message || ''));
+
+            if (isRateLimit) {
+                if (retryAfterMs > 0) {
+                    setSearchRetryUntilTs(Date.now() + retryAfterMs);
+                }
+                setSearchErrorCanRetry(true);
+                setStatus({
+                    type: 'error',
+                    message: buildRateLimitMessage(
+                        retryAfterMs,
+                        '短時間にアクセスが集中したため一時的に検索できません。しばらくしてから再試行してください。'
+                    )
+                });
+                return;
+            }
+
+            setSearchErrorCanRetry(true);
+            setStatus({
+                type: 'error',
+                message: '作品の取得に失敗しました。時間をおいて再試行してください。'
+            });
+        } finally {
+            setIsSearching(false);
         }
+    };
+
+    const handleSearchRetry = () => {
+        if (isSearching) return;
+        if (!query.trim()) return;
+        if (searchRetryCountdownSec > 0) return;
+        handleSearch();
     };
 
     // 3. Bulk Search Logic
@@ -1318,6 +1534,9 @@ function AddAnimeScreen({
         setSuggestions([]);
         setIsSuggesting(false);
         setShowSuggestions(false);
+        setSuggestionFeedback({ type: '', message: '' });
+        setSuggestionRetryUntilTs(0);
+        setSuggestionRetryCountdownSec(0);
         setStatus({ type: 'info', message: '作品が選択されました。内容を確認してください。' });
     };
 
@@ -1592,6 +1811,12 @@ function AddAnimeScreen({
             setShowSuggestions(false);
             autocompleteRequestIdRef.current += 1;
             setIsSuggesting(false);
+            setSuggestionFeedback({ type: '', message: '' });
+            setSuggestionRetryUntilTs(0);
+            setSuggestionRetryCountdownSec(0);
+            setSearchRetryUntilTs(0);
+            setSearchRetryCountdownSec(0);
+            setSearchErrorCanRetry(false);
             if (clearInput) setQuery('');
             setStatus({ type: '', message: '' });
             setToast({ visible: true, message, type });
@@ -1633,6 +1858,12 @@ function AddAnimeScreen({
                 setShowSuggestions(false);
                 autocompleteRequestIdRef.current += 1;
                 setIsSuggesting(false);
+                setSuggestionFeedback({ type: '', message: '' });
+                setSuggestionRetryUntilTs(0);
+                setSuggestionRetryCountdownSec(0);
+                setSearchRetryUntilTs(0);
+                setSearchRetryCountdownSec(0);
+                setSearchErrorCanRetry(false);
                 setQuery('');
                 setStatus({ type: '', message: '' });
                 setToast({ visible: true, message: `「${title}」をブックマークに追加しました。`, type: 'success' });
@@ -1649,6 +1880,12 @@ function AddAnimeScreen({
         setStatus({ type: '', message: '' });
         setSuggestions([]);
         setShowSuggestions(false);
+        setSuggestionFeedback({ type: '', message: '' });
+        setSuggestionRetryUntilTs(0);
+        setSuggestionRetryCountdownSec(0);
+        setSearchRetryUntilTs(0);
+        setSearchRetryCountdownSec(0);
+        setSearchErrorCanRetry(false);
         setShowReview(false);
         setIsBulkComplete(false);
         setBulkQuery('');
@@ -1705,6 +1942,11 @@ function AddAnimeScreen({
     const browsePaginationLabel = normalizedBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
     const isBrowseBusy = browseLoading || browsePageSwitching;
     const browseLoadingLabel = browseLoading ? '作品を取得中です…' : 'ページを切り替えています…';
+    const canRetryNormalSearch = entryTab === 'search'
+        && mode === 'normal'
+        && status.type === 'error'
+        && searchErrorCanRetry
+        && !previewData;
     const renderBulkOverflowNotice = () => {
         if (!bulkOverflowInfo) return null;
         const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '';
@@ -1907,6 +2149,22 @@ function AddAnimeScreen({
                                 </div>
                             )}
 
+                            {showSuggestions && !isSuggesting && suggestions.length === 0 && suggestionFeedback.message && (
+                                <div
+                                    className={`suggestions-status ${suggestionFeedback.type || 'empty'}`}
+                                    style={suggestionsDropdownStyle}
+                                    role="status"
+                                    aria-live="polite"
+                                >
+                                    <div className="suggestions-status-text">{suggestionFeedback.message}</div>
+                                    {suggestionFeedback.type === 'warning' && suggestionRetryCountdownSec > 0 && (
+                                        <div className="suggestions-status-meta">
+                                            再試行まで: {suggestionRetryCountdownSec}秒
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Suggestions Dropdown */}
                             {showSuggestions && suggestions.length > 0 && (
                                 <div
@@ -1938,7 +2196,11 @@ function AddAnimeScreen({
                                 </div>
                             )}
                         </div>
-                        <button type="submit" className="action-button primary-button" disabled={isSearching}>
+                        <button
+                            type="submit"
+                            className="action-button primary-button"
+                            disabled={isSearching || searchRetryCountdownSec > 0}
+                        >
                             {isSearching ? '検索中...' : '作品を検索する'}
                         </button>
                     </form>
@@ -2460,9 +2722,31 @@ function AddAnimeScreen({
             )}
 
             {/* Status Message */}
-            {entryTab === 'search' && status.message && !(mode === 'bulk' && isSearching) && !(mode === 'bulk' && showReview) && !(mode === 'normal' && previewData) && (
+            {entryTab === 'search'
+                && status.message
+                && !(mode === 'bulk' && isSearching)
+                && !(mode === 'bulk' && showReview)
+                && !(mode === 'normal' && previewData)
+                && !(mode === 'normal' && isSearching) && (
                 <div className={`status-message-container ${status.type}`}>
                     <div className="status-text">{status.message}</div>
+                    {canRetryNormalSearch && (
+                        <div className="status-message-actions">
+                            {searchRetryCountdownSec > 0 && (
+                                <span className="status-retry-countdown">
+                                    再試行まで: {searchRetryCountdownSec}秒
+                                </span>
+                            )}
+                            <button
+                                type="button"
+                                className="status-retry-button"
+                                onClick={handleSearchRetry}
+                                disabled={isSearching || searchRetryCountdownSec > 0 || !query.trim()}
+                            >
+                                再試行
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
