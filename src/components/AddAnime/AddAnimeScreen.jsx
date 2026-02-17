@@ -19,6 +19,91 @@ const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', '
 const BROWSE_RESULTS_CACHE = new Map();
 const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MESSAGE_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
+const BULK_RESULT_KIND = Object.freeze({
+    HIT: 'hit',
+    NOT_FOUND: 'not_found',
+    RATE_LIMITED: 'rate_limited',
+    UPSTREAM_ERROR: 'upstream_error',
+    REQUEST_ERROR: 'request_error',
+    TIMEOUT: 'timeout'
+});
+const BULK_FETCH_FAILURE_TYPES = new Set([
+    BULK_RESULT_KIND.RATE_LIMITED,
+    BULK_RESULT_KIND.UPSTREAM_ERROR,
+    BULK_RESULT_KIND.REQUEST_ERROR,
+    BULK_RESULT_KIND.TIMEOUT
+]);
+const extractBulkLookupData = (entry) => {
+    if (entry && typeof entry === 'object') {
+        if (entry.data && typeof entry.data.id === 'number') return entry.data;
+        if (typeof entry.id === 'number') return entry;
+    }
+    return null;
+};
+const extractBulkLookupType = (entry) => {
+    if (entry && typeof entry === 'object' && typeof entry.resultType === 'string') {
+        return entry.resultType;
+    }
+    return extractBulkLookupData(entry) ? BULK_RESULT_KIND.HIT : BULK_RESULT_KIND.NOT_FOUND;
+};
+const extractBulkLookupRetryAfterMs = (entry) => {
+    const retryAfterMs = Number(entry?.retryAfterMs);
+    return Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : 0;
+};
+const extractBulkLookupStatusCode = (entry) => {
+    const statusCode = Number(entry?.status);
+    return Number.isFinite(statusCode) && statusCode > 0 ? statusCode : null;
+};
+const extractBulkLookupMessage = (entry) => {
+    const text = String(entry?.message || '').trim();
+    return text.length > 0 ? text : '';
+};
+const isBulkFetchFailureType = (type) => BULK_FETCH_FAILURE_TYPES.has(type);
+const createBulkResultsState = () => ({
+    hits: [],
+    notFound: [],
+    rateLimited: [],
+    fetchFailed: [],
+    alreadyAdded: []
+});
+const createBulkLiveStatsState = (overrides = {}) => ({
+    processed: 0,
+    total: 0,
+    hits: 0,
+    notFound: 0,
+    rateLimited: 0,
+    fetchFailed: 0,
+    alreadyAdded: 0,
+    timedOut: 0,
+    ...overrides
+});
+const buildBulkFailureMeta = (entry, fallbackType = BULK_RESULT_KIND.REQUEST_ERROR) => {
+    const type = extractBulkLookupType(entry);
+    const resolvedType = isBulkFetchFailureType(type) ? type : fallbackType;
+    return {
+        type: resolvedType,
+        status: extractBulkLookupStatusCode(entry),
+        retryAfterMs: extractBulkLookupRetryAfterMs(entry),
+        message: extractBulkLookupMessage(entry),
+        loading: false,
+        error: ''
+    };
+};
+const describeBulkFailure = (meta = {}) => {
+    const statusCode = Number(meta?.status);
+    const statusLabel = Number.isFinite(statusCode) && statusCode > 0 ? ` (HTTP ${statusCode})` : '';
+    switch (meta?.type) {
+    case BULK_RESULT_KIND.RATE_LIMITED:
+        return `アクセス制限により取得失敗${statusLabel}`;
+    case BULK_RESULT_KIND.UPSTREAM_ERROR:
+        return `サーバーエラーにより取得失敗${statusLabel}`;
+    case BULK_RESULT_KIND.TIMEOUT:
+        return 'タイムアウトにより取得失敗';
+    case BULK_RESULT_KIND.REQUEST_ERROR:
+    default:
+        return `取得失敗${statusLabel}`;
+    }
+};
 
 const createRequestIssueState = () => ({
     rateLimited: false,
@@ -150,24 +235,16 @@ function AddAnimeScreen({
 
     // Bulk Add States
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
-    const [bulkLiveStats, setBulkLiveStats] = useState({
-        processed: 0,
-        total: 0,
-        hits: 0,
-        notFound: 0,
-        alreadyAdded: 0,
-        timedOut: 0
-    });
+    const [bulkLiveStats, setBulkLiveStats] = useState(createBulkLiveStatsState);
     const [bulkPhase, setBulkPhase] = useState('idle'); // idle | firstPass | retryPass
     const [bulkRetryProgress, setBulkRetryProgress] = useState({ current: 0, total: 0 });
     const [bulkCurrentTitle, setBulkCurrentTitle] = useState('');
-    const [bulkResults, setBulkResults] = useState({
-        hits: [],
-        notFound: [],
-        alreadyAdded: []
-    });
+    const [bulkResults, setBulkResults] = useState(createBulkResultsState);
     const [bulkOverflowInfo, setBulkOverflowInfo] = useState(null);
     const [bulkNotFoundStatus, setBulkNotFoundStatus] = useState({});
+    const [bulkFailedStatus, setBulkFailedStatus] = useState({});
+    const [bulkRetryUntilTs, setBulkRetryUntilTs] = useState(0);
+    const [bulkRetryCountdownSec, setBulkRetryCountdownSec] = useState(0);
     const [bulkTarget, setBulkTarget] = useState('mylist'); // mylist | bookmark
     const [bulkExecutionSummary, setBulkExecutionSummary] = useState({
         added: 0,
@@ -611,6 +688,21 @@ function AddAnimeScreen({
         const timer = setInterval(updateCountdown, 250);
         return () => clearInterval(timer);
     }, [searchRetryUntilTs]);
+
+    useEffect(() => {
+        if (!bulkRetryUntilTs || bulkRetryUntilTs <= Date.now()) {
+            setBulkRetryCountdownSec(0);
+            return;
+        }
+        const updateCountdown = () => {
+            const remainingMs = bulkRetryUntilTs - Date.now();
+            const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+            setBulkRetryCountdownSec(remainingSec);
+        };
+        updateCountdown();
+        const timer = setInterval(updateCountdown, 250);
+        return () => clearInterval(timer);
+    }, [bulkRetryUntilTs]);
 
     useEffect(() => () => {
         if (browsePageSwitchTimerRef.current) {
@@ -1253,9 +1345,16 @@ function AddAnimeScreen({
     };
 
     // 3. Bulk Search Logic
-    const handleBulkSearch = async (e) => {
+    const handleBulkSearch = async (e, options = {}) => {
         if (e) e.preventDefault();
-        const inputTitles = bulkQuery.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+        if (isSearching) return;
+
+        const overrideTitles = Array.isArray(options?.titlesOverride) ? options.titlesOverride : null;
+        const retrySource = String(options?.source || 'default');
+        const shouldSyncBulkQuery = !overrideTitles;
+        const inputTitles = (overrideTitles || bulkQuery.split('\n'))
+            .map((t) => String(t || '').trim())
+            .filter((t) => t.length > 0);
         if (inputTitles.length === 0) return;
 
         let titles = inputTitles;
@@ -1263,7 +1362,9 @@ function AddAnimeScreen({
             const keptTitles = inputTitles.slice(0, MAX_BULK_TITLES);
             const removedTitles = inputTitles.slice(MAX_BULK_TITLES);
             titles = keptTitles;
-            setBulkQuery(keptTitles.join('\n'));
+            if (shouldSyncBulkQuery) {
+                setBulkQuery(keptTitles.join('\n'));
+            }
             setBulkOverflowInfo({
                 removedTitles,
                 removedCount: removedTitles.length,
@@ -1286,33 +1387,40 @@ function AddAnimeScreen({
         }
 
         setIsSearching(true);
+        setShowReview(false);
+        setIsBulkComplete(false);
+        setBulkProgress({ current: 0, total: titles.length });
+        setBulkLiveStats(createBulkLiveStatsState({ total: titles.length }));
+        setBulkPhase('firstPass');
+        setBulkRetryProgress({ current: 0, total: 0 });
+        setBulkCurrentTitle('');
+        setBulkResults(createBulkResultsState());
+        setBulkNotFoundStatus({});
+        setBulkFailedStatus({});
+        setBulkRetryUntilTs(0);
+        setBulkRetryCountdownSec(0);
+        setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
+
         if (titles.length > RECOMMENDED_BULK_TITLES) {
             setStatus({
                 type: 'info',
                 message: `件数が多いため、安定性を優先した低速モードで処理します（${titles.length}件）。`
             });
-        } else if (inputTitles.length <= MAX_BULK_TITLES) {
+        } else if (retrySource === 'failedOnly') {
+            setStatus({
+                type: 'info',
+                message: `取得失敗分 ${titles.length} 件の再試行を開始します。`
+            });
+        } else {
             setStatus({ type: '', message: '' });
         }
-        setBulkProgress({ current: 0, total: titles.length });
-        setBulkLiveStats({
-            processed: 0,
-            total: titles.length,
-            hits: 0,
-            notFound: 0,
-            alreadyAdded: 0,
-            timedOut: 0
-        });
-        setBulkPhase('firstPass');
-        setBulkRetryProgress({ current: 0, total: 0 });
-        setBulkCurrentTitle('');
-        setBulkResults({ hits: [], notFound: [], alreadyAdded: [] });
-        setBulkNotFoundStatus({});
-        setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
 
         const hits = [];
         const notFound = [];
+        const rateLimited = [];
+        const fetchFailed = [];
         const alreadyAdded = [];
+        const failedStatus = {};
 
         const isBookmarkTarget = bulkTarget === 'bookmark';
         const existingForTarget = isBookmarkTarget
@@ -1320,7 +1428,7 @@ function AddAnimeScreen({
             : [...(animeList || [])];
         const seenIds = new Set(existingForTarget.map((a) => a.id));
         const existingTitleSet = new Set(
-            existingForTarget.flatMap(a => [
+            existingForTarget.flatMap((a) => [
                 normalizeTitleForCompare(a.title?.native || ''),
                 normalizeTitleForCompare(a.title?.romaji || ''),
                 normalizeTitleForCompare(a.title?.english || '')
@@ -1343,9 +1451,7 @@ function AddAnimeScreen({
             }
             seenTitles.add(normalizedTitle);
 
-            const isAlreadyAdded = existingTitleSet.has(normalizedTitle);
-
-            if (isAlreadyAdded) {
+            if (existingTitleSet.has(normalizedTitle)) {
                 alreadyAdded.push(title);
                 continue;
             }
@@ -1358,138 +1464,83 @@ function AddAnimeScreen({
         setBulkProgress({ current: preProcessedCount, total: titles.length });
         let liveHits = 0;
         let liveNotFound = 0;
+        let liveRateLimited = 0;
+        let liveFetchFailed = 0;
         let liveAlreadyAdded = alreadyAdded.length;
         let liveTimedOut = 0;
         const liveSeenIds = new Set(seenIds);
-        setBulkLiveStats({
+
+        setBulkLiveStats(createBulkLiveStatsState({
             processed: preProcessedCount,
             total: titles.length,
             hits: liveHits,
             notFound: liveNotFound,
+            rateLimited: liveRateLimited,
+            fetchFailed: liveFetchFailed,
             alreadyAdded: liveAlreadyAdded,
             timedOut: liveTimedOut
-        });
+        }));
 
-        if (toQuery.length > 0) {
-            const concurrency = titles.length >= RECOMMENDED_BULK_TITLES ? 3 : 4;
-            const interRequestDelayMs = titles.length >= RECOMMENDED_BULK_TITLES ? 100 : 50;
-            const useFastFailMode = titles.length > RECOMMENDED_BULK_TITLES;
-            const requestTimeoutMs = useFastFailMode ? BULK_FAST_PER_REQUEST_TIMEOUT_MS : BULK_PER_REQUEST_TIMEOUT_MS;
-            const perTitleTimeoutMs = useFastFailMode ? BULK_FAST_PER_TITLE_TIMEOUT_MS : BULK_PER_TITLE_TIMEOUT_MS;
-            const retryAttempts = useFastFailMode ? BULK_FAST_MAX_RETRY_ATTEMPTS : BULK_MAX_RETRY_ATTEMPTS;
-            const retryBaseDelayMs = useFastFailMode ? BULK_FAST_RETRY_BASE_DELAY_MS : BULK_RETRY_BASE_DELAY_MS;
-            const retryDelayCapMs = useFastFailMode ? BULK_FAST_RETRY_DELAY_CAP_MS : BULK_RETRY_DELAY_CAP_MS;
+        try {
+            if (toQuery.length > 0) {
+                const concurrency = titles.length >= RECOMMENDED_BULK_TITLES ? 3 : 4;
+                const interRequestDelayMs = titles.length >= RECOMMENDED_BULK_TITLES ? 100 : 50;
+                const useFastFailMode = titles.length > RECOMMENDED_BULK_TITLES;
+                const requestTimeoutMs = useFastFailMode ? BULK_FAST_PER_REQUEST_TIMEOUT_MS : BULK_PER_REQUEST_TIMEOUT_MS;
+                const perTitleTimeoutMs = useFastFailMode ? BULK_FAST_PER_TITLE_TIMEOUT_MS : BULK_PER_TITLE_TIMEOUT_MS;
+                const retryAttempts = useFastFailMode ? BULK_FAST_MAX_RETRY_ATTEMPTS : BULK_MAX_RETRY_ATTEMPTS;
+                const retryBaseDelayMs = useFastFailMode ? BULK_FAST_RETRY_BASE_DELAY_MS : BULK_RETRY_BASE_DELAY_MS;
+                const retryDelayCapMs = useFastFailMode ? BULK_FAST_RETRY_DELAY_CAP_MS : BULK_RETRY_DELAY_CAP_MS;
 
-            const bulkData = await fetchAnimeDetailsBulk(toQuery, {
-                concurrency,
-                interRequestDelayMs,
-                cooldownOn429Ms: 1000,
-                timeoutMs: requestTimeoutMs,
-                perTitleMaxMs: perTitleTimeoutMs,
-                maxAttempts: retryAttempts,
-                baseDelayMs: retryBaseDelayMs,
-                maxRetryDelayMs: retryDelayCapMs,
-                onProgress: ({ completed, hit, dataId, timedOut, title }) => {
-                    setBulkCurrentTitle(title || '');
-                    if (hit) {
-                        if (dataId != null && liveSeenIds.has(dataId)) {
-                            liveAlreadyAdded += 1;
-                        } else {
-                            liveHits += 1;
-                            if (dataId != null) liveSeenIds.add(dataId);
-                        }
-                    } else {
-                        liveNotFound += 1;
-                    }
-                    if (timedOut) {
-                        liveTimedOut += 1;
-                    }
-
-                    setBulkProgress({ current: preProcessedCount + completed, total: titles.length });
-                    setBulkLiveStats({
-                        processed: preProcessedCount + completed,
-                        total: titles.length,
-                        hits: liveHits,
-                        notFound: liveNotFound,
-                        alreadyAdded: liveAlreadyAdded,
-                        timedOut: liveTimedOut
-                    });
-                }
-            });
-
-            const unresolvedTitles = [];
-            for (let k = 0; k < toQuery.length; k++) {
-                const title = queryToOriginal[k];
-                const data = Array.isArray(bulkData) ? bulkData[k] : null;
-                if (data) {
-                    if (seenIds.has(data.id)) {
-                        alreadyAdded.push(title);
-                    } else {
-                        hits.push({ data, originalTitle: title });
-                        seenIds.add(data.id);
-                    }
-                } else {
-                    unresolvedTitles.push(title);
-                }
-            }
-
-            // Second pass: recover false negatives that often succeed in single search.
-            if (unresolvedTitles.length > 0) {
-                setBulkPhase('retryPass');
-                setBulkRetryProgress({ current: 0, total: unresolvedTitles.length });
-                setBulkCurrentTitle('');
-                const retryData = await fetchAnimeDetailsBulk(unresolvedTitles, {
-                    concurrency: 2,
-                    interRequestDelayMs: 120,
+                const bulkData = await fetchAnimeDetailsBulk(toQuery, {
+                    concurrency,
+                    interRequestDelayMs,
                     cooldownOn429Ms: 1000,
-                    timeoutMs: 9000,
-                    perTitleMaxMs: 6000,
-                    maxAttempts: 2,
-                    baseDelayMs: 300,
-                    maxRetryDelayMs: 1200,
-                    adaptiveFallback: true,
-                    adaptiveSkipPrimary: true,
-                    adaptiveMaxTerms: 4,
-                    adaptivePerPage: 10,
-                    adaptiveMinScore: 0.3,
-                    adaptiveTimeoutMs: 2200,
-                    adaptiveMaxAttempts: 1,
-                    onProgress: ({ completed, hit, dataId, timedOut, title, adaptiveQuery }) => {
-                        setBulkRetryProgress({ current: completed, total: unresolvedTitles.length });
-                        const displayTitle =
-                            adaptiveQuery && adaptiveQuery !== title
-                                ? `${title} -> ${adaptiveQuery}`
-                                : (title || '');
-                        setBulkCurrentTitle(displayTitle);
-
+                    timeoutMs: requestTimeoutMs,
+                    perTitleMaxMs: perTitleTimeoutMs,
+                    maxAttempts: retryAttempts,
+                    baseDelayMs: retryBaseDelayMs,
+                    maxRetryDelayMs: retryDelayCapMs,
+                    includeMeta: true,
+                    onProgress: ({ completed, hit, dataId, timedOut, title, resultType }) => {
+                        setBulkCurrentTitle(title || '');
                         if (hit) {
-                            liveNotFound = Math.max(0, liveNotFound - 1);
                             if (dataId != null && liveSeenIds.has(dataId)) {
                                 liveAlreadyAdded += 1;
                             } else {
                                 liveHits += 1;
                                 if (dataId != null) liveSeenIds.add(dataId);
                             }
+                        } else if (resultType === BULK_RESULT_KIND.RATE_LIMITED) {
+                            liveRateLimited += 1;
+                        } else if (isBulkFetchFailureType(resultType)) {
+                            liveFetchFailed += 1;
+                        } else {
+                            liveNotFound += 1;
                         }
-
                         if (timedOut) {
                             liveTimedOut += 1;
                         }
 
-                        setBulkLiveStats({
-                            processed: titles.length,
+                        setBulkProgress({ current: preProcessedCount + completed, total: titles.length });
+                        setBulkLiveStats(createBulkLiveStatsState({
+                            processed: preProcessedCount + completed,
                             total: titles.length,
                             hits: liveHits,
                             notFound: liveNotFound,
+                            rateLimited: liveRateLimited,
+                            fetchFailed: liveFetchFailed,
                             alreadyAdded: liveAlreadyAdded,
                             timedOut: liveTimedOut
-                        });
-                    },
+                        }));
+                    }
                 });
 
-                for (let r = 0; r < unresolvedTitles.length; r++) {
-                    const title = unresolvedTitles[r];
-                    const data = Array.isArray(retryData) ? retryData[r] : null;
+                const unresolvedEntries = [];
+                for (let k = 0; k < toQuery.length; k++) {
+                    const title = queryToOriginal[k];
+                    const entry = Array.isArray(bulkData) ? bulkData[k] : null;
+                    const data = extractBulkLookupData(entry);
                     if (data) {
                         if (seenIds.has(data.id)) {
                             alreadyAdded.push(title);
@@ -1498,33 +1549,185 @@ function AddAnimeScreen({
                             seenIds.add(data.id);
                         }
                     } else {
-                        notFound.push(title);
+                        unresolvedEntries.push({ title, firstType: extractBulkLookupType(entry) });
+                    }
+                }
+
+                // Second pass: recover misses with adaptive single-search.
+                if (unresolvedEntries.length > 0) {
+                    const unresolvedTitles = unresolvedEntries.map((item) => item.title);
+                    const firstTypeByTitle = new Map(unresolvedEntries.map((item) => [item.title, item.firstType]));
+                    setBulkPhase('retryPass');
+                    setBulkRetryProgress({ current: 0, total: unresolvedTitles.length });
+                    setBulkCurrentTitle('');
+                    const retryData = await fetchAnimeDetailsBulk(unresolvedTitles, {
+                        concurrency: 2,
+                        interRequestDelayMs: 120,
+                        cooldownOn429Ms: 1000,
+                        timeoutMs: 9000,
+                        perTitleMaxMs: 6000,
+                        maxAttempts: 2,
+                        baseDelayMs: 300,
+                        maxRetryDelayMs: 1200,
+                        adaptiveFallback: true,
+                        adaptiveSkipPrimary: true,
+                        adaptiveMaxTerms: 4,
+                        adaptivePerPage: 10,
+                        adaptiveMinScore: 0.3,
+                        adaptiveTimeoutMs: 2200,
+                        adaptiveMaxAttempts: 1,
+                        includeMeta: true,
+                        onProgress: ({ completed, hit, dataId, timedOut, title, adaptiveQuery }) => {
+                            setBulkRetryProgress({ current: completed, total: unresolvedTitles.length });
+                            const displayTitle = adaptiveQuery && adaptiveQuery !== title
+                                ? `${title} -> ${adaptiveQuery}`
+                                : (title || '');
+                            setBulkCurrentTitle(displayTitle);
+
+                            if (hit) {
+                                const firstType = firstTypeByTitle.get(title);
+                                if (firstType === BULK_RESULT_KIND.RATE_LIMITED) {
+                                    liveRateLimited = Math.max(0, liveRateLimited - 1);
+                                } else if (isBulkFetchFailureType(firstType)) {
+                                    liveFetchFailed = Math.max(0, liveFetchFailed - 1);
+                                } else {
+                                    liveNotFound = Math.max(0, liveNotFound - 1);
+                                }
+
+                                if (dataId != null && liveSeenIds.has(dataId)) {
+                                    liveAlreadyAdded += 1;
+                                } else {
+                                    liveHits += 1;
+                                    if (dataId != null) liveSeenIds.add(dataId);
+                                }
+                            }
+
+                            if (timedOut) {
+                                liveTimedOut += 1;
+                            }
+
+                            setBulkLiveStats(createBulkLiveStatsState({
+                                processed: titles.length,
+                                total: titles.length,
+                                hits: liveHits,
+                                notFound: liveNotFound,
+                                rateLimited: liveRateLimited,
+                                fetchFailed: liveFetchFailed,
+                                alreadyAdded: liveAlreadyAdded,
+                                timedOut: liveTimedOut
+                            }));
+                        }
+                    });
+
+                    for (let r = 0; r < unresolvedTitles.length; r++) {
+                        const title = unresolvedTitles[r];
+                        const entry = Array.isArray(retryData) ? retryData[r] : null;
+                        const data = extractBulkLookupData(entry);
+                        if (data) {
+                            if (seenIds.has(data.id)) {
+                                alreadyAdded.push(title);
+                            } else {
+                                hits.push({ data, originalTitle: title });
+                                seenIds.add(data.id);
+                            }
+                            continue;
+                        }
+
+                        const resultType = extractBulkLookupType(entry);
+                        if (resultType === BULK_RESULT_KIND.RATE_LIMITED) {
+                            rateLimited.push(title);
+                            const assistKey = normalizeTitleForCompare(title) || title;
+                            failedStatus[assistKey] = buildBulkFailureMeta(entry, BULK_RESULT_KIND.RATE_LIMITED);
+                        } else if (isBulkFetchFailureType(resultType)) {
+                            fetchFailed.push(title);
+                            const assistKey = normalizeTitleForCompare(title) || title;
+                            failedStatus[assistKey] = buildBulkFailureMeta(entry, BULK_RESULT_KIND.REQUEST_ERROR);
+                        } else {
+                            notFound.push(title);
+                        }
                     }
                 }
             }
-        }
 
-        setBulkLiveStats({
-            processed: titles.length,
-            total: titles.length,
-            hits: hits.length,
-            notFound: notFound.length,
-            alreadyAdded: alreadyAdded.length,
-            timedOut: liveTimedOut
-        });
-        setBulkResults({ hits, notFound, alreadyAdded });
-        setPendingList(prev => [...new Set([...prev, ...notFound])]); // Merge and unique
-        setIsSearching(false);
-        setBulkPhase('idle');
-        setBulkRetryProgress({ current: 0, total: 0 });
-        setBulkCurrentTitle('');
-        setStatus({
-            type: 'info',
-            message: notFound.length > 0
-                ? `一括検索が完了しました。未ヒット ${notFound.length} 件は「未ヒット（要確認）」から個別再検索できます。`
-                : '一括検索が完了しました。'
-        });
-        setShowReview(true);
+            const maxRetryAfterMs = Object.values(failedStatus).reduce((maxValue, item) => {
+                if (item?.type !== BULK_RESULT_KIND.RATE_LIMITED) return maxValue;
+                return Math.max(maxValue, Number(item?.retryAfterMs) || 0);
+            }, 0);
+
+            if (maxRetryAfterMs > 0) {
+                setBulkRetryUntilTs(Date.now() + maxRetryAfterMs);
+            }
+
+            setBulkLiveStats(createBulkLiveStatsState({
+                processed: titles.length,
+                total: titles.length,
+                hits: hits.length,
+                notFound: notFound.length,
+                rateLimited: rateLimited.length,
+                fetchFailed: fetchFailed.length,
+                alreadyAdded: alreadyAdded.length,
+                timedOut: liveTimedOut
+            }));
+            setBulkResults({ hits, notFound, rateLimited, fetchFailed, alreadyAdded });
+            setBulkFailedStatus(failedStatus);
+            setPendingList((prev) => [...new Set([...prev, ...notFound, ...rateLimited, ...fetchFailed])]);
+
+            if (rateLimited.length > 0) {
+                const retryHint = maxRetryAfterMs > 0
+                    ? ` 約${Math.max(1, Math.ceil(maxRetryAfterMs / 1000))}秒後に再試行できます。`
+                    : ' 再試行の目安は数十秒〜1分程度です。';
+                const upstreamHint = fetchFailed.length > 0
+                    ? ` さらに取得失敗（サーバーエラー等）が ${fetchFailed.length} 件あります。`
+                    : '';
+                const notFoundHint = notFound.length > 0
+                    ? ` 未ヒット ${notFound.length} 件は別枠で表示しています。`
+                    : '';
+                setStatus({
+                    type: 'error',
+                    message: `一括検索が完了しました。短時間に検索が集中したため、一時的に検索できません。しばらく時間をおいてから再試行してください。アクセス制限による取得失敗は ${rateLimited.length} 件です。${retryHint}${upstreamHint}${notFoundHint}`
+                });
+            } else if (fetchFailed.length > 0) {
+                const notFoundHint = notFound.length > 0
+                    ? ` 未ヒット ${notFound.length} 件は別枠で表示しています。`
+                    : '';
+                setStatus({
+                    type: 'error',
+                    message: `一括検索が完了しました。取得失敗（サーバーエラー等）が ${fetchFailed.length} 件あります。時間をおいて再試行してください。${notFoundHint}`
+                });
+            } else {
+                setStatus({
+                    type: 'info',
+                    message: notFound.length > 0
+                        ? `一括検索が完了しました。未ヒット ${notFound.length} 件は「未ヒット（要確認）」から個別再検索できます。`
+                        : '一括検索が完了しました。'
+                });
+            }
+            setShowReview(true);
+        } catch (_) {
+            setStatus({
+                type: 'error',
+                message: '一括検索の処理中にエラーが発生しました。時間をおいて再試行してください。'
+            });
+        } finally {
+            setIsSearching(false);
+            setBulkPhase('idle');
+            setBulkRetryProgress({ current: 0, total: 0 });
+            setBulkCurrentTitle('');
+        }
+    };
+
+    const handleBulkRetryAll = () => {
+        if (isSearching) return;
+        if (!bulkQuery.trim()) return;
+        handleBulkSearch(null, { source: 'retryAll' });
+    };
+
+    const handleBulkRetryFailedOnly = () => {
+        if (isSearching) return;
+        if (bulkRetryCountdownSec > 0 && bulkResults.rateLimited.length > 0) return;
+        const retryTitles = [...new Set([...bulkResults.rateLimited, ...bulkResults.fetchFailed])];
+        if (retryTitles.length === 0) return;
+        handleBulkSearch(null, { source: 'failedOnly', titlesOverride: retryTitles });
     };
 
     // 4. Selection Logic
@@ -1634,15 +1837,24 @@ function AddAnimeScreen({
             ? [...(animeList || []), ...(bookmarkList || [])]
             : [...(animeList || [])];
         const existingIdSet = new Set(existingForTarget.map((a) => a.id));
+        const assistKey = normalizeTitleForCompare(originalTitle) || originalTitle;
 
         if (existingIdSet.has(data.id)) {
             setBulkResults((prev) => ({
                 ...prev,
                 notFound: prev.notFound.filter((t) => t !== originalTitle),
+                rateLimited: prev.rateLimited.filter((t) => t !== originalTitle),
+                fetchFailed: prev.fetchFailed.filter((t) => t !== originalTitle),
                 alreadyAdded: prev.alreadyAdded.includes(originalTitle)
                     ? prev.alreadyAdded
                     : [...prev.alreadyAdded, originalTitle]
             }));
+            setBulkFailedStatus((prev) => {
+                if (!prev[assistKey]) return prev;
+                const next = { ...prev };
+                delete next[assistKey];
+                return next;
+            });
             setPendingList((prev) => prev.filter((t) => t !== originalTitle));
             return { ok: false, reason: 'already-added' };
         }
@@ -1653,8 +1865,16 @@ function AddAnimeScreen({
             return {
                 ...prev,
                 hits: nextHits,
-                notFound: prev.notFound.filter((t) => t !== originalTitle)
+                notFound: prev.notFound.filter((t) => t !== originalTitle),
+                rateLimited: prev.rateLimited.filter((t) => t !== originalTitle),
+                fetchFailed: prev.fetchFailed.filter((t) => t !== originalTitle)
             };
+        });
+        setBulkFailedStatus((prev) => {
+            if (!prev[assistKey]) return prev;
+            const next = { ...prev };
+            delete next[assistKey];
+            return next;
         });
         setPendingList((prev) => prev.filter((t) => t !== originalTitle));
         return { ok: true };
@@ -1667,8 +1887,12 @@ function AddAnimeScreen({
             [key]: { ...(prev[key] || {}), loading: true, error: '' }
         }));
 
-        const recovered = await fetchAnimeDetails(title, {
+        const retryData = await fetchAnimeDetailsBulk([title], {
+            concurrency: 1,
+            interRequestDelayMs: 0,
+            cooldownOn429Ms: 1000,
             timeoutMs: 7000,
+            perTitleMaxMs: 5000,
             maxAttempts: 2,
             baseDelayMs: 250,
             maxRetryDelayMs: 900,
@@ -1679,7 +1903,10 @@ function AddAnimeScreen({
             adaptiveMinScore: 0.3,
             adaptiveTimeoutMs: 2400,
             adaptiveMaxAttempts: 1,
+            includeMeta: true
         });
+        const entry = Array.isArray(retryData) ? retryData[0] : null;
+        const recovered = extractBulkLookupData(entry);
 
         if (recovered) {
             const result = mergeRecoveredHit(title, recovered);
@@ -1692,6 +1919,38 @@ function AddAnimeScreen({
             } else if (result.reason === 'already-added') {
                 setToast({ visible: true, message: `「${title}」は登録済みのためスキップしました。`, type: 'warning' });
             }
+            return;
+        }
+
+        const resultType = extractBulkLookupType(entry);
+        if (resultType === BULK_RESULT_KIND.RATE_LIMITED) {
+            const retryAfterMs = extractBulkLookupRetryAfterMs(entry);
+            if (retryAfterMs > 0) {
+                setBulkRetryUntilTs((prev) => Math.max(prev, Date.now() + retryAfterMs));
+            }
+            setBulkNotFoundStatus((prev) => ({
+                ...prev,
+                [key]: {
+                    ...(prev[key] || {}),
+                    loading: false,
+                    error: buildRateLimitMessage(
+                        retryAfterMs,
+                        '短時間に検索が集中したため、一時的に検索できません。しばらく時間をおいてから再試行してください。'
+                    )
+                }
+            }));
+            return;
+        }
+
+        if (isBulkFetchFailureType(resultType)) {
+            setBulkNotFoundStatus((prev) => ({
+                ...prev,
+                [key]: {
+                    ...(prev[key] || {}),
+                    loading: false,
+                    error: '取得に失敗しました（サーバーエラー等）。時間をおいて再試行してください。'
+                }
+            }));
             return;
         }
 
@@ -1710,10 +1969,18 @@ function AddAnimeScreen({
         setPendingList(prev => prev.filter(title => title !== titleToRemove));
         setBulkResults(prev => ({
             ...prev,
-            notFound: prev.notFound.filter((title) => title !== titleToRemove)
+            notFound: prev.notFound.filter((title) => title !== titleToRemove),
+            rateLimited: prev.rateLimited.filter((title) => title !== titleToRemove),
+            fetchFailed: prev.fetchFailed.filter((title) => title !== titleToRemove)
         }));
         const key = normalizeTitleForCompare(titleToRemove) || titleToRemove;
         setBulkNotFoundStatus((prev) => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+        setBulkFailedStatus((prev) => {
             if (!prev[key]) return prev;
             const next = { ...prev };
             delete next[key];
@@ -1724,8 +1991,11 @@ function AddAnimeScreen({
     const handleClearPending = () => {
         if (window.confirm('保留リストをすべて削除しますか？')) {
             setPendingList([]);
-            setBulkResults((prev) => ({ ...prev, notFound: [] }));
+            setBulkResults((prev) => ({ ...prev, notFound: [], rateLimited: [], fetchFailed: [] }));
             setBulkNotFoundStatus({});
+            setBulkFailedStatus({});
+            setBulkRetryUntilTs(0);
+            setBulkRetryCountdownSec(0);
         }
     };
 
@@ -1892,20 +2162,17 @@ function AddAnimeScreen({
         autocompleteRequestIdRef.current += 1;
         setIsSuggesting(false);
         setBulkProgress({ current: 0, total: 0 });
-        setBulkLiveStats({
-            processed: 0,
-            total: 0,
-            hits: 0,
-            notFound: 0,
-            alreadyAdded: 0,
-            timedOut: 0
-        });
+        setBulkLiveStats(createBulkLiveStatsState());
         setBulkPhase('idle');
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
+        setBulkResults(createBulkResultsState());
         setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
         setBulkOverflowInfo(null);
         setBulkNotFoundStatus({});
+        setBulkFailedStatus({});
+        setBulkRetryUntilTs(0);
+        setBulkRetryCountdownSec(0);
     };
 
     const guideSummaryText = isBrowsePresetLocked
@@ -1947,6 +2214,12 @@ function AddAnimeScreen({
         && status.type === 'error'
         && searchErrorCanRetry
         && !previewData;
+    const bulkFailureCount = bulkResults.rateLimited.length + bulkResults.fetchFailed.length;
+    const bulkRetryTargetCount = [...new Set([...bulkResults.rateLimited, ...bulkResults.fetchFailed])].length;
+    const bulkRetryWaitMessage = bulkRetryCountdownSec > 0
+        ? `あと${bulkRetryCountdownSec}秒後に再試行できます。`
+        : '再試行の目安は数十秒〜1分程度です。';
+    const disableBulkFailedRetry = isSearching || (bulkResults.rateLimited.length > 0 && bulkRetryCountdownSec > 0);
     const renderBulkOverflowNotice = () => {
         if (!bulkOverflowInfo) return null;
         const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '';
@@ -2287,6 +2560,14 @@ function AddAnimeScreen({
                                             <span>未ヒット</span>
                                             <strong>{bulkLiveStats.notFound}</strong>
                                         </div>
+                                        <div className="progress-pill rate-limit">
+                                            <span>アクセス制限</span>
+                                            <strong>{bulkLiveStats.rateLimited}</strong>
+                                        </div>
+                                        <div className="progress-pill fail">
+                                            <span>取得失敗</span>
+                                            <strong>{bulkLiveStats.fetchFailed}</strong>
+                                        </div>
                                         <div className="progress-pill dup">
                                             <span>重複</span>
                                             <strong>{bulkLiveStats.alreadyAdded}</strong>
@@ -2323,7 +2604,11 @@ function AddAnimeScreen({
                                         </p>
                                     </div>
                                 ) : (
-                                    <p>検索された作品を確認し、登録を完了してください。</p>
+                                    <p>
+                                        {bulkFailureCount > 0
+                                            ? `取得失敗 ${bulkFailureCount} 件は「取得失敗」枠に表示しています。未ヒットとは別扱いです。`
+                                            : '検索された作品を確認し、登録を完了してください。'}
+                                    </p>
                                 )}
                             </div>
 
@@ -2349,6 +2634,82 @@ function AddAnimeScreen({
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+
+                                {!isBulkComplete && bulkFailureCount > 0 && (
+                                    <div className="review-section error">
+                                        <h4>取得失敗（再試行推奨） ({bulkFailureCount})</h4>
+                                        <div className="bulk-failure-guide">
+                                            {bulkResults.rateLimited.length > 0 && (
+                                                <>
+                                                    <div className="bulk-notfound-hint warning strong">短時間に検索が集中したため、一時的に検索できません。</div>
+                                                    <div className="bulk-notfound-hint warning">しばらく時間をおいてから再試行してください。</div>
+                                                    <div className="bulk-notfound-hint">{bulkRetryWaitMessage}</div>
+                                                </>
+                                            )}
+                                            {bulkResults.fetchFailed.length > 0 && (
+                                                <div className="bulk-notfound-hint warning">
+                                                    サーバーエラー等により、一部の作品情報を取得できませんでした。時間をおいて再試行してください。
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="bulk-failure-actions">
+                                            <button
+                                                type="button"
+                                                className="bulk-mini-button"
+                                                onClick={handleBulkRetryFailedOnly}
+                                                disabled={disableBulkFailedRetry || bulkRetryTargetCount === 0}
+                                            >
+                                                失敗分のみ再試行
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="bulk-mini-button subtle"
+                                                onClick={handleBulkRetryAll}
+                                                disabled={isSearching || !bulkQuery.trim()}
+                                            >
+                                                全件を再試行
+                                            </button>
+                                        </div>
+                                        {bulkResults.rateLimited.length > 0 && (
+                                            <>
+                                                <div className="bulk-review-subheading">アクセス制限で取得失敗 ({bulkResults.rateLimited.length})</div>
+                                                <ul className="bulk-notfound-list">
+                                                    {bulkResults.rateLimited.map((title, idx) => {
+                                                        const assistKey = normalizeTitleForCompare(title) || title;
+                                                        const assist = bulkFailedStatus[assistKey] || {};
+                                                        return (
+                                                            <li key={`${title}-${idx}`} className="bulk-notfound-item">
+                                                                <div className="bulk-notfound-row">
+                                                                    <span className="bulk-notfound-title">{title}</span>
+                                                                </div>
+                                                                <div className="bulk-notfound-hint warning">{describeBulkFailure(assist)}</div>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            </>
+                                        )}
+                                        {bulkResults.fetchFailed.length > 0 && (
+                                            <>
+                                                <div className="bulk-review-subheading">サーバーエラー等で取得失敗 ({bulkResults.fetchFailed.length})</div>
+                                                <ul className="bulk-notfound-list">
+                                                    {bulkResults.fetchFailed.map((title, idx) => {
+                                                        const assistKey = normalizeTitleForCompare(title) || title;
+                                                        const assist = bulkFailedStatus[assistKey] || {};
+                                                        return (
+                                                            <li key={`${title}-${idx}`} className="bulk-notfound-item">
+                                                                <div className="bulk-notfound-row">
+                                                                    <span className="bulk-notfound-title">{title}</span>
+                                                                </div>
+                                                                <div className="bulk-notfound-hint warning">{describeBulkFailure(assist)}</div>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            </>
+                                        )}
                                     </div>
                                 )}
 
@@ -2817,7 +3178,7 @@ function AddAnimeScreen({
                         </div>
                     </div>
                     <div className="pending-list-description">
-                        一括追加で見つからなかった作品、または除外した作品です。必要に応じて再検索してください。
+                        一括追加で未ヒットだった作品や、アクセス制限・サーバーエラーで取得失敗した作品、または除外した作品です。必要に応じて再検索してください。
                     </div>
                     <ul className="pending-checklist">
                         {pendingList.map((title, index) => (

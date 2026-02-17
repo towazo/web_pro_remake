@@ -3967,6 +3967,14 @@ body {
     border-color: #e4c3c3;
 }
 
+.progress-pill.rate-limit {
+    border-color: #f59e0b;
+}
+
+.progress-pill.fail {
+    border-color: #d97706;
+}
+
 .progress-pill.dup {
     border-color: #d4d4d4;
 }
@@ -4012,6 +4020,10 @@ body {
 
 .review-section.warning h4 {
     border-left-color: #888;
+}
+
+.review-section.error h4 {
+    border-left-color: #b45309;
 }
 
 .review-section.subtle h4 {
@@ -4184,6 +4196,28 @@ body {
     color: #7f1d1d;
 }
 
+.bulk-notfound-hint.warning.strong {
+    font-weight: 800;
+}
+
+.bulk-failure-guide {
+    margin: 8px 0 0;
+}
+
+.bulk-failure-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.bulk-review-subheading {
+    margin: 14px 0 8px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #5b3413;
+}
+
 .bulk-candidate-list {
     margin-top: 8px;
     display: grid;
@@ -4237,6 +4271,10 @@ body {
 
     .bulk-notfound-actions {
         width: 100%;
+    }
+
+    .bulk-failure-actions .bulk-mini-button {
+        flex: 1;
     }
 
     .bulk-mini-button {

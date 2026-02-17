@@ -576,6 +576,15 @@ const buildAdaptiveSearchTerms = (title, maxTerms = 4) => {
     .slice(0, Math.max(1, Number(maxTerms) || 4));
 };
 
+const safeInvokeRetryCallback = (onRetry, payload) => {
+  if (typeof onRetry !== 'function') return;
+  try {
+    onRetry(payload);
+  } catch (_) {
+    // ignore callback errors
+  }
+};
+
 const postAniListGraphQL = async (query, variables, options = {}) => {
   const {
     timeoutMs = 12000,
@@ -585,6 +594,13 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
     onRetry,
     signal,
   } = options;
+
+  const emitAttemptInfo = (payload = {}) => {
+    safeInvokeRetryCallback(onRetry, {
+      ...payload,
+      search: variables?.search,
+    });
+  };
 
   let lastError;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -614,31 +630,40 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
         if (result?.errors?.length) {
           const retryable = isRetryableGraphQLError(result.errors);
           const hasData = hasAnyGraphQLData(result?.data);
+          const status = Number(result.errors?.[0]?.status) || 200;
           if (retryable && !hasData && attempt < maxAttempts) {
             const backoff = baseDelayMs * Math.pow(2, attempt - 1);
             const jitter = Math.floor(Math.random() * 250);
             const rawWaitMs = retryAfterMs ?? (backoff + jitter);
             const waitMs = Math.min(maxRetryDelayMs, rawWaitMs);
-            if (typeof onRetry === 'function') {
-              try {
-                onRetry({
-                  kind: 'graphql',
-                  status: Number(result.errors?.[0]?.status) || 200,
-                  attempt,
-                  maxAttempts,
-                  waitMs,
-                  search: variables?.search,
-                  errors: result.errors,
-                  retryAfterMs,
-                  rateLimit: rateLimitMeta,
-                });
-              } catch (_) {
-                // ignore callback errors
-              }
-            }
+            emitAttemptInfo({
+              kind: 'graphql',
+              status,
+              attempt,
+              maxAttempts,
+              waitMs,
+              errors: result.errors,
+              retryAfterMs,
+              rateLimit: rateLimitMeta,
+              willRetry: true,
+            });
             if (signal?.aborted) throw createAbortError();
             await sleepWithSignal(waitMs, signal);
             continue;
+          }
+
+          if (!hasData) {
+            emitAttemptInfo({
+              kind: 'graphql',
+              status,
+              attempt,
+              maxAttempts,
+              waitMs: 0,
+              errors: result.errors,
+              retryAfterMs,
+              rateLimit: rateLimitMeta,
+              willRetry: false,
+            });
           }
 
           return {
@@ -656,6 +681,16 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
       const status = response.status;
       const retryable = status === 404 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
       if (!retryable || attempt === maxAttempts) {
+        emitAttemptInfo({
+          kind: 'http',
+          status,
+          attempt,
+          maxAttempts,
+          waitMs: 0,
+          retryAfterMs,
+          rateLimit: rateLimitMeta,
+          willRetry: false,
+        });
         return {
           ok: false,
           status,
@@ -670,22 +705,16 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
       const jitter = Math.floor(Math.random() * 250);
       const rawWaitMs = retryAfterMs ?? (backoff + jitter);
       const waitMs = Math.min(maxRetryDelayMs, rawWaitMs);
-      if (typeof onRetry === 'function') {
-        try {
-          onRetry({
-            kind: 'http',
-            status,
-            attempt,
-            maxAttempts,
-            waitMs,
-            search: variables?.search,
-            retryAfterMs,
-            rateLimit: rateLimitMeta,
-          });
-        } catch (_) {
-          // ignore callback errors
-        }
-      }
+      emitAttemptInfo({
+        kind: 'http',
+        status,
+        attempt,
+        maxAttempts,
+        waitMs,
+        retryAfterMs,
+        rateLimit: rateLimitMeta,
+        willRetry: true,
+      });
       if (signal?.aborted) throw createAbortError();
       await sleepWithSignal(waitMs, signal);
     } catch (error) {
@@ -693,26 +722,31 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
         throw error;
       }
       lastError = error;
-      if (attempt === maxAttempts) break;
+      if (attempt === maxAttempts) {
+        emitAttemptInfo({
+          kind: 'error',
+          status: Number(error?.status) || null,
+          attempt,
+          maxAttempts,
+          waitMs: 0,
+          error,
+          willRetry: false,
+        });
+        break;
+      }
       const backoff = baseDelayMs * Math.pow(2, attempt - 1);
       const jitter = Math.floor(Math.random() * 250);
       const rawWaitMs = backoff + jitter;
       const waitMs = Math.min(maxRetryDelayMs, rawWaitMs);
-      if (typeof onRetry === 'function') {
-        try {
-          onRetry({
-            kind: 'error',
-            status: null,
-            attempt,
-            maxAttempts,
-            waitMs,
-            search: variables?.search,
-            error,
-          });
-        } catch (_) {
-          // ignore callback errors
-        }
-      }
+      emitAttemptInfo({
+        kind: 'error',
+        status: Number(error?.status) || null,
+        attempt,
+        maxAttempts,
+        waitMs,
+        error,
+        willRetry: true,
+      });
       if (signal?.aborted) throw createAbortError();
       await sleepWithSignal(waitMs, signal);
     }
@@ -985,6 +1019,61 @@ const mergeSearchCandidates = (bucket, query, list) => {
   }
 };
 
+const BULK_RATE_LIMIT_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
+const BULK_UPSTREAM_PATTERN = /\btimeout\b|temporar|internal server error|bad gateway|service unavailable|gateway timeout/i;
+
+const createBulkIssueState = () => ({
+  rateLimited: false,
+  upstreamError: false,
+  requestError: false,
+  retryAfterMs: 0,
+  status: 0,
+  message: '',
+});
+
+const collectBulkIssue = (bucket, info) => {
+  if (!bucket || !info) return;
+  const statusRaw = Number(info?.status);
+  const status = Number.isFinite(statusRaw) ? statusRaw : 0;
+  const errorText = [
+    info?.error?.message || '',
+    Array.isArray(info?.errors)
+      ? info.errors.map((item) => item?.message || '').join(' ')
+      : '',
+  ].join(' ');
+  const hasRateLimitText = BULK_RATE_LIMIT_PATTERN.test(String(errorText));
+  const hasUpstreamText = BULK_UPSTREAM_PATTERN.test(String(errorText));
+
+  if (status === 429 || hasRateLimitText) {
+    bucket.rateLimited = true;
+  }
+  if (status >= 500 || status === 0 || info?.kind === 'error' || hasUpstreamText) {
+    bucket.upstreamError = true;
+  }
+  if (status > 0 && status < 500 && status !== 429) {
+    bucket.requestError = true;
+  }
+  if (status > 0 && (bucket.status === 0 || status === 429 || status >= 500)) {
+    bucket.status = status;
+  }
+  if (!bucket.message && errorText.trim().length > 0) {
+    bucket.message = errorText.trim();
+  }
+  const retryAfterMs = Number(info?.retryAfterMs ?? info?.rateLimit?.retryAfterMs);
+  if (Number.isFinite(retryAfterMs) && retryAfterMs > bucket.retryAfterMs) {
+    bucket.retryAfterMs = retryAfterMs;
+  }
+};
+
+const resolveBulkResultType = ({ data, timedOut, issue }) => {
+  if (data) return 'hit';
+  if (timedOut) return 'timeout';
+  if (issue?.rateLimited) return 'rate_limited';
+  if (issue?.upstreamError) return 'upstream_error';
+  if (issue?.requestError) return 'request_error';
+  return 'not_found';
+};
+
 export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
   const safeTitles = Array.isArray(titles)
     ? titles.filter((t) => typeof t === 'string' && t.trim().length > 0)
@@ -1012,6 +1101,7 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
     onProgress,
     onTimeout,
     onAdaptiveQuery,
+    includeMeta = false,
   } = options;
 
   const workerCount = Math.max(1, Math.min(6, Number(concurrency) || 1));
@@ -1034,6 +1124,7 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
       let timedOut = false;
       let adaptiveUsed = false;
       let adaptiveQuery = '';
+      const issue = createBulkIssueState();
       const perTitleController = new AbortController();
       const perTitleTimer = setTimeout(() => {
         timedOut = true;
@@ -1056,6 +1147,7 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
           adaptiveMaxAttempts,
           signal: perTitleController.signal,
           onRetry: (info) => {
+            collectBulkIssue(issue, info);
             if (info?.status === 429) saw429 = true;
             if (typeof onRetry === 'function') {
               onRetry({ ...info, title, index, total: safeTitles.length });
@@ -1073,6 +1165,7 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
         if (!timedOut && !isAbortError(error)) {
           console.error(`Bulk fetch error for ${title}:`, error);
         }
+        collectBulkIssue(issue, { kind: 'error', status: Number(error?.status) || null, error });
         data = null;
       } finally {
         clearTimeout(perTitleTimer);
@@ -1086,7 +1179,20 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
         }
       }
 
-      results[index] = data ?? null;
+      const resultType = resolveBulkResultType({ data, timedOut, issue });
+      const resultMeta = {
+        data: data ?? null,
+        resultType,
+        status: issue.status > 0 ? issue.status : null,
+        retryAfterMs: issue.retryAfterMs > 0 ? issue.retryAfterMs : 0,
+        timedOut,
+        saw429: issue.rateLimited || saw429,
+        adaptiveUsed,
+        adaptiveQuery,
+        message: issue.message || '',
+      };
+
+      results[index] = includeMeta ? resultMeta : (data ?? null);
       completed += 1;
 
       if (typeof onProgress === 'function') {
@@ -1097,15 +1203,19 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
           title,
           hit: Boolean(data),
           dataId: data?.id ?? null,
-          saw429,
-          timedOut,
+          saw429: resultMeta.saw429,
+          timedOut: resultMeta.timedOut,
           adaptiveUsed,
           adaptiveQuery,
+          resultType,
+          status: resultMeta.status,
+          retryAfterMs: resultMeta.retryAfterMs,
+          message: resultMeta.message,
         });
       }
 
       if (delayMs > 0) await sleep(delayMs);
-      if (saw429 && cooldownMs > 0) await sleep(cooldownMs);
+      if (resultMeta.saw429 && cooldownMs > 0) await sleep(cooldownMs);
     }
   };
 
