@@ -4,11 +4,15 @@ import { translateGenre } from '../../constants/animeData';
 function StatIcon({ src, alt, fallback }) {
     const [hasError, setHasError] = React.useState(false);
     const resolvedSrc = `${import.meta.env.BASE_URL}${String(src || '').replace(/^\/+/, '')}`;
+    React.useEffect(() => {
+        setHasError(false);
+    }, [resolvedSrc]);
 
     return (
         <div className="stat-icon">
-            <span className="stat-icon-fallback" aria-hidden="true">{fallback}</span>
-            {!hasError && (
+            {hasError ? (
+                <span className="stat-icon-fallback" aria-hidden="true">{fallback}</span>
+            ) : (
                 <img
                     src={resolvedSrc}
                     alt={alt}
