@@ -1536,6 +1536,13 @@ body {
     object-fit: contain;
 }
 
+.stat-icon-fallback {
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: #111;
+    line-height: 1;
+}
+
 .stat-info {
     display: flex;
     flex-direction: column;
