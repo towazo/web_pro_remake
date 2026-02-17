@@ -2011,6 +2011,13 @@ body {
     box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.12);
     z-index: 2100;
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.screen-bottom-home-nav.hidden-while-suggesting {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(calc(100% + 8px));
 }
 
 .screen-bottom-home-button {
@@ -2768,7 +2775,7 @@ body {
     background: #fff;
     border: 1px solid #000;
     border-top: none;
-    z-index: 1000;
+    z-index: 2305;
     padding: 12px 15px;
     font-size: 0.85rem;
     font-weight: 700;
@@ -2783,15 +2790,19 @@ body {
     background: white;
     border: 1px solid #000;
     border-top: none;
-    z-index: 1000;
-    max-height: 400px;
+    z-index: 2305;
+    max-height: min(400px, 56vh);
     overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    scrollbar-gutter: stable;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
 }
 
 .suggestion-item {
     display: flex;
-    padding: 12px 15px;
+    padding: 10px 12px;
     gap: 15px;
     cursor: pointer;
     border-bottom: 1px solid #eee;
@@ -3053,6 +3064,41 @@ body {
     color: #777;
 }
 
+.browse-loading-state {
+    border: 1px solid #eee;
+    background: #fff;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+}
+
+.browse-loading-inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.browse-loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ccc;
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: browseSpinnerSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+.browse-loading-text {
+    font-size: 0.84rem;
+    font-weight: 800;
+    color: #111;
+}
+
+.browse-loading-note {
+    font-size: 0.75rem;
+    color: #666;
+    margin-top: 6px;
+}
+
 .browse-skeleton-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -3096,6 +3142,12 @@ body {
     }
     100% {
         background-position: -200% 0;
+    }
+}
+
+@keyframes browseSpinnerSpin {
+    to {
+        transform: rotate(360deg);
     }
 }
 

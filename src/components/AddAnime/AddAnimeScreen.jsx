@@ -51,6 +51,10 @@ function AddAnimeScreen({
     const BULK_FAST_MAX_RETRY_ATTEMPTS = 1;
     const BULK_FAST_RETRY_BASE_DELAY_MS = 150;
     const BULK_FAST_RETRY_DELAY_CAP_MS = 450;
+    const SUGGESTION_MIN_HEIGHT = 96;
+    const SUGGESTION_COMFORT_MIN_HEIGHT = 220;
+    const SUGGESTION_MAX_HEIGHT = 420;
+    const SUGGESTION_VIEWPORT_MARGIN = 12;
     const normalizedBrowsePreset = React.useMemo(() => {
         const preset = browsePreset && typeof browsePreset === 'object' ? browsePreset : null;
         const year = Number(preset?.year);
@@ -91,10 +95,14 @@ function AddAnimeScreen({
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isSuggesting, setIsSuggesting] = useState(false);
+    const [suggestionsMaxHeight, setSuggestionsMaxHeight] = useState(320);
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
     const [isSearching, setIsSearching] = useState(false);
     const autocompleteRequestIdRef = React.useRef(0);
+    const searchFieldWrapperRef = React.useRef(null);
+    const bottomHomeNavRef = React.useRef(null);
+    const suggestionAutoScrollAtRef = React.useRef(0);
 
     // Bulk Add States
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
@@ -145,6 +153,7 @@ function AddAnimeScreen({
         hasNextPage: false
     });
     const [browseLoading, setBrowseLoading] = useState(false);
+    const [browsePageSwitching, setBrowsePageSwitching] = useState(false);
     const [browseError, setBrowseError] = useState('');
     const [browseReloadToken, setBrowseReloadToken] = useState(0);
     const [browseRetryUntilTs, setBrowseRetryUntilTs] = useState(0);
@@ -160,6 +169,7 @@ function AddAnimeScreen({
     const entryScrollPositionsRef = React.useRef({ search: 0, browse: 0 });
     const browseRequestIdRef = React.useRef(0);
     const browseResultsTopRef = React.useRef(null);
+    const browsePageSwitchTimerRef = React.useRef(null);
     const pendingBrowseScrollPageRef = React.useRef(null);
     const browseAutoRetryCountRef = React.useRef(new Map());
     const browseInFlightRef = React.useRef(0);
@@ -230,6 +240,72 @@ function AddAnimeScreen({
             : '';
         return `preset:${selectedBrowseYear}:${normalizedBrowsePreset.mediaSeason || ''}:${statusInKey}:${statusNotKey}`;
     }, [selectedBrowseYear, normalizedBrowsePreset]);
+    const isSuggestionPanelVisible = entryTab === 'search'
+        && mode === 'normal'
+        && showSuggestions
+        && !previewData
+        && (isSuggesting || suggestions.length > 0);
+    const suggestionsDropdownStyle = React.useMemo(() => ({
+        maxHeight: `${suggestionsMaxHeight}px`,
+        top: 'calc(100% + 2px)',
+        bottom: 'auto'
+    }), [suggestionsMaxHeight]);
+    const updateSuggestionsLayout = React.useCallback(() => {
+        const wrapper = searchFieldWrapperRef.current;
+        if (!wrapper) return;
+
+        const rect = wrapper.getBoundingClientRect();
+        const viewportHeight = Number(window.visualViewport?.height)
+            || window.innerHeight
+            || document.documentElement?.clientHeight
+            || 0;
+        const docEl = document.documentElement;
+        const scrollTop = window.scrollY || window.pageYOffset || 0;
+        const scrollableBottom = Math.max(0, (docEl?.scrollHeight || 0) - (scrollTop + viewportHeight));
+
+        let bottomDockOffset = 0;
+        const navRect = bottomHomeNavRef.current?.getBoundingClientRect?.();
+        if (navRect && navRect.height > 0 && navRect.top < viewportHeight) {
+            bottomDockOffset = Math.max(0, viewportHeight - navRect.top);
+        }
+
+        const spaceBelowRaw = Math.max(
+            0,
+            viewportHeight - rect.bottom - SUGGESTION_VIEWPORT_MARGIN - bottomDockOffset
+        );
+        const desiredVisibleHeight = Math.max(SUGGESTION_MIN_HEIGHT, SUGGESTION_COMFORT_MIN_HEIGHT);
+        if (isSuggestionPanelVisible && spaceBelowRaw < desiredVisibleHeight) {
+            const neededScroll = desiredVisibleHeight - spaceBelowRaw;
+            const scrollDelta = Math.min(Math.max(0, neededScroll + 8), scrollableBottom);
+            const now = Date.now();
+            if (scrollDelta > 0 && now - suggestionAutoScrollAtRef.current > 120) {
+                suggestionAutoScrollAtRef.current = now;
+                window.scrollBy({ top: scrollDelta, behavior: 'auto' });
+            }
+        }
+
+        const spaceBelow = Math.max(
+            0,
+            viewportHeight - rect.bottom - SUGGESTION_VIEWPORT_MARGIN - bottomDockOffset
+        );
+        const measuredHeight = Math.floor(spaceBelow);
+        const maxHeight = measuredHeight >= SUGGESTION_MIN_HEIGHT
+            ? Math.min(SUGGESTION_MAX_HEIGHT, measuredHeight)
+            : Math.max(0, measuredHeight);
+
+        setSuggestionsMaxHeight((prev) => {
+            if (Math.abs(prev - maxHeight) <= 1) {
+                return prev;
+            }
+            return maxHeight;
+        });
+    }, [
+        SUGGESTION_COMFORT_MIN_HEIGHT,
+        SUGGESTION_MAX_HEIGHT,
+        SUGGESTION_MIN_HEIGHT,
+        SUGGESTION_VIEWPORT_MARGIN,
+        isSuggestionPanelVisible
+    ]);
 
     // 1. Autocomplete Search Logic (Debounced)
     useEffect(() => {
@@ -274,6 +350,56 @@ function AddAnimeScreen({
             clearTimeout(timer);
         };
     }, [query, previewData, mode, entryTab]);
+
+    useEffect(() => {
+        if (!showSuggestions) return;
+
+        let rafId = null;
+        const requestUpdate = () => {
+            if (rafId != null) return;
+            rafId = requestAnimationFrame(() => {
+                rafId = null;
+                updateSuggestionsLayout();
+            });
+        };
+
+        requestUpdate();
+        window.addEventListener('resize', requestUpdate);
+        window.addEventListener('scroll', requestUpdate, true);
+        window.visualViewport?.addEventListener?.('resize', requestUpdate);
+        window.visualViewport?.addEventListener?.('scroll', requestUpdate);
+
+        return () => {
+            if (rafId != null) cancelAnimationFrame(rafId);
+            window.removeEventListener('resize', requestUpdate);
+            window.removeEventListener('scroll', requestUpdate, true);
+            window.visualViewport?.removeEventListener?.('resize', requestUpdate);
+            window.visualViewport?.removeEventListener?.('scroll', requestUpdate);
+        };
+    }, [showSuggestions, suggestions.length, isSuggesting, updateSuggestionsLayout]);
+
+    useEffect(() => {
+        if (!showSuggestions) return;
+
+        const handlePointerDown = (event) => {
+            const wrapper = searchFieldWrapperRef.current;
+            if (!wrapper) return;
+            if (wrapper.contains(event.target)) return;
+            setShowSuggestions(false);
+        };
+        const handleEscape = (event) => {
+            if (event.key === 'Escape') {
+                setShowSuggestions(false);
+            }
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [showSuggestions]);
 
     useEffect(() => {
         const targetY = entryScrollPositionsRef.current[entryTab] || 0;
@@ -365,6 +491,22 @@ function AddAnimeScreen({
         const timer = setInterval(updateCountdown, 250);
         return () => clearInterval(timer);
     }, [browseRetryUntilTs]);
+
+    useEffect(() => () => {
+        if (browsePageSwitchTimerRef.current) {
+            clearTimeout(browsePageSwitchTimerRef.current);
+            browsePageSwitchTimerRef.current = null;
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!browseLoading) return;
+        if (browsePageSwitchTimerRef.current) {
+            clearTimeout(browsePageSwitchTimerRef.current);
+            browsePageSwitchTimerRef.current = null;
+        }
+        setBrowsePageSwitching(false);
+    }, [browseLoading]);
 
     useEffect(() => {
         if (!browseAutoRetryPlan || !browseAutoRetryPlan.key) return;
@@ -730,6 +872,7 @@ function AddAnimeScreen({
     };
 
     const handleBrowseGenreToggle = (genre) => {
+        startBrowseUiTransition(140);
         setBrowseGenreFilters((prev) => {
             const exists = prev.includes(genre);
             const next = exists ? prev.filter((g) => g !== genre) : [...prev, genre];
@@ -739,12 +882,14 @@ function AddAnimeScreen({
     };
 
     const handleBrowseGenreClear = () => {
+        startBrowseUiTransition(140);
         setBrowseGenreFilters([]);
         setBrowsePage(1);
     };
 
     const handleBrowseSeasonToggle = (seasonKey) => {
         if (isBrowsePresetLocked) return;
+        startBrowseUiTransition(140);
         setBrowseSeasonFilters((prev) => {
             const exists = prev.includes(seasonKey);
             return exists ? prev.filter((key) => key !== seasonKey) : [...prev, seasonKey];
@@ -754,6 +899,7 @@ function AddAnimeScreen({
 
     const handleBrowseSeasonClear = () => {
         if (isBrowsePresetLocked) return;
+        startBrowseUiTransition(140);
         setBrowseSeasonFilters([]);
         setBrowsePage(1);
     };
@@ -811,6 +957,17 @@ function AddAnimeScreen({
             behavior
         });
     };
+    const startBrowseUiTransition = React.useCallback((durationMs = 180) => {
+        if (browsePageSwitchTimerRef.current) {
+            clearTimeout(browsePageSwitchTimerRef.current);
+            browsePageSwitchTimerRef.current = null;
+        }
+        setBrowsePageSwitching(true);
+        browsePageSwitchTimerRef.current = setTimeout(() => {
+            setBrowsePageSwitching(false);
+            browsePageSwitchTimerRef.current = null;
+        }, Math.max(60, Number(durationMs) || 180));
+    }, []);
 
     const handleBrowsePageChange = (nextPage) => {
         const page = Number(nextPage);
@@ -819,6 +976,7 @@ function AddAnimeScreen({
         if (!Number.isFinite(page) || page < 1) return;
         if (page === currentPage) return;
         if (page > lastPage) return;
+        startBrowseUiTransition(180);
         pendingBrowseScrollPageRef.current = page;
         setBrowsePage(page);
         requestAnimationFrame(() => {
@@ -1520,6 +1678,8 @@ function AddAnimeScreen({
         : '登録済み・重複';
     const browseResultsTitle = normalizedBrowsePreset?.title || `${selectedBrowseYear}年の作品`;
     const browsePaginationLabel = normalizedBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
+    const isBrowseBusy = browseLoading || browsePageSwitching;
+    const browseLoadingLabel = browseLoading ? '作品を取得中です…' : 'ページを切り替えています…';
     const renderBulkOverflowNotice = () => {
         if (!bulkOverflowInfo) return null;
         const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '';
@@ -1697,7 +1857,7 @@ function AddAnimeScreen({
             {entryTab === 'search' && (mode === 'normal' ? (
                 !previewData && (
                     <form onSubmit={handleSearch} className="add-form">
-                        <div className="search-field-wrapper">
+                        <div className="search-field-wrapper" ref={searchFieldWrapperRef}>
                             <input
                                 type="text"
                                 value={query}
@@ -1708,19 +1868,26 @@ function AddAnimeScreen({
                                 placeholder="作品タイトルを入力（日本語・英語可）"
                                 disabled={isSearching}
                                 className="search-input"
-                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                                 onFocus={() => {
                                     if (query.trim().length >= 2) setShowSuggestions(true);
                                 }}
                             />
 
                             {showSuggestions && isSuggesting && (
-                                <div className="suggestions-loading">候補を検索中...</div>
+                                <div
+                                    className="suggestions-loading"
+                                    style={suggestionsDropdownStyle}
+                                >
+                                    候補を検索中...
+                                </div>
                             )}
 
                             {/* Suggestions Dropdown */}
                             {showSuggestions && suggestions.length > 0 && (
-                                <div className="suggestions-dropdown">
+                                <div
+                                    className="suggestions-dropdown"
+                                    style={suggestionsDropdownStyle}
+                                >
                                     {suggestions.map((anime) => (
                                         <div
                                             key={anime.id}
@@ -2106,6 +2273,20 @@ function AddAnimeScreen({
                                 </div>
                             </div>
 
+                            {isBrowseBusy && (
+                                <div className="browse-loading-state" role="status" aria-live="polite">
+                                    <div className="browse-loading-inline">
+                                        <span className="browse-loading-spinner" aria-hidden="true" />
+                                        <span className="browse-loading-text">{browseLoadingLabel}</span>
+                                    </div>
+                                    {browseLoading && (
+                                        <div className="browse-loading-note">
+                                            回線状況により数秒かかる場合があります。
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {browseLoading && (
                                 <div className="browse-skeleton-grid">
                                     {Array.from({ length: 8 }).map((_, idx) => (
@@ -2130,7 +2311,7 @@ function AddAnimeScreen({
                                                 type="button"
                                                 className="browse-page-button"
                                                 onClick={() => handleBrowsePageChange(browseCurrentPage - 1)}
-                                                disabled={browseCurrentPage <= 1}
+                                                disabled={browseCurrentPage <= 1 || isBrowseBusy}
                                             >
                                                 前ページ
                                             </button>
@@ -2141,7 +2322,7 @@ function AddAnimeScreen({
                                                 type="button"
                                                 className="browse-page-button"
                                                 onClick={() => handleBrowsePageChange(browseCurrentPage + 1)}
-                                                disabled={browseCurrentPage >= browseLastPage}
+                                                disabled={browseCurrentPage >= browseLastPage || isBrowseBusy}
                                             >
                                                 次ページ
                                             </button>
@@ -2170,7 +2351,7 @@ function AddAnimeScreen({
                                     )}
 
                                     {browseVisibleResults.length === 0 ? (
-                                        <div className="browse-filter-empty">条件に一致する作品はありません。</div>
+                                        <div className="browse-filter-empty">該当なし（条件に一致する作品はありません）</div>
                                     ) : (
                                         <div className="browse-card-grid">
                                             {browsePagedResults.map((anime) => {
@@ -2228,7 +2409,7 @@ function AddAnimeScreen({
                                                 type="button"
                                                 className="browse-page-button"
                                                 onClick={() => handleBrowsePageChange(browseCurrentPage - 1)}
-                                                disabled={browseCurrentPage <= 1}
+                                                disabled={browseCurrentPage <= 1 || isBrowseBusy}
                                             >
                                                 前ページ
                                             </button>
@@ -2239,7 +2420,7 @@ function AddAnimeScreen({
                                                 type="button"
                                                 className="browse-page-button"
                                                 onClick={() => handleBrowsePageChange(browseCurrentPage + 1)}
-                                                disabled={browseCurrentPage >= browseLastPage}
+                                                disabled={browseCurrentPage >= browseLastPage || isBrowseBusy}
                                             >
                                                 次ページ
                                             </button>
@@ -2360,7 +2541,11 @@ function AddAnimeScreen({
                 </div>
             )}
 
-            <nav className="screen-bottom-home-nav" aria-label="画面移動">
+            <nav
+                ref={bottomHomeNavRef}
+                className={`screen-bottom-home-nav ${isSuggestionPanelVisible ? 'hidden-while-suggesting' : ''}`}
+                aria-label="画面移動"
+            >
                 <button type="button" className="screen-bottom-home-button" onClick={onBack}>
                     {backButtonLabel}
                 </button>
