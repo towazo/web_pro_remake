@@ -139,6 +139,28 @@ const parsePositiveMs = (value) => {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
+const buildApiRateLimitCountdownMessage = (countdownSec = 0) => {
+    const safeCountdown = Math.max(0, Math.floor(Number(countdownSec) || 0));
+    if (safeCountdown > 0) {
+        return `現在APIのアクセス制限中です。あと${safeCountdown}秒で再度利用可能になります。`;
+    }
+    return '現在APIのアクセス制限中です。まもなく再度利用可能になります。';
+};
+
+const buildApiRateLimitMessage = (retryAfterMs = 0) => {
+    const waitMs = parsePositiveMs(retryAfterMs);
+    const waitSec = waitMs > 0 ? Math.max(1, Math.ceil(waitMs / 1000)) : 0;
+    return buildApiRateLimitCountdownMessage(waitSec);
+};
+
+const buildBulkRateLimitInterruptedMessage = (retryAfterMs = 0) => {
+    const waitMs = parsePositiveMs(retryAfterMs);
+    const retryText = waitMs > 0
+        ? `あと${Math.max(1, Math.ceil(waitMs / 1000))}秒で再試行できます。`
+        : '時間をおいて再試行してください。';
+    return `検索途中でAPIのアクセス制限に達したため、すべてを検索できませんでした。${retryText}`;
+};
+
 const getRetryUntilTs = (retryAfterMs = 0) => {
     const waitMs = parsePositiveMs(retryAfterMs);
     return waitMs > 0 ? Date.now() + waitMs : 0;
@@ -413,6 +435,7 @@ function AddAnimeScreen({
     const [browseLoading, setBrowseLoading] = useState(false);
     const [browsePageSwitching, setBrowsePageSwitching] = useState(false);
     const [browseError, setBrowseError] = useState('');
+    const [browseErrorType, setBrowseErrorType] = useState('');
     const [browseReloadToken, setBrowseReloadToken] = useState(0);
     const [browseRetryUntilTs, setBrowseRetryUntilTs] = useState(0);
     const [browseRetryCountdownSec, setBrowseRetryCountdownSec] = useState(0);
@@ -645,7 +668,7 @@ function AddAnimeScreen({
                         setSuggestionRetryUntilTs(getRetryUntilTs(retryAfterMs));
                         setSuggestionFeedback({
                             type: 'warning',
-                            message: buildRateLimitMessage(retryAfterMs, '候補取得を一時停止しています。')
+                            message: buildApiRateLimitMessage(retryAfterMs)
                         });
                     } else if (requestIssue.upstreamError) {
                         setSuggestionFeedback({
@@ -659,9 +682,18 @@ function AddAnimeScreen({
                         });
                     }
                 } else {
-                    setSuggestionRetryUntilTs(0);
-                    setSuggestionRetryCountdownSec(0);
-                    setSuggestionFeedback({ type: '', message: '' });
+                    if (requestIssue.rateLimited) {
+                        const retryAfterMs = parsePositiveMs(requestIssue.retryAfterMs);
+                        setSuggestionRetryUntilTs(getRetryUntilTs(retryAfterMs));
+                        setSuggestionFeedback({
+                            type: 'warning',
+                            message: buildApiRateLimitMessage(retryAfterMs)
+                        });
+                    } else {
+                        setSuggestionRetryUntilTs(0);
+                        setSuggestionRetryCountdownSec(0);
+                        setSuggestionFeedback({ type: '', message: '' });
+                    }
                 }
             } catch (error) {
                 if (autocompleteRequestIdRef.current !== requestId) return;
@@ -677,7 +709,7 @@ function AddAnimeScreen({
                     setSuggestionRetryUntilTs(getRetryUntilTs(retryAfterMs));
                     setSuggestionFeedback({
                         type: 'warning',
-                        message: buildRateLimitMessage(retryAfterMs, '候補取得を一時停止しています。')
+                        message: buildApiRateLimitMessage(retryAfterMs)
                     });
                 } else {
                     setSuggestionRetryUntilTs(0);
@@ -1000,19 +1032,19 @@ function AddAnimeScreen({
         browseRequestIdRef.current = requestId;
         setBrowseLoading(true);
         setBrowseError('');
+        setBrowseErrorType('');
 
         const run = async () => {
             browseInFlightRef.current += 1;
             const inFlightNow = browseInFlightRef.current;
             const requestIssue = createRequestIssueState();
-            const sourceLabel = normalizedBrowsePreset ? '作品リスト' : '年代リスト';
             let instantRateLimitHandled = false;
             const applyBrowseRateLimitUi = (retryAfterMsInput = 0) => {
                 if (browseRequestIdRef.current !== requestId) return;
                 const retryAfterMs = parsePositiveMs(retryAfterMsInput) || parsePositiveMs(requestIssue.retryAfterMs);
                 const fallbackEntry = browseDataKey ? BROWSE_RESULTS_CACHE.get(browseDataKey) : null;
                 const fallbackItems = Array.isArray(fallbackEntry?.items) ? fallbackEntry.items : [];
-                const message = buildRateLimitMessage(retryAfterMs, `${sourceLabel}の取得を一時停止しています。`);
+                const message = buildApiRateLimitMessage(retryAfterMs);
                 if (retryAfterMs > 0) {
                     const retryUntil = getRetryUntilTs(retryAfterMs);
                     setBrowseRetryUntilTs(retryUntil);
@@ -1030,10 +1062,12 @@ function AddAnimeScreen({
                 if (fallbackItems.length > 0) {
                     setBrowseResults(fallbackItems);
                     setBrowsePage(1);
+                    setBrowseErrorType('rate_limit');
                     setBrowseError(`${message} 前回取得した一覧を表示しています。`);
                 } else {
                     setBrowseResults([]);
                     setBrowsePage(1);
+                    setBrowseErrorType('rate_limit');
                     setBrowseError(message);
                 }
                 setBrowseLoading(false);
@@ -1059,6 +1093,7 @@ function AddAnimeScreen({
                     setBrowseResults(cachedItems);
                     setBrowsePage(1);
                     setBrowseError('');
+                    setBrowseErrorType('');
                     if (normalizedBrowsePreset && browseReloadToken === 0) {
                         if (isDevRuntime) {
                             console.info('[AddAnimeScreen] browse cache hit', {
@@ -1162,7 +1197,7 @@ function AddAnimeScreen({
                     const isRateLimit = statusCode === 429 || hasRateLimitError(error?.message);
                     const retryAfterMs = parsePositiveMs(error?.retryAfterMs) || parsePositiveMs(requestIssue.retryAfterMs);
                     const baseMessage = isRateLimit
-                        ? buildRateLimitMessage(retryAfterMs, `${sourceLabel}の取得を一時停止しています。`)
+                        ? buildApiRateLimitMessage(retryAfterMs)
                         : `${sourceLabel}の取得に失敗しました。時間をおいて再試行してください。`;
                     const debugMessage = (typeof import.meta !== 'undefined' && import.meta.env?.DEV)
                         ? ` (${error.message || 'unknown error'})`
@@ -1186,16 +1221,19 @@ function AddAnimeScreen({
                     if (fallbackItems.length > 0) {
                         setBrowseResults(fallbackItems);
                         setBrowsePage(1);
+                        setBrowseErrorType(isRateLimit ? 'rate_limit' : 'upstream');
                         setBrowseError(`${baseMessage} 前回取得した一覧を表示しています。${debugMessage}`);
                     } else {
                         setBrowseResults([]);
                         setBrowsePage(1);
+                        setBrowseErrorType(isRateLimit ? 'rate_limit' : 'upstream');
                         setBrowseError(`${baseMessage}${debugMessage}`);
                     }
                 } else if (!safeItems || safeItems.length === 0) {
                     setBrowseResults([]);
                     setBrowsePage(1);
                     setBrowseError('');
+                    setBrowseErrorType('');
                     setBrowseRetryUntilTs(0);
                     setBrowseAutoRetryPlan(null);
                 } else {
@@ -1208,9 +1246,32 @@ function AddAnimeScreen({
                         });
                         browseAutoRetryCountRef.current.set(browseDataKey, 0);
                     }
-                    setBrowseError('');
-                    setBrowseRetryUntilTs(0);
-                    setBrowseAutoRetryPlan(null);
+                    const statusCode = Number(error?.status) || 0;
+                    const isRateLimit = Boolean(error) && (statusCode === 429 || hasRateLimitError(error?.message));
+                    const retryAfterMs = parsePositiveMs(error?.retryAfterMs) || parsePositiveMs(requestIssue.retryAfterMs);
+                    if (isRateLimit) {
+                        if (retryAfterMs > 0) {
+                            const retryUntil = getRetryUntilTs(retryAfterMs);
+                            setBrowseRetryUntilTs(retryUntil);
+                            const key = browseDataKey || `year:${selectedBrowseYear}`;
+                            const autoRetryCount = Number(browseAutoRetryCountRef.current.get(key) || 0);
+                            if (autoRetryCount < 2) {
+                                setBrowseAutoRetryPlan({ key, runAt: retryUntil });
+                            } else {
+                                setBrowseAutoRetryPlan(null);
+                            }
+                        } else {
+                            setBrowseRetryUntilTs(0);
+                            setBrowseAutoRetryPlan(null);
+                        }
+                        setBrowseErrorType('rate_limit');
+                        setBrowseError(buildApiRateLimitMessage(retryAfterMs));
+                    } else {
+                        setBrowseError('');
+                        setBrowseErrorType('');
+                        setBrowseRetryUntilTs(0);
+                        setBrowseAutoRetryPlan(null);
+                    }
                 }
 
                 if (isDevRuntime) {
@@ -1663,11 +1724,8 @@ function AddAnimeScreen({
                 setBulkRetryUntilTs((prev) => Math.max(prev, getRetryUntilTs(retryAfterMs)));
             }
             setStatus({
-                type: 'error',
-                message: buildRateLimitMessage(
-                    retryAfterMs,
-                    '一括取得を一時停止しています。'
-                )
+                type: 'info',
+                message: buildBulkRateLimitInterruptedMessage(retryAfterMs)
             });
         };
 
@@ -2041,12 +2099,9 @@ function AddAnimeScreen({
                 const notFoundHint = notFound.length > 0
                     ? ` 未ヒット ${notFound.length} 件は別枠で表示しています。`
                     : '';
-                const pausedMessage = buildRateLimitMessage(
-                    effectiveRetryAfterMs,
-                    `一括検索を一時停止しました。アクセス制限対象 ${rateLimited.length} 件を保留にしています。`
-                );
+                const pausedMessage = buildBulkRateLimitInterruptedMessage(effectiveRetryAfterMs);
                 setStatus({
-                    type: 'error',
+                    type: 'info',
                     message: `${pausedMessage}${upstreamHint}${notFoundHint}`
                 });
             } else if (fetchFailed.length > 0) {
@@ -2070,8 +2125,8 @@ function AddAnimeScreen({
             if (bulkRateLimitMeta.detected) {
                 const waitMs = parsePositiveMs(bulkRateLimitMeta.retryAfterMs);
                 setStatus({
-                    type: 'error',
-                    message: buildRateLimitMessage(waitMs, '一括検索を一時停止しています。')
+                    type: 'info',
+                    message: buildBulkRateLimitInterruptedMessage(waitMs)
                 });
                 setShowReview(true);
             } else {
@@ -2320,7 +2375,6 @@ function AddAnimeScreen({
             skipped: skippedCount,
             target: bulkTarget
         });
-        setBulkOverflowInfo(null);
         setIsBulkComplete(true);
     };
 
@@ -2692,7 +2746,6 @@ function AddAnimeScreen({
         setBulkCurrentTitle('');
         setBulkResults(createBulkResultsState());
         setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
-        setBulkOverflowInfo(null);
         setBulkNotFoundStatus({});
         setBulkFailedStatus({});
         setBulkRetryUntilTs(0);
@@ -2734,6 +2787,9 @@ function AddAnimeScreen({
     const browsePaginationLabel = normalizedBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
     const isBrowseBusy = browseLoading || browsePageSwitching;
     const browseLoadingLabel = browseLoading ? '作品を取得中です…' : 'ページを切り替えています…';
+    const browseErrorMessage = browseErrorType === 'rate_limit' && browseRetryCountdownSec > 0
+        ? buildApiRateLimitCountdownMessage(browseRetryCountdownSec)
+        : browseError;
     const canRetryNormalSearch = entryTab === 'search'
         && mode === 'normal'
         && status.type === 'error'
@@ -2747,18 +2803,20 @@ function AddAnimeScreen({
     const disableBulkFailedRetry = isSearching || (bulkResults.rateLimited.length > 0 && bulkRetryCountdownSec > 0);
     const renderBulkOverflowNotice = () => {
         if (!bulkOverflowInfo) return null;
-        const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '';
+        const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '不明';
         return (
             <div className="bulk-overflow-notice">
+                <div className="bulk-overflow-label">上限超過専用リスト</div>
                 <div className="bulk-overflow-header">
-                    <strong>{`上限超過を検知: ${bulkOverflowInfo.totalEntered} 件入力 / ${bulkOverflowInfo.keptCount} 件を処理対象に維持`}</strong>
+                    <strong>前回の検索で件数上限を超えたため、検索対象から除外された作品です。</strong>
                     <span>{`${bulkOverflowInfo.removedCount} 件を ${bulkOverflowInfo.rule}`}</span>
                 </div>
-                {cutoffTitle && (
-                    <div className="bulk-overflow-cutoff">
-                        {`除外開始作品: 「${cutoffTitle}」以降の作品は除外されています。`}
-                    </div>
-                )}
+                <div className="bulk-overflow-summary">
+                    {`${bulkOverflowInfo.totalEntered} 件入力 / ${bulkOverflowInfo.keptCount} 件を検索対象に維持`}
+                </div>
+                <div className="bulk-overflow-cutoff">
+                    {`除外開始作品: 「${cutoffTitle}」以降の作品は除外されています。`}
+                </div>
                 <div className="bulk-overflow-actions">
                     <button
                         type="button"
@@ -2778,7 +2836,7 @@ function AddAnimeScreen({
                     </button>
                 </div>
                 <details className="bulk-overflow-details">
-                    <summary>除外された作品一覧を表示</summary>
+                    <summary>上限超過専用リストを表示</summary>
                     <ul className="bulk-overflow-list">
                         {bulkOverflowInfo.removedTitles.map((title, idx) => (
                             <li key={`${title}-${idx}`}>{title}</li>
@@ -2982,6 +3040,30 @@ function AddAnimeScreen({
                                     className="suggestions-dropdown"
                                     style={suggestionsDropdownStyle}
                                 >
+                                    {suggestionFeedback.type === 'warning' && suggestionFeedback.message && (
+                                        <div className="suggestions-inline-warning" role="status" aria-live="polite">
+                                            <div className="suggestions-inline-warning-text">
+                                                {suggestionRetryCountdownSec > 0
+                                                    ? buildApiRateLimitCountdownMessage(suggestionRetryCountdownSec)
+                                                    : suggestionFeedback.message}
+                                            </div>
+                                            <div className="suggestions-inline-warning-actions">
+                                                {suggestionRetryCountdownSec > 0 && (
+                                                    <div className="suggestions-status-meta">
+                                                        再試行まで: {suggestionRetryCountdownSec}秒
+                                                    </div>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="suggestions-status-retry-button"
+                                                    onClick={handleSuggestionRetry}
+                                                    disabled={isSuggesting || suggestionRetryCountdownSec > 0 || query.trim().length < 2}
+                                                >
+                                                    候補を再取得
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                     {suggestions.map((anime) => {
                                         const suggestionRating = normalizeRatingValue(suggestionRatingById[anime.id]);
                                         const isAutoSelected = suggestionRating !== null;
@@ -3263,13 +3345,13 @@ function AddAnimeScreen({
                                 )}
 
                                 {!isBulkComplete && bulkFailureCount > 0 && (
-                                    <div className="review-section error">
-                                        <h4>要再試行（アクセス制限/サーバーエラー） ({bulkFailureCount})</h4>
+                                    <div className="review-section warning">
+                                        <h4>検索未完了（アクセス制限/取得失敗） ({bulkFailureCount})</h4>
                                         <div className="bulk-failure-guide">
                                             {bulkResults.rateLimited.length > 0 && (
                                                 <>
-                                                    <div className="bulk-notfound-hint warning strong">短時間に検索が集中したため、一時的に検索できません。</div>
-                                                    <div className="bulk-notfound-hint warning">しばらく時間をおいてから再試行してください。</div>
+                                                    <div className="bulk-notfound-hint warning strong">検索途中でAPIのアクセス制限に達したため、すべてを検索できませんでした。</div>
+                                                    <div className="bulk-notfound-hint warning">制限解除後に再試行してください。</div>
                                                     <div className="bulk-notfound-hint">{bulkRetryWaitMessage}</div>
                                                 </>
                                             )}
@@ -3382,8 +3464,6 @@ function AddAnimeScreen({
                                     </div>
                                 )}
                             </div>
-
-                            {!isBulkComplete && renderBulkOverflowNotice()}
 
                             <div className="bulk-actions grouped">
                                 {!isBulkComplete ? (
@@ -3602,8 +3682,12 @@ function AddAnimeScreen({
                                     </div>
 
                                     {browseError && (
-                                        <div className="browse-error-message" role="alert" aria-live="polite">
-                                            <div className="browse-error-text">{browseError}</div>
+                                        <div
+                                            className={`browse-error-message ${browseErrorType === 'rate_limit' ? 'rate-limit' : 'error'}`}
+                                            role={browseErrorType === 'rate_limit' ? 'status' : 'alert'}
+                                            aria-live="polite"
+                                        >
+                                            <div className="browse-error-text">{browseErrorMessage}</div>
                                             <div className="browse-error-actions">
                                                 {browseRetryCountdownSec > 0 && (
                                                     <span className="browse-retry-countdown">
@@ -3801,6 +3885,12 @@ function AddAnimeScreen({
                 </div>
             )}
 
+            {entryTab === 'search' && bulkOverflowInfo && (
+                <div className="pending-overflow-container">
+                    {renderBulkOverflowNotice()}
+                </div>
+            )}
+
             {/* Persistent Pending Checklist */}
             {entryTab === 'search' && pendingList.length > 0 && (
                 <div className="pending-list-container">
@@ -3816,7 +3906,7 @@ function AddAnimeScreen({
                         </div>
                     </div>
                     <div className="pending-list-description">
-                        一括追加で未ヒットだった作品や、アクセス制限で保留になった作品、サーバーエラーで取得失敗した作品、または除外した作品です。必要に応じて再検索してください。
+                        一括追加で未ヒットだった作品や、アクセス制限で保留になった作品、サーバーエラーで取得失敗した作品です。必要に応じて再検索してください。
                     </div>
                     <ul className="pending-checklist">
                         {pendingList.map((title, index) => (

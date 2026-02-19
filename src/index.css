@@ -3311,6 +3311,32 @@ body {
     cursor: not-allowed;
 }
 
+.suggestions-inline-warning {
+    border-bottom: 1px solid #e7d9a8;
+    background: #fffbea;
+    padding: 10px 12px;
+}
+
+.suggestions-inline-warning-text {
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.5;
+    color: #5f4a00;
+}
+
+.suggestions-inline-warning-actions {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.suggestions-inline-warning .suggestions-status-meta {
+    margin-top: 0;
+    color: #6b5500;
+}
+
 .suggestions-dropdown {
     position: absolute;
     top: 100%;
@@ -3803,12 +3829,24 @@ body {
 }
 
 .browse-error-message {
-    border: 1px solid #f1c6c6;
-    background: #fff2f2;
-    color: #8b2d2d;
+    border: 1px solid #d8d8d8;
+    background: #fafafa;
+    color: #333;
     padding: 10px 12px;
     font-size: 0.85rem;
     margin-bottom: 10px;
+}
+
+.browse-error-message.error {
+    border-color: #f1c6c6;
+    background: #fff2f2;
+    color: #8b2d2d;
+}
+
+.browse-error-message.rate-limit {
+    border-color: #e7d9a8;
+    background: #fffbea;
+    color: #5f4a00;
 }
 
 .browse-error-text {
@@ -3831,7 +3869,15 @@ body {
 .browse-retry-countdown {
     font-size: 0.8rem;
     font-weight: 700;
+    color: #4f4f4f;
+}
+
+.browse-error-message.error .browse-retry-countdown {
     color: #8b2d2d;
+}
+
+.browse-error-message.rate-limit .browse-retry-countdown {
+    color: #6b5500;
 }
 
 .browse-filter-empty {
@@ -4353,11 +4399,22 @@ body {
 
 .bulk-overflow-notice {
     margin-top: 12px;
-    border: 1px solid #b91c1c;
-    border-left: 6px solid #dc2626;
-    background: #fef2f2;
-    box-shadow: 0 2px 8px rgba(185, 28, 28, 0.12);
+    border: 1px solid #b6c8dc;
+    border-left: 6px solid #5c7fa3;
+    background: #f4f8fc;
+    box-shadow: 0 2px 8px rgba(30, 64, 96, 0.1);
     padding: 10px 12px;
+}
+
+.bulk-overflow-label {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #274564;
+    background: #e4edf6;
+    border: 1px solid #b6c8dc;
+    padding: 2px 8px;
 }
 
 .bulk-overflow-header {
@@ -4367,18 +4424,25 @@ body {
     gap: 10px;
     flex-wrap: wrap;
     font-size: 0.82rem;
-    color: #7f1d1d;
+    color: #274564;
+    margin-top: 8px;
 }
 
 .bulk-overflow-header strong {
     font-size: 0.86rem;
 }
 
+.bulk-overflow-summary {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: #385a7d;
+}
+
 .bulk-overflow-cutoff {
     margin-top: 8px;
     font-size: 0.82rem;
     font-weight: 700;
-    color: #991b1b;
+    color: #1f3e5e;
 }
 
 .bulk-overflow-actions {
@@ -4394,7 +4458,7 @@ body {
 .bulk-overflow-details summary {
     cursor: pointer;
     font-size: 0.8rem;
-    color: #7f1d1d;
+    color: #274564;
     font-weight: 700;
 }
 
@@ -4959,6 +5023,14 @@ body {
 }
 
 /* Pending List Checklist */
+.pending-overflow-container {
+    margin-top: 40px;
+}
+
+.pending-overflow-container .bulk-overflow-notice {
+    margin-top: 0;
+}
+
 .pending-list-container {
     margin-top: 60px;
     padding: 30px;
