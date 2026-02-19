@@ -2,6 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
 
 const LONG_PRESS_MS = 450;
+const RATING_VALUES = [1, 2, 3, 4, 5];
+
+const normalizeRating = (value) => {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return null;
+  if (parsed < 1 || parsed > 5) return null;
+  return parsed;
+};
 
 function BookmarkScreen({
   bookmarkList = [],
@@ -17,6 +25,8 @@ function BookmarkScreen({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedBookmarkIds, setSelectedBookmarkIds] = useState([]);
   const [actionNotice, setActionNotice] = useState({ type: '', message: '' });
+  const [pendingRatingById, setPendingRatingById] = useState({});
+  const [ratingTargetId, setRatingTargetId] = useState(null);
   const watchedIdSet = useMemo(
     () => new Set((watchedAnimeList || []).map((anime) => anime.id)),
     [watchedAnimeList]
@@ -34,6 +44,17 @@ function BookmarkScreen({
       prev.filter((id) => sortedBookmarks.some((anime) => anime.id === id))
     );
   }, [sortedBookmarks]);
+
+  useEffect(() => {
+    if (!isSelectionMode) return;
+    setRatingTargetId(null);
+  }, [isSelectionMode]);
+
+  useEffect(() => {
+    if (ratingTargetId == null) return;
+    if (sortedBookmarks.some((anime) => anime.id === ratingTargetId)) return;
+    setRatingTargetId(null);
+  }, [sortedBookmarks, ratingTargetId]);
 
   useEffect(() => {
     return () => {
@@ -94,19 +115,42 @@ function BookmarkScreen({
     setSelectedBookmarkIds([]);
   };
 
-  const handleMarkWatched = (anime, event) => {
+  const handleMarkWatched = (anime, event, rating = null) => {
     event.stopPropagation();
     if (typeof onMarkWatched !== 'function') {
       setActionNotice({ type: 'error', message: 'マイリスト登録を実行できませんでした。' });
       return;
     }
     const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
-    const result = onMarkWatched(anime);
+    const normalizedRating = normalizeRating(rating);
+    const result = onMarkWatched(anime, { rating: normalizedRating });
     if (result?.success) {
+      setRatingTargetId(null);
       setActionNotice({ type: 'success', message: `「${title}」をマイリストに追加しました。` });
     } else {
       setActionNotice({ type: 'error', message: result?.message || 'マイリスト追加に失敗しました。' });
     }
+  };
+
+  const handleOpenRatingPanel = (anime, event) => {
+    event.stopPropagation();
+    if (!anime || typeof anime.id !== 'number') return;
+    setRatingTargetId((prev) => (prev === anime.id ? null : anime.id));
+    setPendingRatingById((prev) => {
+      if (Object.prototype.hasOwnProperty.call(prev, anime.id)) return prev;
+      return { ...prev, [anime.id]: null };
+    });
+  };
+
+  const handleCloseRatingPanel = (animeId, event) => {
+    event.stopPropagation();
+    if (ratingTargetId !== animeId) return;
+    setRatingTargetId(null);
+  };
+
+  const handleDraftRatingSelect = (animeId, rating, event) => {
+    event.stopPropagation();
+    setPendingRatingById((prev) => ({ ...prev, [animeId]: normalizeRating(rating) }));
   };
 
   return (
@@ -164,6 +208,8 @@ function BookmarkScreen({
             const isWatched = watchedIdSet.has(anime.id);
             const isSelected = selectedBookmarkIds.includes(anime.id);
             const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品名不明';
+            const draftRating = normalizeRating(pendingRatingById[anime.id]);
+            const isRatingPanelOpen = ratingTargetId === anime.id;
             return (
               <article
                 key={anime.id}
@@ -210,11 +256,60 @@ function BookmarkScreen({
                           </button>
                           <button
                             type="button"
-                            className="bookmark-mark-watched-button"
-                            onClick={(event) => handleMarkWatched(anime, event)}
+                            className={`bookmark-mark-watched-button${isRatingPanelOpen ? ' active' : ''}`}
+                            onClick={(event) => handleOpenRatingPanel(anime, event)}
+                            aria-expanded={isRatingPanelOpen}
+                            aria-controls={`bookmark-rating-panel-${anime.id}`}
                           >
-                            ✓ 視聴した（マイリストへ）
+                            {isRatingPanelOpen ? '✓ 評価入力を閉じる' : '✓ マイリストへ追加（評価）'}
                           </button>
+                          {isRatingPanelOpen && (
+                            <div
+                              id={`bookmark-rating-panel-${anime.id}`}
+                              className="bookmark-rating-panel"
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => event.stopPropagation()}
+                            >
+                              <p className="bookmark-rating-label">評価（任意）</p>
+                              <div className="bookmark-rating-stars" role="group" aria-label="評価を選択">
+                                {RATING_VALUES.map((value) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    className={`bookmark-rating-star ${draftRating !== null && draftRating >= value ? 'active' : ''}`}
+                                    onClick={(event) => handleDraftRatingSelect(anime.id, value, event)}
+                                  >
+                                    ★
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="bookmark-rating-actions">
+                                <button
+                                  type="button"
+                                  className="bookmark-rating-clear"
+                                  onClick={(event) => handleDraftRatingSelect(anime.id, null, event)}
+                                  title="評価をクリア"
+                                  aria-label="評価をクリア"
+                                >
+                                  クリア
+                                </button>
+                                <button
+                                  type="button"
+                                  className="bookmark-rating-submit"
+                                  onClick={(event) => handleMarkWatched(anime, event, draftRating)}
+                                >
+                                  マイリストへ追加
+                                </button>
+                                <button
+                                  type="button"
+                                  className="bookmark-rating-cancel"
+                                  onClick={(event) => handleCloseRatingPanel(anime.id, event)}
+                                >
+                                  キャンセル
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </>

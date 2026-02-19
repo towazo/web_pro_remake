@@ -5,7 +5,6 @@ import {
   filterDisplayEligibleAnimeList,
   filterOutHentaiAnimeList,
   isDisplayEligibleAnime,
-  isHentaiAnime,
 } from '../utils/contentFilters';
 
 const ANILIST_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV)
@@ -1592,7 +1591,6 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
   const allowUnknownFormat = options.allowUnknownFormat !== false;
   const allowUnknownCountry = options.allowUnknownCountry !== false;
   const formatIn = resolveAllowedFormats(options.formatIn, DEFAULT_YEAR_FORMATS);
-  const formatInSet = new Set(formatIn);
   const { country: countryOfOrigin } = resolveCountryPreference(options, DEFAULT_COUNTRY_OF_ORIGIN);
   const queryFormatIn = formatIn;
   const queryCountryOfOrigin = countryOfOrigin;
@@ -1736,27 +1734,19 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
       ? pageInfoRaw.hasNextPage
       : null;
     const rawItems = Array.isArray(pageData?.media) ? pageData.media : [];
+    const eligibilityOptions = {
+      allowUnknownFormat,
+      allowUnknownCountry,
+      allowedFormats: formatIn,
+      countryOfOrigin: countryOfOrigin || undefined,
+    };
     const normalizedItems = rawItems.filter((item) => {
-      const itemCountryOfOrigin = normalizeCountryValue(item?.countryOfOrigin);
-      if (countryOfOrigin) {
-        if (itemCountryOfOrigin) {
-          if (itemCountryOfOrigin !== countryOfOrigin) return false;
-        } else if (!allowUnknownCountry) {
-          return false;
-        }
-      }
-
-      const itemFormat = normalizeMediaFormatValue(item?.format);
-      if (itemFormat) {
-        if (formatInSet.size > 0 && !formatInSet.has(itemFormat)) return false;
-      } else if (!allowUnknownFormat) {
-        return false;
-      }
+      if (!isDisplayEligibleAnime(item, eligibilityOptions)) return false;
 
       if (hasSeasonFilter) {
         const itemYear = Number(item?.seasonYear);
         const itemSeason = String(item?.season || '').toUpperCase();
-        if (itemYear !== year || itemSeason !== season || isHentaiAnime(item)) return false;
+        if (itemYear !== year || itemSeason !== season) return false;
         if (hasStatusFilter) {
           const itemStatus = String(item?.status || '').trim();
           if (statusIn && !statusIn.includes(itemStatus)) return false;
@@ -1764,7 +1754,7 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
         }
         return true;
       }
-      if (Number(item?.startDate?.year) !== year || isHentaiAnime(item)) return false;
+      if (Number(item?.startDate?.year) !== year) return false;
       if (hasStatusFilter) {
         const itemStatus = String(item?.status || '').trim();
         if (statusIn && !statusIn.includes(itemStatus)) return false;

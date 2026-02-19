@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
 
+const normalizeAnimeRating = (value) => {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) return null;
+    if (parsed < 1 || parsed > 5) return null;
+    return parsed;
+};
+
 function Hero({ anime, isActive }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
@@ -90,6 +97,7 @@ function Hero({ anime, isActive }) {
     const heroImageSrc = anime.bannerImage || coverExtraLarge || coverLarge || '';
     const posterImageSrc = coverExtraLarge || coverLarge || '';
     const mediaImageSrc = hasBannerImage ? anime.bannerImage : posterImageSrc;
+    const rating = normalizeAnimeRating(anime?.rating);
     const heroImageSrcSet = !hasBannerImage
         ? [coverLarge ? `${coverLarge} 1x` : '', coverExtraLarge ? `${coverExtraLarge} 2x` : '']
             .filter(Boolean)
@@ -128,6 +136,12 @@ function Hero({ anime, isActive }) {
                     <span>{anime.genres ? anime.genres.slice(0, 3).map(translateGenre).join(' / ') : ''}</span>
                     <span className="dot">•</span>
                     <span>{anime.episodes || '?'} 話</span>
+                    {rating !== null && (
+                        <>
+                            <span className="dot">•</span>
+                            <span className="hero-rating" aria-label={`評価 ${rating} / 5`}>★{rating}</span>
+                        </>
+                    )}
                 </div>
 
                 {isTranslating ? (

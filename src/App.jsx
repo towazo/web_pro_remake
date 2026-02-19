@@ -36,10 +36,23 @@ import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
  * Responsible for routing, global state management, and data orchestration.
  */
 function App() {
+  const normalizeAnimeRating = (value) => {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) return null;
+    if (parsed < 1 || parsed > 5) return null;
+    return parsed;
+  };
+
   const sanitizeAnimeList = (list) => filterDisplayEligibleAnimeList(Array.isArray(list) ? list : [], {
     // Keep legacy items that do not include format/country metadata.
     allowUnknownFormat: true,
     allowUnknownCountry: true,
+  }).map((anime) => {
+    const normalizedRating = normalizeAnimeRating(anime?.rating);
+    if ((anime?.rating ?? null) === normalizedRating) {
+      return anime;
+    }
+    return { ...anime, rating: normalizedRating };
   });
 
   // Initialize state from localStorage if available
@@ -53,7 +66,7 @@ function App() {
   const [featuredSlides, setFeaturedSlides] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("All");
-  const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year'
+  const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year', 'rating'
   const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
@@ -300,15 +313,19 @@ function App() {
     window.scrollTo({ top: docH, behavior: 'smooth' });
   };
 
-  const handleAddAnime = (data) => {
+  const handleAddAnime = (data, options = {}) => {
+    if (!data || typeof data.id !== 'number') {
+      return { success: false, message: '作品情報を取得できませんでした。' };
+    }
     if (!isDisplayEligibleAnime(data, { allowUnknownFormat: true, allowUnknownCountry: true })) {
       return { success: false, message: 'この作品は表示対象外です。' };
     }
     if (animeList.some(a => a.id === data.id)) {
       return { success: false, message: 'その作品は既に追加されています。' };
     }
+    const rating = normalizeAnimeRating(options?.rating ?? data?.rating);
     // Add timestamp for "added" sort
-    const animeWithDate = { ...data, addedAt: Date.now() };
+    const animeWithDate = { ...data, rating, addedAt: Date.now() };
     setAnimeList(prev => sanitizeAnimeList([animeWithDate, ...prev]));
     setBookmarkList(prev => sanitizeAnimeList(prev.filter((anime) => anime.id !== data.id)));
     return { success: true };
@@ -317,6 +334,21 @@ function App() {
   const handleRemoveAnime = (id) => {
     setAnimeList(prev => {
       return prev.filter(anime => anime.id !== id);
+    });
+  };
+
+  const handleUpdateAnimeRating = (id, rating) => {
+    const normalizedRating = normalizeAnimeRating(rating);
+    setAnimeList((prev) => {
+      let changed = false;
+      const next = prev.map((anime) => {
+        if (anime.id !== id) return anime;
+        const currentRating = normalizeAnimeRating(anime.rating);
+        if (currentRating === normalizedRating) return anime;
+        changed = true;
+        return { ...anime, rating: normalizedRating };
+      });
+      return changed ? next : prev;
     });
   };
 
@@ -349,11 +381,11 @@ function App() {
     setBookmarkList((prev) => prev.filter((anime) => !removeIdSet.has(anime.id)));
   };
 
-  const handleMarkBookmarkAsWatched = (anime) => {
+  const handleMarkBookmarkAsWatched = (anime, options = {}) => {
     if (!anime || typeof anime.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
     }
-    return handleAddAnime(anime);
+    return handleAddAnime(anime, { rating: options?.rating });
   };
 
   const handleLongPressAnime = (id) => {
@@ -422,6 +454,10 @@ function App() {
         case 'year':
           valA = a.seasonYear || 0;
           valB = b.seasonYear || 0;
+          break;
+        case 'rating':
+          valA = normalizeAnimeRating(a.rating) || 0;
+          valB = normalizeAnimeRating(b.rating) || 0;
           break;
         case 'added':
         default:
@@ -597,6 +633,7 @@ function App() {
                   <option value="added">追加順</option>
                   <option value="title">タイトル順</option>
                   <option value="year">放送年順</option>
+                  <option value="rating">評価順</option>
                 </select>
                 <button
                   type="button"
@@ -635,6 +672,7 @@ function App() {
                   isSelected={selectedAnimeIds.includes(anime.id)}
                   onToggleSelect={handleToggleAnimeSelection}
                   onLongPress={handleLongPressAnime}
+                  onUpdateRating={handleUpdateAnimeRating}
                 />
               ))}
             </div>

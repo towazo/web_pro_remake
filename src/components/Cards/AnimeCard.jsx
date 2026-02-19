@@ -2,6 +2,14 @@ import { useEffect, useRef } from 'react';
 import { translateGenre } from '../../constants/animeData';
 
 const LONG_PRESS_MS = 450;
+const RATING_VALUES = [1, 2, 3, 4, 5];
+
+const normalizeRating = (value) => {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return null;
+  if (parsed < 1 || parsed > 5) return null;
+  return parsed;
+};
 
 function AnimeCard({
   anime,
@@ -10,9 +18,12 @@ function AnimeCard({
   isSelected = false,
   onToggleSelect,
   onLongPress,
+  onUpdateRating,
 }) {
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
+  const rating = normalizeRating(anime?.rating);
+  const canEditRating = typeof onUpdateRating === 'function' && !isSelectionMode;
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -60,6 +71,22 @@ function AnimeCard({
       event.preventDefault();
       onToggleSelect(anime.id);
     }
+  };
+
+  const handleRatingPointerDown = (event) => {
+    event.stopPropagation();
+  };
+
+  const handleRatingSelect = (event, value) => {
+    event.stopPropagation();
+    if (!canEditRating) return;
+    onUpdateRating(anime.id, value);
+  };
+
+  const handleRatingClear = (event) => {
+    event.stopPropagation();
+    if (!canEditRating) return;
+    onUpdateRating(anime.id, null);
   };
 
   return (
@@ -114,6 +141,37 @@ function AnimeCard({
           {anime.genres?.map((genre, index) => (
             <span key={index} className="meta-tag genre">{translateGenre(genre)}</span>
           ))}
+        </div>
+        <div className="card-rating-section">
+          <div className="card-rating-stars" role="group" aria-label="作品評価">
+            {RATING_VALUES.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`card-rating-star ${rating !== null && rating >= value ? 'active' : ''}`}
+                onPointerDown={handleRatingPointerDown}
+                onClick={(event) => handleRatingSelect(event, value)}
+                disabled={!canEditRating}
+                aria-label={`${value}つ星で評価`}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+          <div className="card-rating-actions">
+            <button
+              type="button"
+              className="card-rating-clear"
+              onPointerDown={handleRatingPointerDown}
+              onClick={handleRatingClear}
+              disabled={!canEditRating || rating === null}
+              title="評価をクリア"
+              aria-label="評価をクリア"
+            >
+              <span className="card-rating-clear-label-full">クリア</span>
+              <span className="card-rating-clear-label-compact">✕</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

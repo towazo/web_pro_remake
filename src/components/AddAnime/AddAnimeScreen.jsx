@@ -15,7 +15,7 @@ const ANILIST_SEASON_TO_FILTER_KEY = {
     SUMMER: 'summer',
     FALL: 'autumn'
 };
-const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'OVA', 'ONA', 'SPECIAL']);
+const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
 const BROWSE_RESULTS_CACHE = new Map();
 const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MESSAGE_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
@@ -171,6 +171,104 @@ const buildRateLimitMessage = (
     return `アクセスが集中しています。${detailMessage} ${retryText}`;
 };
 
+const RATING_VALUES = [1, 2, 3, 4, 5];
+
+const normalizeRatingValue = (value) => {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) return null;
+    if (parsed < 1 || parsed > 5) return null;
+    return parsed;
+};
+
+const InlineRatingPicker = ({
+    value = null,
+    onChange,
+    label = '評価（任意）',
+    className = ''
+}) => {
+    const normalizedValue = normalizeRatingValue(value);
+    const canEdit = typeof onChange === 'function';
+    return (
+        <div className={`inline-rating-picker${className ? ` ${className}` : ''}`}>
+            <div className="inline-rating-header">
+                <span className="inline-rating-label">{label}</span>
+                <button
+                    type="button"
+                    className="inline-rating-clear"
+                    onClick={() => canEdit && onChange(null)}
+                    disabled={!canEdit || normalizedValue === null}
+                    title="評価をクリア"
+                    aria-label="評価をクリア"
+                >
+                    クリア
+                </button>
+            </div>
+            <div className="inline-rating-stars" role="group" aria-label={label}>
+                {RATING_VALUES.map((rating) => (
+                    <button
+                        key={rating}
+                        type="button"
+                        className={`inline-rating-star ${normalizedValue !== null && normalizedValue >= rating ? 'active' : ''}`}
+                        onClick={() => canEdit && onChange(rating)}
+                        disabled={!canEdit}
+                        aria-label={`${rating}つ星`}
+                    >
+                        ★
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const MiniStarRating = ({
+    value = null,
+    onChange,
+    className = '',
+    ariaLabel = '評価'
+}) => {
+    const normalizedValue = normalizeRatingValue(value);
+    const canEdit = typeof onChange === 'function';
+    return (
+        <div
+            className={`mini-star-rating${className ? ` ${className}` : ''}`}
+            role="group"
+            aria-label={ariaLabel}
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+        >
+            {RATING_VALUES.map((rating) => (
+                <button
+                    key={rating}
+                    type="button"
+                    className={`mini-star-rating-button ${normalizedValue !== null && normalizedValue >= rating ? 'active' : ''}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        if (canEdit) onChange(rating);
+                    }}
+                    disabled={!canEdit}
+                    aria-label={`${rating}つ星`}
+                >
+                    ★
+                </button>
+            ))}
+            <button
+                type="button"
+                className="mini-star-rating-clear"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    if (canEdit) onChange(null);
+                }}
+                disabled={!canEdit || normalizedValue === null}
+                title="評価をクリア"
+                aria-label="評価をクリア"
+            >
+                ✕
+            </button>
+        </div>
+    );
+};
+
 function AddAnimeScreen({
     onAdd,
     onRemove,
@@ -244,7 +342,12 @@ function AddAnimeScreen({
     const [showGuide, setShowGuide] = useState(false);
     const [mode, setMode] = useState('normal'); // 'normal' or 'bulk'
     const [query, setQuery] = useState('');
+    const [normalTarget, setNormalTarget] = useState('mylist'); // mylist | bookmark
+    const [selectedSuggestionIds, setSelectedSuggestionIds] = useState([]);
+    const [normalAddRating, setNormalAddRating] = useState(null); // single preview add
+    const [suggestionRatingById, setSuggestionRatingById] = useState({});
     const [bulkQuery, setBulkQuery] = useState('');
+    const [bulkHitRatingById, setBulkHitRatingById] = useState({});
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isSuggesting, setIsSuggesting] = useState(false);
@@ -293,6 +396,7 @@ function AddAnimeScreen({
     const [selectedBrowseYear, setSelectedBrowseYear] = useState(() => (
         normalizedBrowsePreset ? normalizedBrowsePreset.year : null
     ));
+    const [browseRatingById, setBrowseRatingById] = useState({});
     const [browsePage, setBrowsePage] = useState(1);
     const [browseGenreFilters, setBrowseGenreFilters] = useState([]);
     const [browseSeasonFilters, setBrowseSeasonFilters] = useState(() => (
@@ -374,6 +478,28 @@ function AddAnimeScreen({
     );
     const addedAnimeIds = React.useMemo(() => new Set((animeList || []).map(a => a.id)), [animeList]);
     const bookmarkIdSet = React.useMemo(() => new Set((bookmarkList || []).map(a => a.id)), [bookmarkList]);
+    const autoSelectedSuggestionIdSet = React.useMemo(() => {
+        const next = new Set();
+        suggestions.forEach((anime) => {
+            if (normalizeRatingValue(suggestionRatingById[anime.id]) !== null) {
+                next.add(anime.id);
+            }
+        });
+        return next;
+    }, [suggestions, suggestionRatingById]);
+    const manualSelectedSuggestionIdSet = React.useMemo(
+        () => new Set(selectedSuggestionIds),
+        [selectedSuggestionIds]
+    );
+    const selectedSuggestionIdSet = React.useMemo(
+        () => new Set([...manualSelectedSuggestionIdSet, ...autoSelectedSuggestionIdSet]),
+        [manualSelectedSuggestionIdSet, autoSelectedSuggestionIdSet]
+    );
+    const selectedSuggestions = React.useMemo(
+        () => suggestions.filter((anime) => selectedSuggestionIdSet.has(anime.id)),
+        [suggestions, selectedSuggestionIdSet]
+    );
+    const selectedSuggestionCount = selectedSuggestions.length;
     const browseGenreOptions = React.useMemo(() => {
         const genreSet = new Set(browseGenreFilters);
         browseResults.forEach((anime) => {
@@ -573,6 +699,59 @@ function AddAnimeScreen({
             clearTimeout(timer);
         };
     }, [query, previewData, mode, entryTab, suggestionReloadToken]);
+
+    useEffect(() => {
+        setSelectedSuggestionIds((prev) => prev.filter((id) => suggestions.some((anime) => anime.id === id)));
+        setSuggestionRatingById((prev) => {
+            const next = {};
+            suggestions.forEach((anime) => {
+                if (Object.prototype.hasOwnProperty.call(prev, anime.id)) {
+                    next[anime.id] = prev[anime.id];
+                }
+            });
+            const hasSameKeys = Object.keys(next).length === Object.keys(prev).length
+                && Object.keys(next).every((key) => prev[key] === next[key]);
+            return hasSameKeys ? prev : next;
+        });
+    }, [suggestions]);
+
+    useEffect(() => {
+        if (entryTab !== 'search' || mode !== 'normal') {
+            setSelectedSuggestionIds([]);
+        }
+    }, [entryTab, mode]);
+
+    useEffect(() => {
+        const hitIdSet = new Set((bulkResults.hits || []).map((hit) => hit?.data?.id).filter((id) => typeof id === 'number'));
+        setBulkHitRatingById((prev) => {
+            const next = {};
+            Object.keys(prev).forEach((key) => {
+                const id = Number(key);
+                if (hitIdSet.has(id)) {
+                    next[id] = prev[key];
+                }
+            });
+            const hasSameKeys = Object.keys(next).length === Object.keys(prev).length
+                && Object.keys(next).every((key) => prev[key] === next[key]);
+            return hasSameKeys ? prev : next;
+        });
+    }, [bulkResults.hits]);
+
+    useEffect(() => {
+        const browseIdSet = new Set((browseResults || []).map((anime) => anime?.id).filter((id) => typeof id === 'number'));
+        setBrowseRatingById((prev) => {
+            const next = {};
+            Object.keys(prev).forEach((key) => {
+                const id = Number(key);
+                if (browseIdSet.has(id)) {
+                    next[id] = prev[key];
+                }
+            });
+            const hasSameKeys = Object.keys(next).length === Object.keys(prev).length
+                && Object.keys(next).every((key) => prev[key] === next[key]);
+            return hasSameKeys ? prev : next;
+        });
+    }, [browseResults]);
 
     useEffect(() => {
         if (!showSuggestions) return;
@@ -1243,6 +1422,7 @@ function AddAnimeScreen({
 
     const handleBrowseToggle = (anime, isAdded) => {
         const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
+        const normalizedBrowseRating = normalizeRatingValue(browseRatingById[anime?.id]);
 
         if (isAdded) {
             if (typeof onRemove === 'function') {
@@ -1254,7 +1434,7 @@ function AddAnimeScreen({
             return;
         }
 
-        const result = onAdd(anime);
+        const result = onAdd(anime, { rating: normalizedBrowseRating });
         if (result.success) {
             setToast({ visible: true, message: `「${title}」を追加しました。`, type: 'success' });
         } else {
@@ -1542,6 +1722,7 @@ function AddAnimeScreen({
         setBulkRetryProgress({ current: 0, total: 0 });
         setBulkCurrentTitle('');
         setBulkResults(createBulkResultsState());
+        setBulkHitRatingById({});
         setBulkNotFoundStatus({});
         setBulkFailedStatus({});
         setBulkRetryUntilTs(0);
@@ -1926,8 +2107,11 @@ function AddAnimeScreen({
 
     // 4. Selection Logic
     const handleSelectSuggestion = (anime) => {
+        const presetRating = normalizeRatingValue(suggestionRatingById[anime?.id]);
         setPreviewData(anime);
+        setNormalAddRating(presetRating);
         setQuery(anime.title.native || anime.title.romaji);
+        setSelectedSuggestionIds([]);
         setSuggestions([]);
         setIsSuggesting(false);
         setShowSuggestions(false);
@@ -1935,6 +2119,134 @@ function AddAnimeScreen({
         setSuggestionRetryUntilTs(0);
         setSuggestionRetryCountdownSec(0);
         setStatus({ type: 'info', message: '作品が選択されました。内容を確認してください。' });
+    };
+
+    const handleToggleSuggestionSelection = (animeId, checked) => {
+        setSelectedSuggestionIds((prev) => {
+            if (checked) {
+                return prev.includes(animeId) ? prev : [...prev, animeId];
+            }
+            return prev.filter((id) => id !== animeId);
+        });
+    };
+
+    const handleSuggestionRatingChange = (animeId, rating) => {
+        const normalizedRating = normalizeRatingValue(rating);
+        setSuggestionRatingById((prev) => {
+            const hasKey = Object.prototype.hasOwnProperty.call(prev, animeId);
+            if (normalizedRating === null) {
+                if (!hasKey) return prev;
+                const next = { ...prev };
+                delete next[animeId];
+                return next;
+            }
+            if (hasKey && prev[animeId] === normalizedRating) return prev;
+            return { ...prev, [animeId]: normalizedRating };
+        });
+        if (normalizedRating === null) {
+            // Clear should also release manual selection so both states reset together.
+            setSelectedSuggestionIds((prev) => prev.filter((id) => id !== animeId));
+        }
+    };
+
+    const handleBulkHitRatingChange = (animeId, rating) => {
+        const normalizedRating = normalizeRatingValue(rating);
+        setBulkHitRatingById((prev) => ({ ...prev, [animeId]: normalizedRating }));
+    };
+
+    const handleBrowseRatingChange = (animeId, rating) => {
+        const normalizedRating = normalizeRatingValue(rating);
+        setBrowseRatingById((prev) => ({ ...prev, [animeId]: normalizedRating }));
+    };
+
+    const handleClearSuggestionSelection = () => {
+        setSelectedSuggestionIds([]);
+        setSuggestionRatingById((prev) => {
+            let changed = false;
+            const next = { ...prev };
+            suggestions.forEach((anime) => {
+                if (Object.prototype.hasOwnProperty.call(next, anime.id)) {
+                    changed = true;
+                    delete next[anime.id];
+                }
+            });
+            return changed ? next : prev;
+        });
+    };
+
+    const handleAddSelectedSuggestions = () => {
+        if (selectedSuggestions.length === 0) return;
+        const localMyListIdSet = new Set((animeList || []).map((a) => a.id));
+        const localBookmarkIdSet = new Set((bookmarkList || []).map((a) => a.id));
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        if (normalTarget === 'bookmark') {
+            if (typeof onToggleBookmark !== 'function') {
+                setStatus({ type: 'error', message: 'ブックマーク追加処理を実行できませんでした。' });
+                return;
+            }
+            selectedSuggestions.forEach((data) => {
+                if (!data || typeof data.id !== 'number') {
+                    skippedCount += 1;
+                    return;
+                }
+                if (localMyListIdSet.has(data.id) || localBookmarkIdSet.has(data.id)) {
+                    skippedCount += 1;
+                    return;
+                }
+                const result = onToggleBookmark(data);
+                if (result?.success && result.action === 'added') {
+                    addedCount += 1;
+                    localBookmarkIdSet.add(data.id);
+                } else {
+                    skippedCount += 1;
+                }
+            });
+        } else {
+            selectedSuggestions.forEach((data) => {
+                if (!data || typeof data.id !== 'number') {
+                    skippedCount += 1;
+                    return;
+                }
+                if (localMyListIdSet.has(data.id)) {
+                    skippedCount += 1;
+                    return;
+                }
+                const perItemRating = normalizeRatingValue(suggestionRatingById[data.id]);
+                const result = onAdd(data, { rating: perItemRating });
+                if (result?.success) {
+                    addedCount += 1;
+                    localMyListIdSet.add(data.id);
+                    localBookmarkIdSet.delete(data.id);
+                } else {
+                    skippedCount += 1;
+                }
+            });
+        }
+
+        const targetLabel = normalTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト';
+        const summaryMessage = skippedCount > 0
+            ? `${targetLabel}に ${addedCount} 件追加、${skippedCount} 件は登録済みのためスキップしました。`
+            : `${targetLabel}に ${addedCount} 件追加しました。`;
+
+        setToast({
+            visible: true,
+            type: addedCount > 0 ? 'success' : 'warning',
+            message: summaryMessage
+        });
+        setStatus({ type: '', message: '' });
+        setSelectedSuggestionIds([]);
+        setShowSuggestions(false);
+        setSuggestions([]);
+        setSuggestionFeedback({ type: '', message: '' });
+        setSuggestionRetryUntilTs(0);
+        setSuggestionRetryCountdownSec(0);
+        autocompleteRequestIdRef.current += 1;
+        setIsSuggesting(false);
+        if (addedCount > 0) {
+            setQuery('');
+        }
     };
 
     // 5. Bulk Add Execution
@@ -1985,7 +2297,8 @@ function AddAnimeScreen({
                     skippedCount += 1;
                     return;
                 }
-                const result = onAdd(data);
+                const perItemRating = normalizeRatingValue(bulkHitRatingById[data.id]);
+                const result = onAdd(data, { rating: perItemRating });
                 if (result.success) {
                     addedCount += 1;
                     localMyListIdSet.add(data.id);
@@ -2017,6 +2330,12 @@ function AddAnimeScreen({
             ...prev,
             hits: prev.hits.filter(h => h.data.id !== hit.data.id)
         }));
+        setBulkHitRatingById((prev) => {
+            if (!Object.prototype.hasOwnProperty.call(prev, hit?.data?.id)) return prev;
+            const next = { ...prev };
+            delete next[hit.data.id];
+            return next;
+        });
         setPendingList(prev => [...new Set([...prev, hit.originalTitle])]);
     };
 
@@ -2269,6 +2588,7 @@ function AddAnimeScreen({
         if (!previewData) return;
         const title = previewData?.title?.native || previewData?.title?.romaji || previewData?.title?.english || '作品';
         const isAdded = addedAnimeIds.has(previewData.id);
+        const normalizedNormalRating = normalizeRatingValue(normalAddRating);
 
         const resetNormalSearchAfterComplete = (message, type = 'success', clearInput = true) => {
             setPreviewData(null);
@@ -2297,7 +2617,7 @@ function AddAnimeScreen({
             return;
         }
 
-        const result = onAdd(previewData);
+        const result = onAdd(previewData, { rating: normalizedNormalRating });
         if (result.success) {
             resetNormalSearchAfterComplete(`「${title}」をマイリストに追加しました。`, 'success', true);
         } else {
@@ -2345,6 +2665,7 @@ function AddAnimeScreen({
         searchAbortControllerRef.current = null;
         bulkAbortControllerRef.current = null;
         setPreviewData(null);
+        setSelectedSuggestionIds([]);
         setQuery('');
         setStatus({ type: '', message: '' });
         setSuggestions([]);
@@ -2355,6 +2676,10 @@ function AddAnimeScreen({
         setSearchRetryUntilTs(0);
         setSearchRetryCountdownSec(0);
         setSearchErrorCanRetry(false);
+        setNormalAddRating(null);
+        setSuggestionRatingById({});
+        setBulkHitRatingById({});
+        setBrowseRatingById({});
         setShowReview(false);
         setIsBulkComplete(false);
         setBulkQuery('');
@@ -2399,6 +2724,7 @@ function AddAnimeScreen({
     const browseRangeEnd = browseRangeStart > 0
         ? browseRangeStart + browsePagedResults.length - 1
         : 0;
+    const normalTargetLabel = normalTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト';
     const bulkTargetLabel = bulkTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト';
     const bulkCompleteTargetLabel = bulkExecutionSummary.target === 'bookmark' ? 'ブックマーク' : 'マイリスト';
     const bulkAlreadyAddedLabel = bulkTarget === 'bookmark'
@@ -2602,6 +2928,7 @@ function AddAnimeScreen({
                                 value={query}
                                 onChange={(e) => {
                                     setQuery(e.target.value);
+                                    setSelectedSuggestionIds([]);
                                     if (previewData) setPreviewData(null); // Reset preview when typing
                                 }}
                                 placeholder="作品タイトルを入力（日本語・英語可）"
@@ -2655,31 +2982,106 @@ function AddAnimeScreen({
                                     className="suggestions-dropdown"
                                     style={suggestionsDropdownStyle}
                                 >
-                                    {suggestions.map((anime) => (
-                                        <div
-                                            key={anime.id}
-                                            className="suggestion-item"
-                                            onClick={() => handleSelectSuggestion(anime)}
-                                        >
-                                            <img
-                                                src={anime.coverImage.large}
-                                                alt=""
-                                                className="suggestion-thumb"
-                                            />
-                                            <div className="suggestion-info">
-                                                <div className="suggestion-title">
-                                                    {anime.title.native || anime.title.romaji}
-                                                </div>
-                                                <div className="suggestion-meta">
-                                                    {anime.seasonYear && <span>{anime.seasonYear}年</span>}
-                                                    {anime.episodes && <span>{anime.episodes}話</span>}
+                                    {suggestions.map((anime) => {
+                                        const suggestionRating = normalizeRatingValue(suggestionRatingById[anime.id]);
+                                        const isAutoSelected = suggestionRating !== null;
+                                        const isSelected = selectedSuggestionIdSet.has(anime.id);
+                                        return (
+                                            <div
+                                                key={anime.id}
+                                                className="suggestion-item"
+                                                onClick={() => handleSelectSuggestion(anime)}
+                                            >
+                                                <label
+                                                    className="suggestion-checkbox"
+                                                    onClick={(event) => event.stopPropagation()}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={(event) => {
+                                                            const checked = event.target.checked;
+                                                            if (!checked && isAutoSelected) {
+                                                                handleSuggestionRatingChange(anime.id, null);
+                                                                return;
+                                                            }
+                                                            handleToggleSuggestionSelection(anime.id, checked);
+                                                        }}
+                                                        aria-label="追加対象として選択"
+                                                    />
+                                                </label>
+                                                <img
+                                                    src={anime.coverImage.large}
+                                                    alt=""
+                                                    className="suggestion-thumb"
+                                                />
+                                                <div className="suggestion-info">
+                                                    <div className="suggestion-title">
+                                                        {anime.title.native || anime.title.romaji}
+                                                    </div>
+                                                    <div className="suggestion-meta">
+                                                        {anime.seasonYear && <span>{anime.seasonYear}年</span>}
+                                                        {anime.episodes && <span>{anime.episodes}話</span>}
+                                                    </div>
+                                                    {normalTarget === 'mylist' && (
+                                                        <MiniStarRating
+                                                            value={suggestionRatingById[anime.id]}
+                                                            onChange={(rating) => handleSuggestionRatingChange(anime.id, rating)}
+                                                            className="suggestion-mini-rating"
+                                                            ariaLabel="この候補の評価"
+                                                        />
+                                                    )}
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
+                        {suggestions.length > 0 && (showSuggestions || selectedSuggestionCount > 0) && (
+                            <div className="normal-multi-add-panel">
+                                <div className="normal-multi-add-header">
+                                    <span className="normal-multi-add-count">{selectedSuggestionCount}件選択中</span>
+                                    <button
+                                        type="button"
+                                        className="normal-multi-add-clear"
+                                        onClick={handleClearSuggestionSelection}
+                                        disabled={selectedSuggestionCount === 0}
+                                    >
+                                        選択解除
+                                    </button>
+                                </div>
+                                <div className="mode-switcher-block normal-target-switcher">
+                                    <div className="mode-switcher-label">追加先</div>
+                                    <div className="mode-switcher">
+                                        <button
+                                            type="button"
+                                            className={`mode-button ${normalTarget === 'mylist' ? 'active' : ''}`}
+                                            onClick={() => setNormalTarget('mylist')}
+                                            disabled={isSearching}
+                                        >
+                                            マイリスト
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`mode-button ${normalTarget === 'bookmark' ? 'active' : ''}`}
+                                            onClick={() => setNormalTarget('bookmark')}
+                                            disabled={isSearching}
+                                        >
+                                            ブックマーク
+                                        </button>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="action-button primary-button normal-multi-add-submit"
+                                    onClick={handleAddSelectedSuggestions}
+                                    disabled={selectedSuggestionCount === 0 || isSearching}
+                                >
+                                    {`選択した作品を${normalTargetLabel}に追加`}
+                                </button>
+                            </div>
+                        )}
                         <button
                             type="submit"
                             className="action-button primary-button"
@@ -2839,8 +3241,20 @@ function AddAnimeScreen({
                                                     </button>
                                                     <img src={hit.data.coverImage.large} alt="" />
                                                     <div className="hit-info">
-                                                        <div className="hit-title">{hit.data.title.native || hit.data.title.romaji}</div>
-                                                        <div className="hit-meta">{hit.data.seasonYear}年 / {hit.data.episodes}話</div>
+                                                        <div className="hit-summary">
+                                                            <div className="hit-title">{hit.data.title.native || hit.data.title.romaji}</div>
+                                                            <div className="hit-meta">{hit.data.seasonYear}年 / {hit.data.episodes}話</div>
+                                                        </div>
+                                                        {bulkTarget === 'mylist' && (
+                                                            <div className="hit-rating-block">
+                                                                <MiniStarRating
+                                                                    value={bulkHitRatingById[hit.data.id]}
+                                                                    onChange={(rating) => handleBulkHitRatingChange(hit.data.id, rating)}
+                                                                    className="bulk-hit-mini-rating"
+                                                                    ariaLabel="この作品の評価"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -3052,7 +3466,6 @@ function AddAnimeScreen({
                                     )}
                                 </div>
                             </div>
-
                             <div className="browse-genre-section">
                                 <div className="browse-filter-title">絞り込み条件（複数選択 / OR）</div>
                                 <div className="browse-filter-grid">
@@ -3230,6 +3643,14 @@ function AddAnimeScreen({
                                                                 {(anime.genres || []).slice(0, 3).map((g) => translateGenre(g)).join(' / ')}
                                                             </div>
                                                             <div className="browse-card-actions">
+                                                                {!isAdded && (
+                                                                    <MiniStarRating
+                                                                        value={browseRatingById[anime.id]}
+                                                                        onChange={(rating) => handleBrowseRatingChange(anime.id, rating)}
+                                                                        className="browse-mini-rating"
+                                                                        ariaLabel="この作品の評価"
+                                                                    />
+                                                                )}
                                                                 <button
                                                                     type="button"
                                                                     className={`browse-add-button ${isAdded ? 'added' : 'not-added'}`}
@@ -3346,6 +3767,12 @@ function AddAnimeScreen({
                             </p>
                         </div>
                     </div>
+                    <InlineRatingPicker
+                        value={normalAddRating}
+                        onChange={setNormalAddRating}
+                        label="マイリスト追加時の評価（任意）"
+                        className="preview-rating-picker"
+                    />
                     <div className="preview-card-actions">
                         <button
                             className="action-button confirm-execution-button"
