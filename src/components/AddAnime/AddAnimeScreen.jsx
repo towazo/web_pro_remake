@@ -3652,6 +3652,31 @@ function AddAnimeScreen({
                                 </div>
                             )}
 
+                            {browseError && (
+                                <div
+                                    className={`browse-error-message ${browseErrorType === 'rate_limit' ? 'rate-limit' : 'error'}`}
+                                    role={browseErrorType === 'rate_limit' ? 'status' : 'alert'}
+                                    aria-live="polite"
+                                >
+                                    <div className="browse-error-text">{browseErrorMessage}</div>
+                                    <div className="browse-error-actions">
+                                        {browseRetryCountdownSec > 0 && (
+                                            <span className="browse-retry-countdown">
+                                                再試行まで: {browseRetryCountdownSec}秒
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            className="browse-page-button browse-error-retry-button"
+                                            onClick={handleBrowseRetry}
+                                            disabled={browseLoading || browseRetryCountdownSec > 0}
+                                        >
+                                            再試行
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {!browseLoading && (
                                 <>
                                     <div className="browse-pagination">
@@ -3680,31 +3705,6 @@ function AddAnimeScreen({
                                             </button>
                                         </div>
                                     </div>
-
-                                    {browseError && (
-                                        <div
-                                            className={`browse-error-message ${browseErrorType === 'rate_limit' ? 'rate-limit' : 'error'}`}
-                                            role={browseErrorType === 'rate_limit' ? 'status' : 'alert'}
-                                            aria-live="polite"
-                                        >
-                                            <div className="browse-error-text">{browseErrorMessage}</div>
-                                            <div className="browse-error-actions">
-                                                {browseRetryCountdownSec > 0 && (
-                                                    <span className="browse-retry-countdown">
-                                                        再試行まで: {browseRetryCountdownSec}秒
-                                                    </span>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    className="browse-page-button browse-error-retry-button"
-                                                    onClick={handleBrowseRetry}
-                                                    disabled={browseLoading || browseRetryCountdownSec > 0}
-                                                >
-                                                    再試行
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
 
                                     {browseVisibleResults.length === 0 ? (
                                         <div className="browse-filter-empty">該当なし（条件に一致する作品はありません）</div>

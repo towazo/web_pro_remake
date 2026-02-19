@@ -7,9 +7,10 @@ import {
   isDisplayEligibleAnime,
 } from '../utils/contentFilters';
 
-const ANILIST_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV)
-  ? '/anilist/'
-  : 'https://graphql.anilist.co';
+const ANILIST_ENDPOINT = String(
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ANILIST_ENDPOINT)
+    || '/anilist/'
+).trim() || '/anilist/';
 
 const ANIME_QUERY = `
   query ($search: String, $formatIn: [MediaFormat], $countryOfOrigin: CountryCode) {
