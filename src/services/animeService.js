@@ -1021,6 +1021,26 @@ const mergeSearchCandidates = (bucket, query, list) => {
 
 const BULK_RATE_LIMIT_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
 const BULK_UPSTREAM_PATTERN = /\btimeout\b|temporar|internal server error|bad gateway|service unavailable|gateway timeout/i;
+const BULK_RATE_LIMIT_ABORT_MESSAGE = 'Rate limited: bulk fetch stopped early';
+
+const isBulkRateLimitInfo = (info) => {
+  if (!info || typeof info !== 'object') return false;
+  const status = Number(info?.status);
+  if (status === 429) return true;
+  const text = [
+    info?.message || '',
+    info?.error?.message || '',
+    Array.isArray(info?.errors)
+      ? info.errors.map((item) => item?.message || '').join(' ')
+      : '',
+  ].join(' ');
+  return BULK_RATE_LIMIT_PATTERN.test(String(text));
+};
+
+const extractBulkRetryAfterMs = (info) => {
+  const retryAfterMs = Number(info?.retryAfterMs ?? info?.rateLimit?.retryAfterMs);
+  return Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : 0;
+};
 
 const createBulkIssueState = () => ({
   rateLimited: false,
@@ -1102,6 +1122,9 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
     onTimeout,
     onAdaptiveQuery,
     includeMeta = false,
+    stopOnRateLimit = false,
+    onRateLimit,
+    signal: externalSignal,
   } = options;
 
   const workerCount = Math.max(1, Math.min(6, Number(concurrency) || 1));
@@ -1109,12 +1132,62 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
   const cooldownMs = Math.max(0, Number(cooldownOn429Ms) || 0);
   const maxMsPerTitle = Math.max(1000, Number(perTitleMaxMs) || 9000);
   const results = new Array(safeTitles.length).fill(null);
+  const bulkController = new AbortController();
+  const abortState = {
+    reason: '',
+    status: 0,
+    retryAfterMs: 0,
+    title: '',
+    index: -1,
+    message: '',
+  };
+  const abortBulk = (payload = null) => {
+    if (payload) {
+      const retryAfterMs = extractBulkRetryAfterMs(payload);
+      if (!abortState.reason) {
+        abortState.reason = String(payload.reason || '');
+        abortState.status = Number(payload.status) || 0;
+        abortState.retryAfterMs = retryAfterMs;
+        abortState.title = String(payload.title || '');
+        abortState.index = Number.isFinite(Number(payload.index)) ? Number(payload.index) : -1;
+        abortState.message = String(payload.message || '');
+      } else {
+        if (retryAfterMs > abortState.retryAfterMs) {
+          abortState.retryAfterMs = retryAfterMs;
+        }
+        if (!abortState.status && Number(payload.status)) {
+          abortState.status = Number(payload.status);
+        }
+        if (!abortState.title && payload.title) {
+          abortState.title = String(payload.title);
+        }
+        if (abortState.index < 0 && Number.isFinite(Number(payload.index))) {
+          abortState.index = Number(payload.index);
+        }
+        if (!abortState.message && payload.message) {
+          abortState.message = String(payload.message);
+        }
+      }
+    }
+    if (!bulkController.signal.aborted) {
+      bulkController.abort();
+    }
+  };
+  const onExternalAbort = () => abortBulk();
+
+  if (externalSignal?.aborted) {
+    abortBulk();
+  } else {
+    externalSignal?.addEventListener?.('abort', onExternalAbort, { once: true });
+  }
 
   let nextIndex = 0;
   let completed = 0;
+  let rateLimitNotified = false;
 
   const runWorker = async () => {
     while (true) {
+      if (bulkController.signal.aborted) break;
       const index = nextIndex;
       nextIndex += 1;
       if (index >= safeTitles.length) break;
@@ -1126,6 +1199,12 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
       let adaptiveQuery = '';
       const issue = createBulkIssueState();
       const perTitleController = new AbortController();
+      const onBulkAbort = () => {
+        if (!perTitleController.signal.aborted) {
+          perTitleController.abort();
+        }
+      };
+      bulkController.signal.addEventListener('abort', onBulkAbort, { once: true });
       const perTitleTimer = setTimeout(() => {
         timedOut = true;
         perTitleController.abort();
@@ -1148,7 +1227,31 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
           signal: perTitleController.signal,
           onRetry: (info) => {
             collectBulkIssue(issue, info);
-            if (info?.status === 429) saw429 = true;
+            if (isBulkRateLimitInfo(info)) {
+              saw429 = true;
+              if (stopOnRateLimit) {
+                const payload = {
+                  reason: 'rate_limited',
+                  status: Number(info?.status) || 429,
+                  retryAfterMs: extractBulkRetryAfterMs(info),
+                  title,
+                  index,
+                  message: info?.message || info?.error?.message || BULK_RATE_LIMIT_ABORT_MESSAGE,
+                };
+                abortBulk(payload);
+                if (!rateLimitNotified && typeof onRateLimit === 'function') {
+                  rateLimitNotified = true;
+                  try {
+                    onRateLimit({
+                      ...payload,
+                      total: safeTitles.length,
+                    });
+                  } catch (_) {
+                    // ignore callback errors
+                  }
+                }
+              }
+            }
             if (typeof onRetry === 'function') {
               onRetry({ ...info, title, index, total: safeTitles.length });
             }
@@ -1166,9 +1269,32 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
           console.error(`Bulk fetch error for ${title}:`, error);
         }
         collectBulkIssue(issue, { kind: 'error', status: Number(error?.status) || null, error });
+        if (stopOnRateLimit && isBulkRateLimitInfo(error)) {
+          const payload = {
+            reason: 'rate_limited',
+            status: Number(error?.status) || 429,
+            retryAfterMs: extractBulkRetryAfterMs(error),
+            title,
+            index,
+            message: error?.message || BULK_RATE_LIMIT_ABORT_MESSAGE,
+          };
+          abortBulk(payload);
+          if (!rateLimitNotified && typeof onRateLimit === 'function') {
+            rateLimitNotified = true;
+            try {
+              onRateLimit({
+                ...payload,
+                total: safeTitles.length,
+              });
+            } catch (_) {
+              // ignore callback errors
+            }
+          }
+        }
         data = null;
       } finally {
         clearTimeout(perTitleTimer);
+        bulkController.signal.removeEventListener('abort', onBulkAbort);
       }
 
       if (timedOut && typeof onTimeout === 'function') {
@@ -1180,13 +1306,23 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
       }
 
       const resultType = resolveBulkResultType({ data, timedOut, issue });
+      if (!data && !timedOut && abortState.reason === 'rate_limited' && !issue.rateLimited) {
+        issue.rateLimited = true;
+        issue.status = issue.status || abortState.status || 429;
+        if (issue.retryAfterMs <= 0 && abortState.retryAfterMs > 0) {
+          issue.retryAfterMs = abortState.retryAfterMs;
+        }
+        if (!issue.message) {
+          issue.message = abortState.message || BULK_RATE_LIMIT_ABORT_MESSAGE;
+        }
+      }
       const resultMeta = {
         data: data ?? null,
-        resultType,
-        status: issue.status > 0 ? issue.status : null,
+        resultType: issue.rateLimited ? 'rate_limited' : resultType,
+        status: issue.status > 0 ? issue.status : (abortState.status > 0 ? abortState.status : null),
         retryAfterMs: issue.retryAfterMs > 0 ? issue.retryAfterMs : 0,
         timedOut,
-        saw429: issue.rateLimited || saw429,
+        saw429: issue.rateLimited || saw429 || abortState.reason === 'rate_limited',
         adaptiveUsed,
         adaptiveQuery,
         message: issue.message || '',
@@ -1214,8 +1350,20 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
         });
       }
 
-      if (delayMs > 0) await sleep(delayMs);
-      if (resultMeta.saw429 && cooldownMs > 0) await sleep(cooldownMs);
+      if (delayMs > 0) {
+        try {
+          await sleepWithSignal(delayMs, bulkController.signal);
+        } catch (_) {
+          break;
+        }
+      }
+      if (resultMeta.saw429 && cooldownMs > 0) {
+        try {
+          await sleepWithSignal(cooldownMs, bulkController.signal);
+        } catch (_) {
+          break;
+        }
+      }
     }
   };
 
@@ -1223,7 +1371,28 @@ export const fetchAnimeDetailsBulk = async (titles, options = {}) => {
     { length: Math.min(workerCount, safeTitles.length) },
     () => runWorker()
   );
-  await Promise.all(workers);
+  try {
+    await Promise.all(workers);
+  } finally {
+    externalSignal?.removeEventListener?.('abort', onExternalAbort);
+  }
+
+  if (includeMeta && abortState.reason === 'rate_limited') {
+    for (let i = 0; i < results.length; i += 1) {
+      if (results[i]) continue;
+      results[i] = {
+        data: null,
+        resultType: 'rate_limited',
+        status: abortState.status || 429,
+        retryAfterMs: abortState.retryAfterMs > 0 ? abortState.retryAfterMs : 0,
+        timedOut: false,
+        saw429: true,
+        adaptiveUsed: false,
+        adaptiveQuery: '',
+        message: abortState.message || BULK_RATE_LIMIT_ABORT_MESSAGE,
+      };
+    }
+  }
 
   return results;
 };
@@ -1337,10 +1506,16 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
     };
 
     for (let i = 0; i < next.length; i++) {
+      if (requestOptions.signal?.aborted) break;
       if (next[i]) continue;
       next[i] = await fetchAnimeDetails(safeTitles[i], singleOptions);
+      if (requestOptions.signal?.aborted) break;
       if (i < next.length - 1) {
-        await sleep(250);
+        try {
+          await sleepWithSignal(250, requestOptions.signal);
+        } catch (_) {
+          break;
+        }
       }
     }
 
@@ -1372,12 +1547,14 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
 export const searchAnimeList = async (title, perPage = 8, options = {}) => {
   const query = normalizeTitleSpacing(title);
   if (!query) return [];
+  if (options?.signal?.aborted) return [];
 
   const requestedCount = Math.max(1, Math.min(30, Number(perPage) || 8));
   const fetchPerTerm = Math.max(requestedCount, 12);
   const rankedMap = new Map();
 
   const primaryList = await searchAnimeListInternal(query, fetchPerTerm, options);
+  if (options?.signal?.aborted) return [];
   mergeSearchCandidates(rankedMap, query, primaryList);
 
   const hasStrongPrimary = Array.from(rankedMap.values()).some((entry) => entry.score >= 1);
@@ -1387,7 +1564,9 @@ export const searchAnimeList = async (title, perPage = 8, options = {}) => {
       .slice(0, 4);
 
     for (const term of variantTerms) {
+      if (options?.signal?.aborted) break;
       const list = await searchAnimeListInternal(term, fetchPerTerm, options);
+      if (options?.signal?.aborted) break;
       mergeSearchCandidates(rankedMap, query, list);
       const hasStrongMatch = Array.from(rankedMap.values()).some((entry) => entry.score >= 1);
       if (rankedMap.size >= requestedCount * 2 && hasStrongMatch) break;
@@ -1452,6 +1631,7 @@ export const fetchAnimeByYear = async (seasonYear, options = {}) => {
       baseDelayMs: Math.max(80, Number(options.baseDelayMs) || 250),
       maxRetryDelayMs: Math.max(200, Number(options.maxRetryDelayMs) || 900),
       signal: options.signal,
+      onRetry: options.onRetry,
     };
     const hasSeasonFilter = Boolean(season);
     const baseVariables = hasSeasonFilter
@@ -1653,6 +1833,7 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
   const firstPage429Retries = Math.max(0, Math.min(5, Number(options.firstPage429Retries) || 2));
   const firstPage429DelayMs = Math.max(400, Number(options.firstPage429DelayMs) || 1500);
   const signal = options.signal;
+  const stopOnRateLimit = options.stopOnRateLimit === true;
   const mergedItems = [];
   const seenIds = new Set();
   let lastError = null;
@@ -1673,6 +1854,9 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
       lastError = error;
       const statusCode = Number(error?.status) || 0;
       const isRateLimited = statusCode === 429 || String(error?.message || '').includes('429');
+      if (isRateLimited && stopOnRateLimit) {
+        return { items: mergedItems, error };
+      }
       if (page === 1 && isRateLimited && firstPage429RetryCount < firstPage429Retries) {
         firstPage429RetryCount += 1;
         const waitMs = Math.min(10000, firstPage429DelayMs * firstPage429RetryCount);
