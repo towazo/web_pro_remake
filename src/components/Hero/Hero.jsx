@@ -9,6 +9,19 @@ const normalizeAnimeRating = (value) => {
     return parsed;
 };
 
+const splitTutorialDescriptionLines = (value) => {
+    const source = String(value || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+    if (!source) return [];
+
+    return source
+        .split('\n')
+        .flatMap((line) => line.match(/[^。]+。?/g) || [])
+        .map((line) => line.trim())
+        .filter(Boolean);
+};
+
 function Hero({ anime, isActive }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
@@ -17,13 +30,23 @@ function Hero({ anime, isActive }) {
 
     // Use a different structure if it's a tutorial slide
     if (anime.isTutorial) {
+        const tutorialLines = splitTutorialDescriptionLines(anime.description);
         return (
             <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero`}>
                 <div className="hero-content tutorial-content">
                     <span className="badge tutorial-badge">{anime.badge}</span>
                     <h1 className="tutorial-title">{anime.title}</h1>
                     <div className="hero-desc tutorial-desc">
-                        {anime.description}
+                        {tutorialLines.length > 0 ? (
+                            tutorialLines.map((line, index) => (
+                                <span key={`${anime.uniqueId || anime.id || 'tutorial'}-line-${index}`}>
+                                    {line}
+                                    {index < tutorialLines.length - 1 && <br />}
+                                </span>
+                            ))
+                        ) : (
+                            anime.description
+                        )}
                     </div>
                     {anime.image && (
                         <div className="tutorial-image-wrapper">
