@@ -1985,14 +1985,14 @@ export const selectFeaturedAnimes = (allAnimes) => {
         isTutorial: true,
         badge: "How to use",
         title: "作品を追加しよう",
-        description: "画面下部の追加ボタンから、視聴したアニメ作品を追加してみましょう。",
+        description: "画面上部の「作品の追加」から、視聴したアニメ作品を検索して追加できます。\nタイトル検索やジャンル・年別の一覧からも簡単に見つけられます。",
         uniqueId: "tut-2"
       },
       {
         isTutorial: true,
         badge: "Features",
-        title: "新しい発見を",
-        description: "作品が増えると、ジャンルごとにランダムで「今日の一本」をスライドで表示します。\n記録が増えるほど楽しさが広がります。",
+        title: "見た作品も、見たい作品も",
+        description: "視聴済みは「マイリスト」、気になる作品は「ブックマーク」で分けて管理。\n評価や並び替えで、あなたのアーカイブをもっと便利に。",
         uniqueId: "tut-3"
       }
     ];
