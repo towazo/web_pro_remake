@@ -3207,7 +3207,7 @@ function AddAnimeScreen({
                                 rows={10}
                             />
                             <div className="bulk-limit-note">
-                                {`追加先: ${bulkTargetLabel} / 一度に登録できるのは最大 ${MAX_BULK_TITLES} 件までです（推奨 ${RECOMMENDED_BULK_TITLES} 件）。登録済み作品はスキップされます。`}
+                                {`追加先: ${bulkTargetLabel} / 一度に登録できるのは最大 ${MAX_BULK_TITLES} 件までです。登録済み作品はスキップされます。`}
                             </div>
                             {isSearching && (
                                 <div className="bulk-search-progress">
