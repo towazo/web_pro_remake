@@ -47,19 +47,44 @@
     padding: 0;
 }
 
+html,
+body,
+#content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+html,
+body {
+    min-height: 100%;
+}
+
 body {
     font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-main);
     line-height: 1.6;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     overflow-wrap: break-word;
     /* Prevent long strings from overflowing the container */
 }
 
+#content {
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
 .app-container {
+    width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 40px;
+    padding-left: max(40px, env(safe-area-inset-left));
+    padding-right: max(40px, env(safe-area-inset-right));
     position: relative;
 }
 
@@ -88,13 +113,15 @@ body {
 
 @media (max-width: 768px) {
     .app-container {
-        padding: 0 20px;
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
     }
 }
 
 @media (max-width: 480px) {
     .app-container {
-        padding: 0 15px;
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
     }
 }
 
@@ -512,7 +539,7 @@ body {
 }
 
 .main-content.has-selection-dock {
-    padding-bottom: 110px;
+    padding-bottom: max(110px, calc(86px + env(safe-area-inset-bottom)));
 }
 
 .selection-action-dock {
@@ -1168,6 +1195,10 @@ body {
 }
 
 .card-image-wrapper:hover .delete-button {
+    opacity: 1;
+}
+
+.bookmark-item-card:hover .delete-button {
     opacity: 1;
 }
 
@@ -1929,7 +1960,7 @@ body {
 }
 
 .bookmark-screen.has-selection-dock {
-    padding-bottom: 110px;
+    padding-bottom: max(110px, calc(86px + env(safe-area-inset-bottom)));
 }
 
 .bookmark-empty {
@@ -1950,6 +1981,8 @@ body {
 .bookmark-item-card {
     border: 1px solid #eee;
     background: #fff;
+    position: relative;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -2350,7 +2383,7 @@ body {
 }
 
 .has-bookmark-bottom-nav {
-    padding-bottom: 140px;
+    padding-bottom: max(140px, calc(104px + env(safe-area-inset-bottom)));
 }
 
 .bookmark-bottom-nav {
@@ -2502,7 +2535,7 @@ body {
     }
 
     .has-bottom-home-nav {
-        padding-bottom: 150px;
+        padding-bottom: max(150px, calc(118px + env(safe-area-inset-bottom)));
     }
 
     .screen-bottom-home-nav {
@@ -2516,13 +2549,29 @@ body {
     }
 
     .has-bookmark-bottom-nav {
-        padding-bottom: 150px;
+        padding-bottom: max(150px, calc(118px + env(safe-area-inset-bottom)));
     }
 
     .bookmark-bottom-nav {
         width: 100%;
         padding: 9px 10px calc(10px + env(safe-area-inset-bottom));
         gap: 8px;
+    }
+
+    .selection-action-dock,
+    .bookmark-selection-dock,
+    .screen-bottom-home-nav,
+    .bookmark-bottom-nav {
+        left: max(0px, env(safe-area-inset-left));
+        right: max(0px, env(safe-area-inset-right));
+        width: auto;
+        transform: none;
+    }
+
+    .screen-bottom-home-button,
+    .bookmark-bottom-nav-button {
+        white-space: normal;
+        line-height: 1.3;
     }
 
     .bookmark-bottom-nav-button {
@@ -3351,6 +3400,7 @@ body {
     border-top: none;
     z-index: 2305;
     max-height: min(400px, 56vh);
+    max-height: min(400px, 56dvh);
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
@@ -4294,6 +4344,8 @@ body {
         min-height: 40px;
         font-size: var(--fs-body-sm);
         padding: 0 8px;
+        white-space: normal;
+        line-height: 1.25;
     }
 
     .global-view-nav-button:nth-child(2n) {
@@ -4658,6 +4710,7 @@ body {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
         max-height: 70vh;
+        max-height: 70dvh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         padding-right: 6px;
@@ -4877,6 +4930,17 @@ body {
 
 .bulk-failure-guide {
     margin: 8px 0 0;
+}
+
+.bulk-history-restore-note {
+    margin-bottom: 12px;
+    border: 1px solid #d97706;
+    background: #fff7ed;
+    color: #7c2d12;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.5;
+    padding: 10px 12px;
 }
 
 .bulk-failure-actions {

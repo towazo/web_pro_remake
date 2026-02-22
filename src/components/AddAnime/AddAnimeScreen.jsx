@@ -139,6 +139,118 @@ const parsePositiveMs = (value) => {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
+const BULK_INTERRUPTED_HISTORY_STORAGE_KEY = 'anitrigger:add:bulk-interrupted-history:v1';
+const BULK_INTERRUPTED_HISTORY_VERSION = 1;
+
+const sanitizeHistoryTitleList = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => String(item || '').trim())
+        .filter((item) => item.length > 0);
+};
+
+const sanitizeBulkOverflowHistory = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const removedTitles = sanitizeHistoryTitleList(value.removedTitles);
+    if (removedTitles.length === 0) return null;
+    const removedCount = Number(value.removedCount);
+    const keptCount = Number(value.keptCount);
+    const totalEntered = Number(value.totalEntered);
+    return {
+        removedTitles,
+        removedCount: Number.isFinite(removedCount) && removedCount > 0 ? removedCount : removedTitles.length,
+        keptCount: Number.isFinite(keptCount) && keptCount >= 0 ? keptCount : 0,
+        totalEntered: Number.isFinite(totalEntered) && totalEntered > 0 ? totalEntered : removedTitles.length,
+        cutoffTitle: String(value.cutoffTitle || removedTitles[0] || ''),
+        rule: String(value.rule || '末尾から除外')
+    };
+};
+
+const sanitizeBulkFailedStatusHistory = (value) => {
+    if (!value || typeof value !== 'object') return {};
+    return Object.entries(value).reduce((bucket, [key, meta]) => {
+        const safeKey = String(key || '').trim();
+        if (!safeKey) return bucket;
+        const normalizedType = isBulkFetchFailureType(meta?.type)
+            ? meta.type
+            : BULK_RESULT_KIND.REQUEST_ERROR;
+        const normalizedStatus = Number(meta?.status);
+        bucket[safeKey] = {
+            type: normalizedType,
+            status: Number.isFinite(normalizedStatus) && normalizedStatus > 0 ? normalizedStatus : null,
+            retryAfterMs: parsePositiveMs(meta?.retryAfterMs),
+            message: String(meta?.message || ''),
+            loading: false,
+            error: ''
+        };
+        return bucket;
+    }, {});
+};
+
+const sanitizeBulkInterruptedHistory = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const bulkQuery = String(value.bulkQuery || '');
+    const pendingList = sanitizeHistoryTitleList(value.pendingList);
+    const bulkResults = {
+        hits: [],
+        notFound: sanitizeHistoryTitleList(value?.bulkResults?.notFound),
+        rateLimited: sanitizeHistoryTitleList(value?.bulkResults?.rateLimited),
+        fetchFailed: sanitizeHistoryTitleList(value?.bulkResults?.fetchFailed),
+        alreadyAdded: sanitizeHistoryTitleList(value?.bulkResults?.alreadyAdded)
+    };
+    if (bulkResults.rateLimited.length === 0) {
+        return null;
+    }
+    return {
+        bulkQuery,
+        pendingList,
+        bulkResults,
+        bulkOverflowInfo: sanitizeBulkOverflowHistory(value.bulkOverflowInfo),
+        bulkFailedStatus: sanitizeBulkFailedStatusHistory(value.bulkFailedStatus),
+        bulkRetryUntilTs: Math.max(0, Number(value.bulkRetryUntilTs) || 0),
+        statusMessage: String(value.statusMessage || ''),
+        savedAt: Math.max(0, Number(value.savedAt) || 0)
+    };
+};
+
+const readBulkInterruptedHistory = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = window.sessionStorage.getItem(BULK_INTERRUPTED_HISTORY_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || Number(parsed.version) !== BULK_INTERRUPTED_HISTORY_VERSION) return null;
+        return sanitizeBulkInterruptedHistory(parsed);
+    } catch (_) {
+        return null;
+    }
+};
+
+const writeBulkInterruptedHistory = (payload) => {
+    if (typeof window === 'undefined' || !payload) return;
+    try {
+        window.sessionStorage.setItem(
+            BULK_INTERRUPTED_HISTORY_STORAGE_KEY,
+            JSON.stringify({
+                version: BULK_INTERRUPTED_HISTORY_VERSION,
+                savedAt: Date.now(),
+                ...payload
+            })
+        );
+    } catch (_) {
+        // Ignore storage quota/runtime errors.
+    }
+};
+
+const clearBulkInterruptedHistory = () => {
+    if (typeof window === 'undefined') return;
+    try {
+        window.sessionStorage.removeItem(BULK_INTERRUPTED_HISTORY_STORAGE_KEY);
+    } catch (_) {
+        // Ignore storage errors.
+    }
+};
+
 const buildApiRateLimitCountdownMessage = (countdownSec = 0) => {
     const safeCountdown = Math.max(0, Math.floor(Number(countdownSec) || 0));
     if (safeCountdown > 0) {
@@ -158,7 +270,7 @@ const buildBulkRateLimitInterruptedMessage = (retryAfterMs = 0) => {
     const retryText = waitMs > 0
         ? `あと${Math.max(1, Math.ceil(waitMs / 1000))}秒で再試行できます。`
         : '時間をおいて再試行してください。';
-    return `検索途中でAPIのアクセス制限に達したため、すべてを検索できませんでした。${retryText}`;
+    return `検索途中でAPIのアクセス制限に達したため、最後まで検索を完了できませんでした。今回入力した全作品を再検索してください。${retryText}`;
 };
 
 const getRetryUntilTs = (retryAfterMs = 0) => {
@@ -412,6 +524,9 @@ function AddAnimeScreen({
     const [showReview, setShowReview] = useState(false);
     const [isBulkComplete, setIsBulkComplete] = useState(false);
     const [pendingList, setPendingList] = useState([]);
+    const [bulkInterruptedHistoryActive, setBulkInterruptedHistoryActive] = useState(false);
+    const [bulkHistoryRestored, setBulkHistoryRestored] = useState(false);
+    const [bulkHistoryBootstrapped, setBulkHistoryBootstrapped] = useState(false);
     const [browseYearDraft, setBrowseYearDraft] = useState(() => (
         normalizedBrowsePreset ? String(normalizedBrowsePreset.year) : ''
     ));
@@ -608,6 +723,83 @@ function AddAnimeScreen({
         SUGGESTION_MIN_HEIGHT,
         SUGGESTION_VIEWPORT_MARGIN,
         isSuggestionPanelVisible
+    ]);
+
+    useEffect(() => {
+        if (isBrowsePresetLocked) {
+            setBulkHistoryBootstrapped(true);
+            return;
+        }
+
+        const restored = readBulkInterruptedHistory();
+        if (!restored) {
+            setBulkHistoryBootstrapped(true);
+            return;
+        }
+
+        const retryAfterMs = Math.max(0, restored.bulkRetryUntilTs - Date.now());
+        const restoredStatusMessage = restored.statusMessage
+            || buildBulkRateLimitInterruptedMessage(retryAfterMs);
+        const restoredPendingList = [...new Set([
+            ...restored.pendingList,
+            ...restored.bulkResults.notFound,
+            ...restored.bulkResults.rateLimited,
+            ...restored.bulkResults.fetchFailed
+        ])];
+
+        setEntryTab('search');
+        setMode('bulk');
+        setShowReview(true);
+        setIsBulkComplete(false);
+        setBulkQuery(restored.bulkQuery);
+        setBulkResults(restored.bulkResults);
+        setBulkFailedStatus(restored.bulkFailedStatus);
+        setBulkOverflowInfo(restored.bulkOverflowInfo);
+        setPendingList(restoredPendingList);
+        setBulkRetryUntilTs(restored.bulkRetryUntilTs);
+        setBulkRetryCountdownSec(0);
+        setStatus({
+            type: 'info',
+            message: restoredStatusMessage
+        });
+        setBulkInterruptedHistoryActive(true);
+        setBulkHistoryRestored(true);
+        setBulkHistoryBootstrapped(true);
+    }, [isBrowsePresetLocked]);
+
+    useEffect(() => {
+        if (!bulkHistoryBootstrapped || !bulkInterruptedHistoryActive) return;
+        if (bulkResults.rateLimited.length === 0) return;
+
+        writeBulkInterruptedHistory({
+            bulkQuery,
+            pendingList,
+            bulkResults: {
+                hits: [],
+                notFound: bulkResults.notFound,
+                rateLimited: bulkResults.rateLimited,
+                fetchFailed: bulkResults.fetchFailed,
+                alreadyAdded: bulkResults.alreadyAdded
+            },
+            bulkOverflowInfo,
+            bulkFailedStatus,
+            bulkRetryUntilTs,
+            statusMessage: status.type === 'info' ? status.message : ''
+        });
+    }, [
+        bulkHistoryBootstrapped,
+        bulkInterruptedHistoryActive,
+        bulkQuery,
+        pendingList,
+        bulkResults.notFound,
+        bulkResults.rateLimited,
+        bulkResults.fetchFailed,
+        bulkResults.alreadyAdded,
+        bulkOverflowInfo,
+        bulkFailedStatus,
+        bulkRetryUntilTs,
+        status.type,
+        status.message
     ]);
 
     // 1. Autocomplete Search Logic (Debounced)
@@ -1731,10 +1923,12 @@ function AddAnimeScreen({
 
         const overrideTitles = Array.isArray(options?.titlesOverride) ? options.titlesOverride : null;
         const retrySource = String(options?.source || 'default');
+        const isRetrySearch = retrySource === 'retryAll' || retrySource === 'failedOnly';
         const shouldSyncBulkQuery = !overrideTitles;
         const inputTitles = (overrideTitles || bulkQuery.split('\n'))
             .map((t) => String(t || '').trim())
             .filter((t) => t.length > 0);
+        const shouldAutoClearOverflowOnSuccess = !isRetrySearch && inputTitles.length <= MAX_BULK_TITLES;
         if (inputTitles.length === 0) {
             if (bulkAbortControllerRef.current === bulkController) {
                 bulkAbortControllerRef.current = null;
@@ -1767,10 +1961,9 @@ function AddAnimeScreen({
                 type: 'info',
                 message: `上限 ${MAX_BULK_TITLES} 件を超えたため、末尾の ${removedTitles.length} 件を自動除外しました。`
             });
-        } else {
-            setBulkOverflowInfo(null);
         }
 
+        setBulkHistoryRestored(false);
         setIsSearching(true);
         setShowReview(false);
         setIsBulkComplete(false);
@@ -1866,6 +2059,51 @@ function AddAnimeScreen({
             alreadyAdded: liveAlreadyAdded,
             timedOut: liveTimedOut
         }));
+
+        const finalizeBulkRateLimitInterruption = (retryAfterMs = 0, statusCode = 429, detailMessage = '') => {
+            const retryTitles = [...new Set(titles)];
+            const normalizedStatus = Number(statusCode) > 0 ? Number(statusCode) : 429;
+            const normalizedRetryAfterMs = parsePositiveMs(retryAfterMs);
+            const normalizedDetailMessage = String(detailMessage || bulkRateLimitMeta.message || '');
+            const interruptedFailedStatus = retryTitles.reduce((bucket, title) => {
+                const assistKey = normalizeTitleForCompare(title) || title;
+                bucket[assistKey] = {
+                    type: BULK_RESULT_KIND.RATE_LIMITED,
+                    status: normalizedStatus,
+                    retryAfterMs: normalizedRetryAfterMs,
+                    message: normalizedDetailMessage,
+                    loading: false,
+                    error: ''
+                };
+                return bucket;
+            }, {});
+
+            setBulkLiveStats(createBulkLiveStatsState({
+                processed: Math.min(titles.length, preProcessedCount + toQuery.length),
+                total: titles.length,
+                hits: 0,
+                notFound: 0,
+                rateLimited: retryTitles.length,
+                fetchFailed: 0,
+                alreadyAdded: alreadyAdded.length,
+                timedOut: liveTimedOut
+            }));
+            setBulkResults({
+                hits: [],
+                notFound: [],
+                rateLimited: retryTitles,
+                fetchFailed: [],
+                alreadyAdded
+            });
+            setBulkFailedStatus(interruptedFailedStatus);
+            setPendingList((prev) => [...new Set([...prev, ...retryTitles])]);
+            setStatus({
+                type: 'info',
+                message: buildBulkRateLimitInterruptedMessage(normalizedRetryAfterMs)
+            });
+            setShowReview(true);
+            setBulkInterruptedHistoryActive(true);
+        };
 
         try {
             if (toQuery.length > 0) {
@@ -2078,6 +2316,23 @@ function AddAnimeScreen({
                 setBulkRetryUntilTs((prev) => Math.max(prev, getRetryUntilTs(effectiveRetryAfterMs)));
             }
 
+            const didInterruptByRateLimit = bulkRateLimitMeta.detected || rateLimited.length > 0;
+            if (didInterruptByRateLimit) {
+                finalizeBulkRateLimitInterruption(
+                    effectiveRetryAfterMs,
+                    bulkRateLimitMeta.status || 429,
+                    bulkRateLimitMeta.message
+                );
+                return;
+            }
+
+            if (shouldAutoClearOverflowOnSuccess) {
+                setBulkOverflowInfo(null);
+            }
+            clearBulkInterruptedHistory();
+            setBulkInterruptedHistoryActive(false);
+            setBulkHistoryRestored(false);
+
             setBulkLiveStats(createBulkLiveStatsState({
                 processed: titles.length,
                 total: titles.length,
@@ -2124,11 +2379,14 @@ function AddAnimeScreen({
         } catch (error) {
             if (bulkRateLimitMeta.detected) {
                 const waitMs = parsePositiveMs(bulkRateLimitMeta.retryAfterMs);
-                setStatus({
-                    type: 'info',
-                    message: buildBulkRateLimitInterruptedMessage(waitMs)
-                });
-                setShowReview(true);
+                if (waitMs > 0) {
+                    setBulkRetryUntilTs((prev) => Math.max(prev, getRetryUntilTs(waitMs)));
+                }
+                finalizeBulkRateLimitInterruption(
+                    waitMs,
+                    bulkRateLimitMeta.status || 429,
+                    bulkRateLimitMeta.message
+                );
             } else {
                 setStatus({
                     type: 'error',
@@ -2149,13 +2407,17 @@ function AddAnimeScreen({
     const handleBulkRetryAll = () => {
         if (isSearching) return;
         if (!bulkQuery.trim()) return;
+        if (bulkResults.rateLimited.length > 0 && bulkRetryCountdownSec > 0) return;
         handleBulkSearch(null, { source: 'retryAll' });
     };
 
     const handleBulkRetryFailedOnly = () => {
         if (isSearching) return;
-        if (bulkRetryCountdownSec > 0 && bulkResults.rateLimited.length > 0) return;
-        const retryTitles = [...new Set([...bulkResults.rateLimited, ...bulkResults.fetchFailed])];
+        if (bulkResults.rateLimited.length > 0) {
+            handleBulkRetryAll();
+            return;
+        }
+        const retryTitles = [...new Set(bulkResults.fetchFailed)];
         if (retryTitles.length === 0) return;
         handleBulkSearch(null, { source: 'failedOnly', titlesOverride: retryTitles });
     };
@@ -2638,6 +2900,37 @@ function AddAnimeScreen({
         }
     };
 
+    const handleClearBulkInterruptedHistory = () => {
+        if (isSearching) return;
+        if (!window.confirm('アクセス制限で中断した検索履歴をクリアしますか？')) return;
+        clearBulkInterruptedHistory();
+        setBulkInterruptedHistoryActive(false);
+        setBulkHistoryRestored(false);
+        setBulkQuery('');
+        setBulkProgress({ current: 0, total: 0 });
+        setBulkLiveStats(createBulkLiveStatsState());
+        setBulkPhase('idle');
+        setBulkRetryProgress({ current: 0, total: 0 });
+        setBulkCurrentTitle('');
+        setBulkResults(createBulkResultsState());
+        setBulkHitRatingById({});
+        setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
+        setBulkNotFoundStatus({});
+        setBulkFailedStatus({});
+        setBulkRetryUntilTs(0);
+        setBulkRetryCountdownSec(0);
+        setBulkOverflowInfo(null);
+        setPendingList([]);
+        setShowReview(false);
+        setIsBulkComplete(false);
+        setStatus({ type: '', message: '' });
+        setToast({
+            visible: true,
+            type: 'success',
+            message: '中断した検索履歴をクリアしました。'
+        });
+    };
+
     const handlePreviewMyListToggle = () => {
         if (!previewData) return;
         const title = previewData?.title?.native || previewData?.title?.romaji || previewData?.title?.english || '作品';
@@ -2714,6 +3007,7 @@ function AddAnimeScreen({
 
     // 8. Cancel Logic
     const handleCancel = () => {
+        const shouldPreserveBulkHistory = bulkInterruptedHistoryActive;
         searchAbortControllerRef.current?.abort();
         bulkAbortControllerRef.current?.abort();
         searchAbortControllerRef.current = null;
@@ -2734,22 +3028,24 @@ function AddAnimeScreen({
         setSuggestionRatingById({});
         setBulkHitRatingById({});
         setBrowseRatingById({});
-        setShowReview(false);
-        setIsBulkComplete(false);
-        setBulkQuery('');
         autocompleteRequestIdRef.current += 1;
         setIsSuggesting(false);
-        setBulkProgress({ current: 0, total: 0 });
-        setBulkLiveStats(createBulkLiveStatsState());
-        setBulkPhase('idle');
-        setBulkRetryProgress({ current: 0, total: 0 });
-        setBulkCurrentTitle('');
-        setBulkResults(createBulkResultsState());
-        setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
-        setBulkNotFoundStatus({});
-        setBulkFailedStatus({});
-        setBulkRetryUntilTs(0);
-        setBulkRetryCountdownSec(0);
+        if (!shouldPreserveBulkHistory) {
+            setShowReview(false);
+            setIsBulkComplete(false);
+            setBulkQuery('');
+            setBulkProgress({ current: 0, total: 0 });
+            setBulkLiveStats(createBulkLiveStatsState());
+            setBulkPhase('idle');
+            setBulkRetryProgress({ current: 0, total: 0 });
+            setBulkCurrentTitle('');
+            setBulkResults(createBulkResultsState());
+            setBulkExecutionSummary({ added: 0, skipped: 0, target: bulkTarget });
+            setBulkNotFoundStatus({});
+            setBulkFailedStatus({});
+            setBulkRetryUntilTs(0);
+            setBulkRetryCountdownSec(0);
+        }
     };
 
     const guideSummaryText = isBrowsePresetLocked
@@ -2796,11 +3092,16 @@ function AddAnimeScreen({
         && searchErrorCanRetry
         && !previewData;
     const bulkFailureCount = bulkResults.rateLimited.length + bulkResults.fetchFailed.length;
-    const bulkRetryTargetCount = [...new Set([...bulkResults.rateLimited, ...bulkResults.fetchFailed])].length;
+    const bulkFetchFailedRetryCount = [...new Set(bulkResults.fetchFailed)].length;
+    const isBulkRateLimitedInterrupted = bulkResults.rateLimited.length > 0;
+    const showBulkHistoryRestoreNote = bulkHistoryRestored && isBulkRateLimitedInterrupted;
     const bulkRetryWaitMessage = bulkRetryCountdownSec > 0
         ? `あと${bulkRetryCountdownSec}秒後に再試行できます。`
         : '再試行の目安は数十秒〜1分程度です。';
-    const disableBulkFailedRetry = isSearching || (bulkResults.rateLimited.length > 0 && bulkRetryCountdownSec > 0);
+    const disableBulkFailedRetry = isSearching || bulkFetchFailedRetryCount === 0;
+    const disableBulkRetryAll = isSearching
+        || !bulkQuery.trim()
+        || (isBulkRateLimitedInterrupted && bulkRetryCountdownSec > 0);
     const renderBulkOverflowNotice = () => {
         if (!bulkOverflowInfo) return null;
         const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '不明';
@@ -3175,6 +3476,11 @@ function AddAnimeScreen({
                 )
             ) : (
                 <div className="bulk-add-section">
+                    {showBulkHistoryRestoreNote && (
+                        <div className="bulk-history-restore-note">
+                            前回の一括検索はアクセス制限で中断されました。入力内容・上限超過リスト・保留リストを復元しています。
+                        </div>
+                    )}
                     {!showReview ? (
                         <form onSubmit={handleBulkSearch} className="add-form">
                             <div className="mode-switcher-block bulk-target-switcher">
@@ -3301,7 +3607,9 @@ function AddAnimeScreen({
                                 ) : (
                                     <p>
                                         {bulkFailureCount > 0
-                                            ? `要再試行 ${bulkFailureCount} 件は「要再試行」枠に表示しています。未ヒットとは別扱いです。`
+                                            ? (bulkResults.rateLimited.length > 0
+                                                ? 'アクセス制限により検索を中断しました。今回入力した全作品を再検索してください。'
+                                                : `要再試行 ${bulkFailureCount} 件は「要再試行」枠に表示しています。未ヒットとは別扱いです。`)
                                             : '検索された作品を確認し、登録を完了してください。'}
                                     </p>
                                 )}
@@ -3350,7 +3658,8 @@ function AddAnimeScreen({
                                         <div className="bulk-failure-guide">
                                             {bulkResults.rateLimited.length > 0 && (
                                                 <>
-                                                    <div className="bulk-notfound-hint warning strong">検索途中でAPIのアクセス制限に達したため、すべてを検索できませんでした。</div>
+                                                    <div className="bulk-notfound-hint warning strong">検索途中でAPIのアクセス制限に達したため、最後まで検索を完了できませんでした。</div>
+                                                    <div className="bulk-notfound-hint warning">今回入力した全作品を再検索してください。</div>
                                                     <div className="bulk-notfound-hint warning">制限解除後に再試行してください。</div>
                                                     <div className="bulk-notfound-hint">{bulkRetryWaitMessage}</div>
                                                 </>
@@ -3362,22 +3671,45 @@ function AddAnimeScreen({
                                             )}
                                         </div>
                                         <div className="bulk-failure-actions">
-                                            <button
-                                                type="button"
-                                                className="bulk-mini-button"
-                                                onClick={handleBulkRetryFailedOnly}
-                                                disabled={disableBulkFailedRetry || bulkRetryTargetCount === 0}
-                                            >
-                                                要再試行分のみ再試行
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="bulk-mini-button subtle"
-                                                onClick={handleBulkRetryAll}
-                                                disabled={isSearching || !bulkQuery.trim()}
-                                            >
-                                                全件を再試行
-                                            </button>
+                                            {bulkResults.rateLimited.length > 0 ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="bulk-mini-button"
+                                                        onClick={handleBulkRetryAll}
+                                                        disabled={disableBulkRetryAll}
+                                                    >
+                                                        全作品を再検索
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="bulk-mini-button subtle"
+                                                        onClick={handleClearBulkInterruptedHistory}
+                                                        disabled={isSearching}
+                                                    >
+                                                        履歴をクリア
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="bulk-mini-button"
+                                                        onClick={handleBulkRetryFailedOnly}
+                                                        disabled={disableBulkFailedRetry}
+                                                    >
+                                                        要再試行分のみ再試行
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="bulk-mini-button subtle"
+                                                        onClick={handleBulkRetryAll}
+                                                        disabled={disableBulkRetryAll}
+                                                    >
+                                                        全件を再試行
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                         {bulkResults.rateLimited.length > 0 && (
                                             <>
@@ -3468,7 +3800,11 @@ function AddAnimeScreen({
                             <div className="bulk-actions grouped">
                                 {!isBulkComplete ? (
                                     <>
-                                        <button className="action-button primary-button" onClick={handleBulkConfirm}>
+                                        <button
+                                            className="action-button primary-button"
+                                            onClick={handleBulkConfirm}
+                                            disabled={bulkResults.hits.length === 0}
+                                        >
                                             {`上記をすべて${bulkTargetLabel}に追加する`}
                                         </button>
                                         <button className="action-button dismiss-button" onClick={handleCancel}>

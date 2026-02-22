@@ -115,6 +115,27 @@ function BookmarkScreen({
     setSelectedBookmarkIds([]);
   };
 
+  const handleRemoveSingleBookmark = (anime, event) => {
+    event.stopPropagation();
+    clearLongPressTimer();
+    if (!anime || typeof anime.id !== 'number') return;
+    if (typeof onToggleBookmark !== 'function') {
+      setActionNotice({ type: 'error', message: 'ブックマーク削除を実行できませんでした。' });
+      return;
+    }
+
+    const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
+    if (!window.confirm(`「${title}」をブックマークから削除しますか？`)) return;
+
+    const result = onToggleBookmark(anime);
+    if (result?.success && result.action === 'removed') {
+      setSelectedBookmarkIds((prev) => prev.filter((id) => id !== anime.id));
+      setActionNotice({ type: 'success', message: `「${title}」をブックマークから削除しました。` });
+      return;
+    }
+    setActionNotice({ type: 'error', message: result?.message || 'ブックマーク削除に失敗しました。' });
+  };
+
   const handleMarkWatched = (anime, event, rating = null) => {
     event.stopPropagation();
     if (typeof onMarkWatched !== 'function') {
@@ -225,6 +246,19 @@ function BookmarkScreen({
                 aria-pressed={isSelectionMode ? isSelected : undefined}
               >
                 <img src={anime?.coverImage?.large || ''} alt="" className="bookmark-item-thumb" />
+                {!isSelectionMode && (
+                  <button
+                    type="button"
+                    className="delete-button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onPointerUp={(event) => event.stopPropagation()}
+                    onClick={(event) => handleRemoveSingleBookmark(anime, event)}
+                    title="ブックマークから削除"
+                    aria-label={`${title}をブックマークから削除`}
+                  >
+                    ✕
+                  </button>
+                )}
                 <div className="bookmark-item-content">
                   <h3 className="bookmark-item-title">{title}</h3>
                   <div className="bookmark-item-meta">

@@ -130,7 +130,7 @@ function AnimeCard({
             }}
             title="削除"
           >
-            X
+            ✕
           </button>
         )}
       </div>
