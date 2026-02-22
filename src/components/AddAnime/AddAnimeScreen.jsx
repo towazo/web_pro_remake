@@ -3094,14 +3094,22 @@ function AddAnimeScreen({
     const bulkFailureCount = bulkResults.rateLimited.length + bulkResults.fetchFailed.length;
     const bulkFetchFailedRetryCount = [...new Set(bulkResults.fetchFailed)].length;
     const isBulkRateLimitedInterrupted = bulkResults.rateLimited.length > 0;
+    const isBulkRetryWaiting = isBulkRateLimitedInterrupted && bulkRetryCountdownSec > 0;
     const showBulkHistoryRestoreNote = bulkHistoryRestored && isBulkRateLimitedInterrupted;
-    const bulkRetryWaitMessage = bulkRetryCountdownSec > 0
+    const bulkRetryWaitMessage = isBulkRetryWaiting
         ? `あと${bulkRetryCountdownSec}秒後に再試行できます。`
-        : '再試行の目安は数十秒〜1分程度です。';
+        : '検索可能になりました。';
+    const bulkRetryWaitMessageClassName = isBulkRetryWaiting
+        ? 'bulk-notfound-hint warning'
+        : 'bulk-notfound-hint ready';
+    const hasBulkAddableResults = bulkResults.hits.length > 0;
+    const bulkReviewDismissLabel = !isBulkComplete && !hasBulkAddableResults
+        ? '追加できる作品がないため次の検索へ'
+        : 'キャンセル';
     const disableBulkFailedRetry = isSearching || bulkFetchFailedRetryCount === 0;
     const disableBulkRetryAll = isSearching
         || !bulkQuery.trim()
-        || (isBulkRateLimitedInterrupted && bulkRetryCountdownSec > 0);
+        || isBulkRetryWaiting;
     const renderBulkOverflowNotice = () => {
         if (!bulkOverflowInfo) return null;
         const cutoffTitle = bulkOverflowInfo.cutoffTitle || bulkOverflowInfo.removedTitles?.[0] || '不明';
@@ -3660,8 +3668,10 @@ function AddAnimeScreen({
                                                 <>
                                                     <div className="bulk-notfound-hint warning strong">検索途中でAPIのアクセス制限に達したため、最後まで検索を完了できませんでした。</div>
                                                     <div className="bulk-notfound-hint warning">今回入力した全作品を再検索してください。</div>
-                                                    <div className="bulk-notfound-hint warning">制限解除後に再試行してください。</div>
-                                                    <div className="bulk-notfound-hint">{bulkRetryWaitMessage}</div>
+                                                    {isBulkRetryWaiting && (
+                                                        <div className="bulk-notfound-hint warning">制限解除後に再試行してください。</div>
+                                                    )}
+                                                    <div className={bulkRetryWaitMessageClassName}>{bulkRetryWaitMessage}</div>
                                                 </>
                                             )}
                                             {bulkResults.fetchFailed.length > 0 && (
@@ -3800,15 +3810,19 @@ function AddAnimeScreen({
                             <div className="bulk-actions grouped">
                                 {!isBulkComplete ? (
                                     <>
+                                        {hasBulkAddableResults && (
+                                            <button
+                                                className="action-button primary-button"
+                                                onClick={handleBulkConfirm}
+                                            >
+                                                {`上記をすべて${bulkTargetLabel}に追加する`}
+                                            </button>
+                                        )}
                                         <button
-                                            className="action-button primary-button"
-                                            onClick={handleBulkConfirm}
-                                            disabled={bulkResults.hits.length === 0}
+                                            className={`action-button dismiss-button ${!hasBulkAddableResults ? 'bulk-next-search-button' : ''}`}
+                                            onClick={handleCancel}
                                         >
-                                            {`上記をすべて${bulkTargetLabel}に追加する`}
-                                        </button>
-                                        <button className="action-button dismiss-button" onClick={handleCancel}>
-                                            キャンセル
+                                            {bulkReviewDismissLabel}
                                         </button>
                                     </>
                                 ) : (

@@ -4935,6 +4935,21 @@ body {
     color: #7f1d1d;
 }
 
+.bulk-notfound-hint.ready {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border: 1px solid #86efac;
+    border-left: 4px solid #15803d;
+    background: #f0fdf4;
+    color: #14532d;
+    font-weight: 800;
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
 .bulk-notfound-hint.warning.strong {
     font-weight: 800;
 }
@@ -5048,6 +5063,15 @@ body {
     margin-top: 30px;
 }
 
+.bulk-next-search-button {
+    white-space: normal;
+    height: auto;
+    min-height: 58px;
+    line-height: 1.35;
+    letter-spacing: 0.03em;
+    padding: 12px 16px !important;
+}
+
 .bulk-rating-picker {
     margin-top: 10px;
 }
@@ -5063,6 +5087,13 @@ body {
 
 .completion-actions .primary-button {
     width: 100%;
+}
+
+@media (max-width: 768px) {
+    .bulk-next-search-button {
+        min-height: 62px;
+        font-size: 0.94rem;
+    }
 }
 
 .back-to-home-button {
