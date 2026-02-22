@@ -3484,7 +3484,7 @@ function AddAnimeScreen({
                 )
             ) : (
                 <div className="bulk-add-section">
-                    {showBulkHistoryRestoreNote && (
+                    {showBulkHistoryRestoreNote && !showReview && (
                         <div className="bulk-history-restore-note">
                             前回の一括検索はアクセス制限で中断されました。入力内容・上限超過リスト・保留リストを復元しています。
                         </div>
@@ -3615,9 +3615,7 @@ function AddAnimeScreen({
                                 ) : (
                                     <p>
                                         {bulkFailureCount > 0
-                                            ? (bulkResults.rateLimited.length > 0
-                                                ? 'アクセス制限により検索を中断しました。今回入力した全作品を再検索してください。'
-                                                : `要再試行 ${bulkFailureCount} 件は「要再試行」枠に表示しています。未ヒットとは別扱いです。`)
+                                            ? '要再試行の作品があります。下の「検索未完了」セクションで内容を確認して再検索してください。'
                                             : '検索された作品を確認し、登録を完了してください。'}
                                     </p>
                                 )}
@@ -3664,19 +3662,59 @@ function AddAnimeScreen({
                                     <div className="review-section warning">
                                         <h4>検索未完了（アクセス制限/取得失敗） ({bulkFailureCount})</h4>
                                         <div className="bulk-failure-guide">
+                                            {showBulkHistoryRestoreNote && (
+                                                <div className="bulk-history-restore-note inline">
+                                                    前回の一括検索はアクセス制限で中断されました。入力内容・上限超過リスト・保留リストを復元しています。
+                                                </div>
+                                            )}
                                             {bulkResults.rateLimited.length > 0 && (
-                                                <>
+                                                <div className="bulk-failure-block rate-limit">
+                                                    <div className="bulk-review-subheading">アクセス制限で中断 ({bulkResults.rateLimited.length})</div>
                                                     <div className="bulk-notfound-hint warning strong">検索途中でAPIのアクセス制限に達したため、最後まで検索を完了できませんでした。</div>
                                                     <div className="bulk-notfound-hint warning">今回入力した全作品を再検索してください。</div>
-                                                    {isBulkRetryWaiting && (
-                                                        <div className="bulk-notfound-hint warning">制限解除後に再試行してください。</div>
-                                                    )}
                                                     <div className={bulkRetryWaitMessageClassName}>{bulkRetryWaitMessage}</div>
-                                                </>
+                                                    <details className="bulk-rate-limited-details">
+                                                        <summary>中断時点までに検索された作品一覧を表示</summary>
+                                                        <ul className="bulk-notfound-list">
+                                                            {bulkResults.rateLimited.map((title, idx) => {
+                                                                const assistKey = normalizeTitleForCompare(title) || title;
+                                                                const assist = bulkFailedStatus[assistKey] || {};
+                                                                return (
+                                                                    <li key={`${title}-${idx}`} className="bulk-notfound-item">
+                                                                        <div className="bulk-notfound-row">
+                                                                            <span className="bulk-notfound-title">{title}</span>
+                                                                        </div>
+                                                                        <div className="bulk-notfound-hint warning">{describeBulkFailure(assist)}</div>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                        </ul>
+                                                    </details>
+                                                </div>
                                             )}
                                             {bulkResults.fetchFailed.length > 0 && (
-                                                <div className="bulk-notfound-hint warning">
-                                                    サーバーエラー等により、一部の作品情報を取得できませんでした。時間をおいて再試行してください。
+                                                <div className="bulk-failure-block fetch-failed">
+                                                    <div className="bulk-review-subheading">サーバーエラー等で取得失敗 ({bulkResults.fetchFailed.length})</div>
+                                                    <div className="bulk-notfound-hint warning">
+                                                        サーバーエラー等により、一部の作品情報を取得できませんでした。時間をおいて再試行してください。
+                                                    </div>
+                                                    <details className="bulk-fetch-failed-details">
+                                                        <summary>取得失敗の作品一覧を表示</summary>
+                                                        <ul className="bulk-notfound-list">
+                                                            {bulkResults.fetchFailed.map((title, idx) => {
+                                                                const assistKey = normalizeTitleForCompare(title) || title;
+                                                                const assist = bulkFailedStatus[assistKey] || {};
+                                                                return (
+                                                                    <li key={`${title}-${idx}`} className="bulk-notfound-item">
+                                                                        <div className="bulk-notfound-row">
+                                                                            <span className="bulk-notfound-title">{title}</span>
+                                                                        </div>
+                                                                        <div className="bulk-notfound-hint warning">{describeBulkFailure(assist)}</div>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                        </ul>
+                                                    </details>
                                                 </div>
                                             )}
                                         </div>
@@ -3721,44 +3759,6 @@ function AddAnimeScreen({
                                                 </>
                                             )}
                                         </div>
-                                        {bulkResults.rateLimited.length > 0 && (
-                                            <>
-                                                <div className="bulk-review-subheading">アクセス制限で一時停止 ({bulkResults.rateLimited.length})</div>
-                                                <ul className="bulk-notfound-list">
-                                                    {bulkResults.rateLimited.map((title, idx) => {
-                                                        const assistKey = normalizeTitleForCompare(title) || title;
-                                                        const assist = bulkFailedStatus[assistKey] || {};
-                                                        return (
-                                                            <li key={`${title}-${idx}`} className="bulk-notfound-item">
-                                                                <div className="bulk-notfound-row">
-                                                                    <span className="bulk-notfound-title">{title}</span>
-                                                                </div>
-                                                                <div className="bulk-notfound-hint warning">{describeBulkFailure(assist)}</div>
-                                                            </li>
-                                                        );
-                                                    })}
-                                                </ul>
-                                            </>
-                                        )}
-                                        {bulkResults.fetchFailed.length > 0 && (
-                                            <>
-                                                <div className="bulk-review-subheading">サーバーエラー等で取得失敗 ({bulkResults.fetchFailed.length})</div>
-                                                <ul className="bulk-notfound-list">
-                                                    {bulkResults.fetchFailed.map((title, idx) => {
-                                                        const assistKey = normalizeTitleForCompare(title) || title;
-                                                        const assist = bulkFailedStatus[assistKey] || {};
-                                                        return (
-                                                            <li key={`${title}-${idx}`} className="bulk-notfound-item">
-                                                                <div className="bulk-notfound-row">
-                                                                    <span className="bulk-notfound-title">{title}</span>
-                                                                </div>
-                                                                <div className="bulk-notfound-hint warning">{describeBulkFailure(assist)}</div>
-                                                            </li>
-                                                        );
-                                                    })}
-                                                </ul>
-                                            </>
-                                        )}
                                     </div>
                                 )}
 

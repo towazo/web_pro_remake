@@ -4956,6 +4956,30 @@ body {
 
 .bulk-failure-guide {
     margin: 8px 0 0;
+    display: grid;
+    gap: 12px;
+}
+
+.bulk-failure-block {
+    border: 1px solid #e7dfd7;
+    background: #fff;
+    padding: 10px 12px;
+}
+
+.bulk-failure-block.rate-limit {
+    border-left: 4px solid #b45309;
+}
+
+.bulk-failure-block.fetch-failed {
+    border-left: 4px solid #7f1d1d;
+}
+
+.bulk-failure-block .bulk-review-subheading {
+    margin: 0 0 8px;
+}
+
+.bulk-history-restore-note.inline {
+    margin: 0;
 }
 
 .bulk-history-restore-note {
@@ -4981,6 +5005,30 @@ body {
     font-size: 0.8rem;
     font-weight: 800;
     color: #5b3413;
+}
+
+.bulk-rate-limited-details {
+    margin-top: 8px;
+}
+
+.bulk-rate-limited-details summary,
+.bulk-fetch-failed-details summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #5b3413;
+}
+
+.bulk-rate-limited-details[open] summary,
+.bulk-fetch-failed-details[open] summary {
+    margin-bottom: 8px;
+}
+
+.bulk-rate-limited-details .bulk-notfound-list,
+.bulk-fetch-failed-details .bulk-notfound-list {
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
 .bulk-candidate-list {
