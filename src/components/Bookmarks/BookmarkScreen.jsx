@@ -74,7 +74,7 @@ function BookmarkScreen({
       if (!hasGenreFilter) return true;
 
       const animeGenres = Array.isArray(anime?.genres) ? anime.genres : [];
-      return selectedGenres.some((genre) => animeGenres.includes(genre));
+      return selectedGenres.every((genre) => animeGenres.includes(genre));
     });
 
     const sorted = [...filtered];
@@ -341,6 +341,7 @@ function BookmarkScreen({
                 ? `選択中: ${selectedGenres.map((genre) => translateGenre(genre)).join(' / ')}`
                 : 'ジャンル未選択（すべて表示）'}
             </p>
+            <p className="bookmark-genre-filter-note">複数選択時は「すべて含む」で絞り込みます。</p>
             {uniqueGenres.length > 0 ? (
               <div className="bookmark-genre-filter-chips">
                 {uniqueGenres.map((genre) => {

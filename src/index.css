@@ -2033,6 +2033,14 @@ body {
     font-weight: 600;
 }
 
+.bookmark-genre-filter-note {
+    margin: -4px 0 10px;
+    font-size: 0.74rem;
+    color: #666;
+    line-height: 1.45;
+    font-weight: 700;
+}
+
 .bookmark-genre-filter-chips {
     display: flex;
     flex-wrap: wrap;
@@ -4304,6 +4312,14 @@ body {
     color: #555;
     margin-bottom: 10px;
     line-height: 1.4;
+}
+
+.browse-filter-hint {
+    font-size: 0.74rem;
+    color: #666;
+    margin: -4px 0 10px;
+    line-height: 1.4;
+    font-weight: 700;
 }
 
 .browse-genre-chips {

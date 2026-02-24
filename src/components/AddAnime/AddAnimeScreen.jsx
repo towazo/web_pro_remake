@@ -1579,7 +1579,7 @@ function AddAnimeScreen({
         browseResults.filter((anime) => {
             if (browseGenreFilters.length > 0) {
                 const animeGenres = Array.isArray(anime?.genres) ? anime.genres : [];
-                const hasGenreMatch = browseGenreFilters.some((genre) => animeGenres.includes(genre));
+                const hasGenreMatch = browseGenreFilters.every((genre) => animeGenres.includes(genre));
                 if (!hasGenreMatch) return false;
             }
             if (browseSeasonFilters.length === 0) return true;
@@ -3266,7 +3266,8 @@ function AddAnimeScreen({
                                     ) : (
                                         <>
                                             <li>まず年を選択して「一覧を表示」を押してください</li>
-                                            <li>ジャンル・放送時期を複数選択すると OR 条件で絞り込めます</li>
+                                            <li>ジャンルは複数選択時に「すべて含む（AND）」で絞り込みます</li>
+                                            <li>放送時期は複数選択時に「いずれか一致（OR）」で絞り込みます</li>
                                             <li>表示された一覧から作品を追加してください</li>
                                         </>
                                     )}
@@ -4005,7 +4006,7 @@ function AddAnimeScreen({
                                 </div>
                             </div>
                             <div className="browse-genre-section">
-                                <div className="browse-filter-title">絞り込み条件（複数選択 / OR）</div>
+                                <div className="browse-filter-title">絞り込み条件</div>
                                 <div className="browse-filter-grid">
                                     <div className="browse-filter-group">
                                         <div className="browse-genre-header">
@@ -4022,6 +4023,7 @@ function AddAnimeScreen({
                                             )}
                                         </div>
                                         <div className="browse-genre-selected">{browseGenreSummaryText}</div>
+                                        <div className="browse-filter-hint">複数選択時は「すべて含む」で絞り込みます。</div>
                                         {browseGenreOptions.length > 0 ? (
                                             <div className="browse-genre-chips">
                                                 {browseGenreOptions.map((genre) => {

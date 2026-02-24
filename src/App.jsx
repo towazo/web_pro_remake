@@ -542,7 +542,7 @@ function App() {
         || titleNative.includes(normalizedSearch)
         || titleRomaji.includes(normalizedSearch)
         || titleEnglish.includes(normalizedSearch);
-      const matchesGenre = !hasGenreFilter || selectedGenres.some((genre) => animeGenres.includes(genre));
+      const matchesGenre = !hasGenreFilter || selectedGenres.every((genre) => animeGenres.includes(genre));
 
       return matchesSearch && matchesGenre;
     });
@@ -785,6 +785,7 @@ function App() {
                   ? `選択中: ${selectedGenres.map((genre) => translateGenre(genre)).join(' / ')}`
                   : 'ジャンル未選択（すべて表示）'}
               </p>
+              <p className="bookmark-genre-filter-note">複数選択時は「すべて含む」で絞り込みます。</p>
               {uniqueGenres.length > 0 ? (
                 <div className="bookmark-genre-filter-chips">
                   {uniqueGenres.map((genre) => {
