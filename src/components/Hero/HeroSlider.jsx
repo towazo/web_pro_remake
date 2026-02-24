@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Hero from './Hero';
 
-function HeroSlider({ slides }) {
+function HeroSlider({ slides, onRefresh, isRefreshing = false }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
@@ -43,6 +43,11 @@ function HeroSlider({ slides }) {
         }
     };
 
+    const handleRefresh = () => {
+        if (typeof onRefresh !== 'function' || isRefreshing) return;
+        onRefresh();
+    };
+
     return (
         <div
             className="hero-slider-container"
@@ -50,6 +55,30 @@ function HeroSlider({ slides }) {
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
         >
+            {typeof onRefresh === 'function' && (
+                <button
+                    type="button"
+                    className={`slider-refresh-button ${isRefreshing ? 'loading' : ''}`}
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    aria-label={isRefreshing ? 'スライダーを更新中' : 'スライダーを更新'}
+                    title={isRefreshing ? '更新中' : 'スライダーを更新'}
+                >
+                    <img
+                        src="/images/icon-update.png"
+                        alt=""
+                        className={`slider-refresh-icon ${isRefreshing ? 'spinning' : ''}`}
+                    />
+                    <span className="slider-refresh-label">{isRefreshing ? '更新中' : '更新'}</span>
+                </button>
+            )}
+
+            {isRefreshing && (
+                <div className="slider-refresh-loading" role="status" aria-live="polite">
+                    スライダーを更新中...
+                </div>
+            )}
+
             {slides.map((anime, index) => (
                 <Hero
                     key={anime.id || index}
@@ -60,18 +89,20 @@ function HeroSlider({ slides }) {
 
             {slides.length > 1 && (
                 <>
-                    <button className="slider-nav-button slider-prev" onClick={prevSlide}>
+                    <button type="button" className="slider-nav-button slider-prev" onClick={prevSlide}>
                         &#10094;
                     </button>
-                    <button className="slider-nav-button slider-next" onClick={nextSlide}>
+                    <button type="button" className="slider-nav-button slider-next" onClick={nextSlide}>
                         &#10095;
                     </button>
                     <div className="slider-indicators">
                         {slides.map((_, index) => (
                             <button
                                 key={index}
+                                type="button"
                                 className={`slider-dot ${index === currentIndex ? 'active' : ''}`}
                                 onClick={() => setCurrentIndex(index)}
+                                aria-label={`${index + 1}枚目を表示`}
                             />
                         ))}
                     </div>

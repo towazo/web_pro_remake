@@ -2438,6 +2438,11 @@ function AddAnimeScreen({
         setStatus({ type: 'info', message: '作品が選択されました。内容を確認してください。' });
     };
 
+    const handleCloseSuggestions = (event) => {
+        event?.stopPropagation?.();
+        setShowSuggestions(false);
+    };
+
     const handleToggleSuggestionSelection = (animeId, checked) => {
         setSelectedSuggestionIds((prev) => {
             if (checked) {
@@ -2466,6 +2471,22 @@ function AddAnimeScreen({
         }
     };
 
+    const handleSuggestionRatingChangeFromReview = (animeId, rating) => {
+        const normalizedRating = normalizeRatingValue(rating);
+        setSelectedSuggestionIds((prev) => (prev.includes(animeId) ? prev : [...prev, animeId]));
+        setSuggestionRatingById((prev) => {
+            const hasKey = Object.prototype.hasOwnProperty.call(prev, animeId);
+            if (normalizedRating === null) {
+                if (!hasKey) return prev;
+                const next = { ...prev };
+                delete next[animeId];
+                return next;
+            }
+            if (hasKey && prev[animeId] === normalizedRating) return prev;
+            return { ...prev, [animeId]: normalizedRating };
+        });
+    };
+
     const handleBulkHitRatingChange = (animeId, rating) => {
         const normalizedRating = normalizeRatingValue(rating);
         setBulkHitRatingById((prev) => ({ ...prev, [animeId]: normalizedRating }));
@@ -2488,6 +2509,16 @@ function AddAnimeScreen({
                 }
             });
             return changed ? next : prev;
+        });
+    };
+
+    const handleRemoveSuggestionFromSelection = (animeId) => {
+        setSelectedSuggestionIds((prev) => prev.filter((id) => id !== animeId));
+        setSuggestionRatingById((prev) => {
+            if (!Object.prototype.hasOwnProperty.call(prev, animeId)) return prev;
+            const next = { ...prev };
+            delete next[animeId];
+            return next;
         });
     };
 
@@ -3311,7 +3342,16 @@ function AddAnimeScreen({
                                     className="suggestions-loading"
                                     style={suggestionsDropdownStyle}
                                 >
-                                    候補を検索中...
+                                    <div className="suggestions-panel-toolbar loading">
+                                        <span className="suggestions-panel-title">候補を検索中...</span>
+                                        <button
+                                            type="button"
+                                            className="suggestions-close-button"
+                                            onClick={handleCloseSuggestions}
+                                        >
+                                            閉じる
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -3340,6 +3380,15 @@ function AddAnimeScreen({
                                             </button>
                                         </div>
                                     )}
+                                    <div className="suggestions-close-row">
+                                        <button
+                                            type="button"
+                                            className="suggestions-close-button"
+                                            onClick={handleCloseSuggestions}
+                                        >
+                                            候補を閉じる
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -3349,6 +3398,16 @@ function AddAnimeScreen({
                                     className="suggestions-dropdown"
                                     style={suggestionsDropdownStyle}
                                 >
+                                    <div className="suggestions-panel-toolbar">
+                                        <span className="suggestions-panel-title">候補一覧</span>
+                                        <button
+                                            type="button"
+                                            className="suggestions-close-button"
+                                            onClick={handleCloseSuggestions}
+                                        >
+                                            閉じる
+                                        </button>
+                                    </div>
                                     {suggestionFeedback.type === 'warning' && suggestionFeedback.message && (
                                         <div className="suggestions-inline-warning" role="status" aria-live="polite">
                                             <div className="suggestions-inline-warning-text">
@@ -3463,6 +3522,53 @@ function AddAnimeScreen({
                                         </button>
                                     </div>
                                 </div>
+                                {selectedSuggestionCount > 0 && (
+                                    <div className="normal-selection-review" role="region" aria-label="追加前の作品一覧">
+                                        <p className="normal-selection-review-label">追加前の確認一覧</p>
+                                        <div className="normal-selection-review-list">
+                                            {selectedSuggestions.map((anime) => {
+                                                const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品名不明';
+                                                const rating = normalizeRatingValue(suggestionRatingById[anime.id]);
+                                                return (
+                                                    <article key={anime.id} className="normal-selection-review-item">
+                                                        <img
+                                                            src={anime?.coverImage?.large || anime?.coverImage?.extraLarge || ''}
+                                                            alt=""
+                                                            className="normal-selection-review-thumb"
+                                                        />
+                                                        <div className="normal-selection-review-main">
+                                                            <p className="normal-selection-review-title">{title}</p>
+                                                            {normalTarget === 'mylist' ? (
+                                                                <div className="normal-selection-review-rating-row">
+                                                                    <p className="normal-selection-review-rating">
+                                                                        {rating !== null ? `評価: ★${rating}` : '評価: 未設定'}
+                                                                    </p>
+                                                                    <MiniStarRating
+                                                                        value={suggestionRatingById[anime.id]}
+                                                                        onChange={(nextRating) => handleSuggestionRatingChangeFromReview(anime.id, nextRating)}
+                                                                        className="normal-selection-review-rating-picker"
+                                                                        ariaLabel={`「${title}」の評価`}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <p className="normal-selection-review-rating">
+                                                                    評価はマイリスト追加時に設定できます
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="normal-selection-review-remove"
+                                                            onClick={() => handleRemoveSuggestionFromSelection(anime.id)}
+                                                        >
+                                                            選択解除
+                                                        </button>
+                                                    </article>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                                 <button
                                     type="button"
                                     className="action-button primary-button normal-multi-add-submit"
@@ -3473,13 +3579,15 @@ function AddAnimeScreen({
                                 </button>
                             </div>
                         )}
-                        <button
-                            type="submit"
-                            className="action-button primary-button"
-                            disabled={isSearching || searchRetryCountdownSec > 0}
-                        >
-                            {isSearching ? '検索中...' : '作品を検索する'}
-                        </button>
+                        {selectedSuggestionCount === 0 && (
+                            <button
+                                type="submit"
+                                className="action-button primary-button"
+                                disabled={isSearching || searchRetryCountdownSec > 0}
+                            >
+                                {isSearching ? '検索中...' : '作品を検索する'}
+                            </button>
+                        )}
                     </form>
                 )
             ) : (

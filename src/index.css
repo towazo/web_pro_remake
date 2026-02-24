@@ -1548,6 +1548,86 @@ body {
     }
 }
 
+.slider-refresh-button {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 14;
+    min-height: 42px;
+    min-width: 84px;
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    background: rgba(20, 20, 20, 0.45);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 11px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.slider-refresh-button:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+.slider-refresh-button:disabled {
+    opacity: 0.8;
+    cursor: wait;
+}
+
+.slider-refresh-button.loading {
+    background: rgba(12, 12, 12, 0.62);
+}
+
+.slider-refresh-icon {
+    --slider-refresh-icon-scale: 1.7;
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: brightness(0) invert(1);
+    opacity: 0.96;
+    transform: scale(var(--slider-refresh-icon-scale));
+}
+
+.slider-refresh-icon.spinning {
+    animation: sliderRefreshSpin 0.9s linear infinite;
+}
+
+.slider-refresh-label {
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.slider-refresh-loading {
+    position: absolute;
+    top: 56px;
+    right: 12px;
+    z-index: 14;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(0, 0, 0, 0.52);
+    color: #fff;
+    padding: 5px 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+@keyframes sliderRefreshSpin {
+    from {
+        transform: rotate(0deg) scale(var(--slider-refresh-icon-scale));
+    }
+
+    to {
+        transform: rotate(360deg) scale(var(--slider-refresh-icon-scale));
+    }
+}
+
 .slider-nav-button {
     position: absolute;
     top: 50%;
@@ -1582,6 +1662,31 @@ body {
 }
 
 @media (max-width: 480px) {
+    .slider-refresh-button {
+        min-width: 88px;
+        min-height: 46px;
+        padding: 0 11px;
+        top: 10px;
+        right: 10px;
+    }
+
+    .slider-refresh-label {
+        display: inline;
+        font-size: 0.72rem;
+    }
+
+    .slider-refresh-icon {
+        --slider-refresh-icon-scale: 1.5;
+        width: 22px;
+        height: 22px;
+    }
+
+    .slider-refresh-loading {
+        top: 54px;
+        right: 10px;
+        font-size: 0.66rem;
+    }
+
     .slider-nav-button {
         display: none;
         top: auto;
@@ -1871,6 +1976,100 @@ body {
     line-height: var(--lh-body);
 }
 
+.bookmark-screen-controls {
+    margin: 8px 0 12px;
+}
+
+.bookmark-screen-controls .search-box {
+    flex: 1 1 360px;
+}
+
+.bookmark-screen-controls .sort-box {
+    flex: 0 1 250px;
+}
+
+.bookmark-genre-filter-section {
+    border: 1px solid #ececec;
+    background: #fafafa;
+    padding: 11px 12px;
+    margin: 0 0 16px;
+}
+
+.bookmark-genre-filter-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.bookmark-genre-filter-title {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #111;
+}
+
+.bookmark-genre-filter-clear {
+    min-height: 30px;
+    border: 1px solid #bcbcbc;
+    background: #fff;
+    color: #111;
+    padding: 0 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.bookmark-genre-filter-clear:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.bookmark-genre-filter-selected {
+    margin: 8px 0 10px;
+    font-size: 0.78rem;
+    color: #555;
+    line-height: 1.45;
+    font-weight: 600;
+}
+
+.bookmark-genre-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.bookmark-genre-chip {
+    border: 1px solid #bbb;
+    background: #fff;
+    color: #111;
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.bookmark-genre-chip.active {
+    border-color: #000;
+    background: #000;
+    color: #fff;
+}
+
+.bookmark-genre-filter-empty {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #666;
+    font-weight: 600;
+}
+
+.bookmark-filter-empty {
+    margin-top: 0;
+}
+
+.mylist-genre-filter-section {
+    margin-bottom: 18px;
+}
+
 .bookmark-action-notice {
     margin: 0 0 14px;
     border: 1px solid #ddd;
@@ -1896,6 +2095,67 @@ body {
     display: flex;
     align-items: stretch;
     gap: 10px;
+}
+
+.mylist-screen-actions {
+    align-items: center;
+}
+
+.mylist-copy-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    border: 1px solid #000;
+    background: #fff;
+    overflow: hidden;
+}
+
+.mylist-copy-rating-toggle {
+    border: none;
+    background: transparent;
+    color: #000;
+    min-height: 46px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mylist-copy-rating-toggle input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.mylist-copy-button {
+    border: none;
+    border-left: 1px solid #000;
+    background: #000;
+    color: #fff;
+    min-height: 46px;
+    padding: 0 16px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mylist-copy-button:hover:not(:disabled) {
+    background: #222;
+}
+
+.mylist-copy-button:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 
 .bookmark-season-nav-buttons {
@@ -2469,6 +2729,26 @@ body {
         gap: 10px;
     }
 
+    .mylist-copy-controls {
+        width: auto;
+        max-width: 100%;
+        align-self: flex-start;
+        display: grid;
+        grid-template-columns: auto auto;
+    }
+
+    .bookmark-screen-controls {
+        margin: 10px 0 10px;
+    }
+
+    .bookmark-screen-controls .sort-box {
+        width: 100%;
+    }
+
+    .bookmark-genre-filter-section {
+        margin-bottom: 14px;
+    }
+
     .bookmark-season-nav-buttons {
         min-width: 0;
         width: 100%;
@@ -2477,6 +2757,11 @@ body {
     .bookmark-screen-add,
     .bookmark-screen-home {
         width: 100%;
+    }
+
+    .mylist-copy-button {
+        min-width: 108px;
+        padding: 0 12px;
     }
 
     .bookmark-screen-desc {
@@ -2595,6 +2880,40 @@ body {
 
     .bookmark-screen-actions {
         gap: 8px;
+    }
+
+    .mylist-copy-controls {
+        width: auto;
+        max-width: 100%;
+        grid-template-columns: auto auto;
+        align-self: flex-start;
+    }
+
+    .mylist-copy-rating-toggle,
+    .mylist-copy-button {
+        width: auto;
+        min-height: 40px;
+    }
+
+    .mylist-copy-button {
+        border-left: 1px solid #000;
+        border-top: none;
+        justify-content: center;
+    }
+
+    .mylist-copy-rating-toggle {
+        padding: 0 10px;
+        font-size: 0.74rem;
+    }
+
+    .mylist-copy-button {
+        min-width: 96px;
+        font-size: 0.76rem;
+        padding: 0 10px;
+    }
+
+    .bookmark-genre-filter-section {
+        padding: 10px;
     }
 
     .bookmark-season-nav-buttons {
@@ -3217,29 +3536,43 @@ body {
 
 .preview-card-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     width: 100%;
     padding: 0;
     border-top: 1px solid #000;
+}
+
+.preview-card-actions .action-button {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+    line-height: 1.25;
+    text-align: center;
 }
 
 .confirm-execution-button {
     flex: 1.6;
     background: #000 !important;
     color: white !important;
-    padding: 0 24px !important;
+    min-height: 58px;
+    height: auto !important;
+    padding: 8px 12px !important;
     border-radius: 0 !important;
     font-weight: 900 !important;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.03em;
     border: none !important;
     justify-content: center;
-    white-space: nowrap;
-    min-width: 0;
 }
 
 .confirm-execution-button:hover {
     background: #222 !important;
+}
+
+.confirm-execution-button .btn-icon {
+    margin-right: 4px;
+    flex-shrink: 0;
 }
 
 .dismiss-button {
@@ -3261,9 +3594,12 @@ body {
     background: #fff !important;
     color: #333 !important;
     border: 1px solid #bcbcbc !important;
-    padding: 0 12px !important;
+    min-height: 58px;
+    height: auto !important;
+    padding: 8px 12px !important;
     justify-content: center;
-    font-size: 1rem;
+    font-size: 0.92rem;
+    letter-spacing: 0.02em;
 }
 
 .preview-bookmark-button:hover:not(:disabled) {
@@ -3286,6 +3622,21 @@ body {
     color: #888 !important;
     border-color: #d3d3d3 !important;
     cursor: not-allowed !important;
+}
+
+.preview-card-actions .dismiss-button {
+    min-height: 50px;
+    height: auto;
+    padding: 8px 16px !important;
+}
+
+@media (max-width: 480px) {
+    .confirm-execution-button,
+    .preview-bookmark-button {
+        font-size: 0.84rem;
+        letter-spacing: 0.01em;
+        padding: 8px 10px !important;
+    }
 }
 
 /* Suggestions Dropdown */
@@ -3353,6 +3704,38 @@ body {
     flex-wrap: wrap;
 }
 
+.suggestions-close-row {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.suggestions-panel-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #ececec;
+    background: #fafafa;
+}
+
+.suggestions-panel-toolbar.loading {
+    position: static;
+    padding: 0;
+    border-bottom: none;
+    background: transparent;
+}
+
+.suggestions-panel-title {
+    font-size: 0.76rem;
+    font-weight: 800;
+    color: #333;
+}
+
 .suggestions-status-retry-button {
     border: 1px solid #000;
     background: #fff;
@@ -3367,6 +3750,22 @@ body {
 .suggestions-status-retry-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.suggestions-close-button {
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.suggestions-close-button:hover {
+    background: #f5f5f5;
 }
 
 .suggestions-inline-warning {
@@ -3523,12 +3922,191 @@ body {
     margin-top: 0;
 }
 
+.normal-target-switcher .mode-switcher,
+.bulk-target-switcher .mode-switcher {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.normal-target-switcher .mode-button,
+.bulk-target-switcher .mode-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    white-space: nowrap;
+}
+
 .normal-rating-picker {
     margin-top: 2px;
 }
 
 .normal-multi-add-submit {
     width: 100%;
+}
+
+.normal-selection-review {
+    border: 1px solid #ddd;
+    background: #fafafa;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.normal-selection-review-label {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #111;
+}
+
+.normal-selection-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.normal-selection-review-item {
+    border: 1px solid #eee;
+    background: #fff;
+    padding: 7px 8px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+}
+
+.normal-selection-review-thumb {
+    width: 42px;
+    height: 58px;
+    object-fit: cover;
+    border: 1px solid #efefef;
+}
+
+.normal-selection-review-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.normal-selection-review-title {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 800;
+    line-height: 1.35;
+    color: #111;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.normal-selection-review-rating {
+    margin: 0;
+    font-size: 0.72rem;
+    color: #555;
+    font-weight: 700;
+}
+
+.normal-selection-review-rating-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.normal-selection-review-rating-picker {
+    margin-left: auto;
+}
+
+.normal-selection-review-rating-picker .mini-star-rating-button {
+    width: 22px;
+    height: 22px;
+    font-size: 0.8rem;
+}
+
+.normal-selection-review-rating-picker .mini-star-rating-clear {
+    min-width: 24px;
+    height: 22px;
+    font-size: 0.62rem;
+    margin-left: 6px;
+}
+
+.normal-selection-review-remove {
+    min-height: 30px;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    padding: 0 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.normal-selection-review-remove:hover {
+    background: #f4f4f4;
+}
+
+@media (max-width: 480px) {
+    .normal-selection-review-item {
+        grid-template-columns: 38px minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    .normal-selection-review-thumb {
+        width: 38px;
+        height: 54px;
+    }
+
+    .normal-selection-review-remove {
+        grid-column: 1 / -1;
+        width: 100%;
+        min-height: 34px;
+    }
+
+    .normal-selection-review-rating-row {
+        align-items: flex-start;
+    }
+
+    .normal-selection-review-rating-picker {
+        margin-left: 0;
+    }
+
+    .suggestions-panel-toolbar {
+        padding: 7px 8px;
+        gap: 8px;
+    }
+
+    .suggestions-panel-title {
+        font-size: 0.72rem;
+    }
+
+    .suggestions-close-button {
+        min-height: 28px;
+        padding: 0 8px;
+        font-size: 0.68rem;
+    }
+
+    .normal-target-switcher .mode-button,
+    .bulk-target-switcher .mode-button {
+        padding: 7px 10px;
+        font-size: 0.74rem;
+        letter-spacing: 0.02em;
+    }
 }
 
 .back-to-home-link {
