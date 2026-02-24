@@ -28,8 +28,14 @@ import {
 import HeroSlider from './components/Hero/HeroSlider';
 import AnimeCard from './components/Cards/AnimeCard';
 import StatsSection from './components/Stats/StatsSection';
+import HomeStatsCustomizeScreen from './components/Stats/HomeStatsCustomizeScreen';
 import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
 import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
+import {
+  readHomeStatsCardBackgroundsFromStorage,
+  sanitizeHomeStatsCardBackgrounds,
+  writeHomeStatsCardBackgroundsToStorage,
+} from './utils/homeStatsBackgrounds';
 
 /**
  * Main App Component
@@ -71,6 +77,9 @@ function App() {
   const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
   const [includeRatingInCopy, setIncludeRatingInCopy] = useState(false);
   const [mylistCopyNotice, setMylistCopyNotice] = useState({ type: '', message: '' });
+  const [homeStatsCardBackgrounds, setHomeStatsCardBackgrounds] = useState(() =>
+    readHomeStatsCardBackgroundsFromStorage()
+  );
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
     mobile: false,
@@ -178,6 +187,10 @@ function App() {
   useEffect(() => {
     writeListToStorage(BOOKMARK_LIST_STORAGE_KEY, bookmarkList);
   }, [bookmarkList]);
+
+  useEffect(() => {
+    writeHomeStatsCardBackgroundsToStorage(homeStatsCardBackgrounds);
+  }, [homeStatsCardBackgrounds]);
 
   useEffect(() => {
     if (!isServerLibraryReady) return;
@@ -607,6 +620,7 @@ function App() {
   }), [nextSeasonInfo, nextSeasonLabel]);
 
   const isAddView = view === 'add' || view === 'addCurrent' || view === 'addNext';
+  const isHomeView = view === 'home' || view === 'homeCustomize';
   const activeBrowsePreset = view === 'addCurrent'
     ? currentSeasonAddPreset
     : view === 'addNext'
@@ -625,6 +639,10 @@ function App() {
       ? `${nextSeasonLabel}の放送予定作品を先に追加できます。`
       : 'マイリストやブックマークに追加する作品を探せます。';
 
+  const handleSaveHomeStatsCardBackgrounds = (nextBackgrounds) => {
+    setHomeStatsCardBackgrounds(sanitizeHomeStatsCardBackgrounds(nextBackgrounds));
+  };
+
   // 6. UI Render
   return (
     <div className="app-container">
@@ -638,7 +656,7 @@ function App() {
       <nav className="global-view-nav" aria-label="メインナビゲーション">
         <button
           type="button"
-          className={`global-view-nav-button ${view === 'home' ? 'active' : ''}`}
+          className={`global-view-nav-button ${isHomeView ? 'active' : ''}`}
           onClick={() => navigateTo('home')}
         >
           ホーム
@@ -698,6 +716,13 @@ function App() {
             onBulkRemoveBookmarks={handleBulkRemoveBookmarks}
           />
         </main>
+      ) : view === 'homeCustomize' ? (
+        <HomeStatsCustomizeScreen
+          animeList={animeList}
+          savedBackgrounds={homeStatsCardBackgrounds}
+          onSave={handleSaveHomeStatsCardBackgrounds}
+          onBackHome={() => navigateTo('home')}
+        />
       ) : view === 'mylist' ? (
           <main className={`main-content mylist-page-main page-shell${isSelectionMode ? ' has-selection-dock' : ' has-bottom-home-nav'}`}>
             <div className="mylist-section-header bookmark-screen-header">
@@ -893,7 +918,17 @@ function App() {
               目的に合わせて移動できます。視聴済みは「マイリスト」、あとで見たい作品は「ブックマーク」で管理してください。
             </p>
 
-            <StatsSection animeList={animeList} />
+            <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
+
+            <div className="home-stats-customize-launch">
+              <button
+                type="button"
+                className="home-stats-customize-launch-button"
+                onClick={() => navigateTo('homeCustomize')}
+              >
+                画像を選択してカスタマイズ
+              </button>
+            </div>
           </main>
         </>
       )}
