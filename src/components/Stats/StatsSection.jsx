@@ -70,7 +70,7 @@ function StatsSection({ animeList, cardBackgrounds = null }) {
             iconAlt: 'Episodes Count',
             iconFallback: '▶',
             value: `${totalEpisodes} 話`,
-            label: '総エピソード',
+            label: '総エピソード数',
         },
         {
             key: HOME_STATS_CARD_KEYS.topGenre,
