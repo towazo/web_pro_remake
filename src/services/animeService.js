@@ -1968,43 +1968,53 @@ export const fetchAnimeByYearAllPages = async (seasonYear, options = {}) => {
   return { items: mergedItems, error: lastError };
 };
 
-export const selectFeaturedAnimes = (allAnimes) => {
+const createTutorialFeaturedSlides = () => ([
+  {
+    isTutorial: true,
+    badge: "Welcome",
+    title: "AniTriggerへようこそ",
+    description: "視聴済みアニメを記録・整理し、思い出すきっかけを作るWebアプリです。\n自分だけのアーカイブを作りましょう。",
+    image: "/images/logo.png",
+    uniqueId: "tut-1"
+  },
+  {
+    isTutorial: true,
+    badge: "How to use",
+    title: "作品を追加しよう",
+    description: "画面上部の「作品の追加」から、視聴したアニメ作品を検索して追加できます。\nタイトル検索やジャンル・年別の一覧からも簡単に見つけられます。",
+    uniqueId: "tut-2"
+  },
+  {
+    isTutorial: true,
+    badge: "Features",
+    title: "見た作品も、見たい作品も",
+    description: "視聴済みは「マイリスト」、気になる作品は「ブックマーク」で分けて管理。\n評価や並び替えで、あなたのアーカイブをもっと便利に。",
+    uniqueId: "tut-3"
+  }
+]);
+
+export const buildFeaturedSliderState = (allAnimes) => {
   const safeAnimes = filterOutHentaiAnimeList(allAnimes);
   // Case 0: Tutorial / Zero State
   if (!safeAnimes || safeAnimes.length === 0) {
-    return [
-      {
-        isTutorial: true,
-        badge: "Welcome",
-        title: "AniTriggerへようこそ",
-        description: "視聴済みアニメを記録・整理し、思い出すきっかけを作るWebアプリです。\n自分だけのアーカイブを作りましょう。",
-        image: "/images/logo.png",
-        uniqueId: "tut-1"
-      },
-      {
-        isTutorial: true,
-        badge: "How to use",
-        title: "作品を追加しよう",
-        description: "画面上部の「作品の追加」から、視聴したアニメ作品を検索して追加できます。\nタイトル検索やジャンル・年別の一覧からも簡単に見つけられます。",
-        uniqueId: "tut-2"
-      },
-      {
-        isTutorial: true,
-        badge: "Features",
-        title: "見た作品も、見たい作品も",
-        description: "視聴済みは「マイリスト」、気になる作品は「ブックマーク」で分けて管理。\n評価や並び替えで、あなたのアーカイブをもっと便利に。",
-        uniqueId: "tut-3"
-      }
-    ];
+    return {
+      slides: createTutorialFeaturedSlides(),
+      sourceType: 'initial',
+      showRefreshButton: false,
+    };
   }
 
   // Case 1: Few items, show all
   if (safeAnimes.length <= 2) {
-    return safeAnimes.map(a => ({
-      ...a,
-      selectionReason: "コレクション",
-      uniqueId: `all-${a.id}`
-    }));
+    return {
+      slides: safeAnimes.map(a => ({
+        ...a,
+        selectionReason: "コレクション",
+        uniqueId: `all-${a.id}`
+      })),
+      sourceType: 'static-collection',
+      showRefreshButton: false,
+    };
   }
 
   // Case 2: Many items, pick random via genres
@@ -2044,5 +2054,11 @@ export const selectFeaturedAnimes = (allAnimes) => {
     selectedIds.add(picked.id);
   }
 
-  return selected;
+  return {
+    slides: selected,
+    sourceType: 'mylist-linked',
+    showRefreshButton: true,
+  };
 };
+
+export const selectFeaturedAnimes = (allAnimes) => buildFeaturedSliderState(allAnimes).slides;

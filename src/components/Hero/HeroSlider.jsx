@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Hero from './Hero';
 
-function HeroSlider({ slides, onRefresh, isRefreshing = false }) {
+function HeroSlider({ slides, onRefresh, showRefreshButton = false, isRefreshing = false }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
@@ -55,7 +55,7 @@ function HeroSlider({ slides, onRefresh, isRefreshing = false }) {
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
         >
-            {typeof onRefresh === 'function' && (
+            {showRefreshButton && typeof onRefresh === 'function' && (
                 <button
                     type="button"
                     className={`slider-refresh-button ${isRefreshing ? 'loading' : ''}`}
@@ -73,7 +73,7 @@ function HeroSlider({ slides, onRefresh, isRefreshing = false }) {
                 </button>
             )}
 
-            {isRefreshing && (
+            {showRefreshButton && isRefreshing && (
                 <div className="slider-refresh-loading" role="status" aria-live="polite">
                     スライダーを更新中...
                 </div>
@@ -81,7 +81,7 @@ function HeroSlider({ slides, onRefresh, isRefreshing = false }) {
 
             {slides.map((anime, index) => (
                 <Hero
-                    key={anime.id || index}
+                    key={anime.uniqueId || anime.id || index}
                     anime={anime}
                     isActive={index === currentIndex}
                 />

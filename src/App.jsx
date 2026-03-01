@@ -4,7 +4,7 @@
 import { translateGenre } from './constants/animeData';
 
 // Services
-import { selectFeaturedAnimes } from './services/animeService';
+import { buildFeaturedSliderState } from './services/animeService';
 import { fetchLibrarySnapshot, saveLibrarySnapshot } from './services/libraryService';
 import { APP_VIEW_HASHES, APP_VIEW_SET, getViewFromLocation } from './utils/appView';
 import {
@@ -70,7 +70,7 @@ function App() {
     if (typeof window === 'undefined') return 'home';
     return getViewFromLocation(window.location.hash, window.location.pathname);
   });
-  const [featuredSlides, setFeaturedSlides] = useState([]);
+  const [featuredSliderState, setFeaturedSliderState] = useState(() => buildFeaturedSliderState(animeList));
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenres, setSelectedGenres] = useState([]);
   const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year', 'rating'
@@ -217,8 +217,12 @@ function App() {
 
   // 2. Featured Content Selection
   useEffect(() => {
-    const slides = selectFeaturedAnimes(animeList);
-    setFeaturedSlides(slides);
+    if (featuredRefreshTimerRef.current) {
+      clearTimeout(featuredRefreshTimerRef.current);
+      featuredRefreshTimerRef.current = null;
+    }
+    setIsRefreshingFeatured(false);
+    setFeaturedSliderState(buildFeaturedSliderState(animeList));
   }, [animeList]);
 
   useEffect(() => () => {
@@ -346,13 +350,13 @@ function App() {
   };
 
   const handleRefreshFeaturedSlides = () => {
-    if (isRefreshingFeatured) return;
+    if (isRefreshingFeatured || !featuredSliderState.showRefreshButton) return;
     setIsRefreshingFeatured(true);
     if (featuredRefreshTimerRef.current) {
       clearTimeout(featuredRefreshTimerRef.current);
     }
     featuredRefreshTimerRef.current = setTimeout(() => {
-      setFeaturedSlides(selectFeaturedAnimes(animeList));
+      setFeaturedSliderState(buildFeaturedSliderState(animeList));
       setIsRefreshingFeatured(false);
       featuredRefreshTimerRef.current = null;
     }, 360);
@@ -868,8 +872,9 @@ function App() {
       ) : (
         <>
           <HeroSlider
-            slides={featuredSlides}
+            slides={featuredSliderState.slides}
             onRefresh={handleRefreshFeaturedSlides}
+            showRefreshButton={featuredSliderState.showRefreshButton}
             isRefreshing={isRefreshingFeatured}
           />
 
