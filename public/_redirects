@@ -1,1 +1,2 @@
+/api/share-image-proxy /.netlify/functions/share-image-proxy 200
 /anilist/* https://graphql.anilist.co/:splat 200
