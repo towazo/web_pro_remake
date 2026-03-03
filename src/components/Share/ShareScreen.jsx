@@ -31,6 +31,10 @@ const SHARE_IMAGE_GRID_GAP = 28;
 const SHARE_IMAGE_GRID_COLUMNS = 3;
 const SHARE_IMAGE_GRID_ROWS = 2;
 const SHARE_LOGO_PATH = '/images/logo.png';
+const DIRECT_SHARE_IMAGE_LOAD_OPTIONS = {
+  crossOrigin: 'anonymous',
+  referrerPolicy: 'no-referrer',
+};
 let shareLogoPromise = null;
 
 const copyTextToClipboard = async (text) => {
@@ -154,6 +158,50 @@ const probeShareImageProxy = async (sourceUrl) => {
   return true;
 };
 
+const probeDirectShareImage = async (sourceUrl) => {
+  const normalizedSource = String(sourceUrl || '').trim();
+  if (!normalizedSource) {
+    throw new Error('share_image_direct_url_missing');
+  }
+
+  const image = await loadImageElement(normalizedSource, DIRECT_SHARE_IMAGE_LOAD_OPTIONS);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+      throw new Error('canvas_context_unavailable');
+    }
+    context.drawImage(image, 0, 0, 1, 1);
+    context.getImageData(0, 0, 1, 1);
+    return true;
+  } finally {
+    closeImageAsset(image);
+  }
+};
+
+const resolveShareImageTransport = async (sourceUrl) => {
+  let proxyError = null;
+  try {
+    await probeShareImageProxy(sourceUrl);
+    return 'proxy';
+  } catch (error) {
+    proxyError = error;
+    console.warn('[share-image] proxy probe failed, checking direct image access', sourceUrl, error);
+  }
+
+  try {
+    await probeDirectShareImage(sourceUrl);
+    return 'direct';
+  } catch (directError) {
+    const error = new Error('share_image_transport_unavailable');
+    error.proxyError = proxyError;
+    error.directError = directError;
+    throw error;
+  }
+};
+
 const loadShareLogoAsset = () => {
   if (!shareLogoPromise) {
     shareLogoPromise = loadImageElement(SHARE_LOGO_PATH);
@@ -170,39 +218,38 @@ const resolveShareCoverImageUrl = (anime) => {
   return candidates.find((value) => String(value || '').trim()) || '';
 };
 
-const loadRemoteImageAsset = async (sourceUrl) => {
+const loadRemoteImageAsset = async (sourceUrl, transport = 'auto') => {
   const normalizedSource = String(sourceUrl || '').trim();
   if (!normalizedSource) return null;
 
-  const proxyUrl = buildShareImageProxyUrl(normalizedSource);
-  if (proxyUrl) {
+  if (transport !== 'direct') {
+    const proxyUrl = buildShareImageProxyUrl(normalizedSource);
+    if (proxyUrl) {
+      try {
+        return await loadImageElement(proxyUrl);
+      } catch (proxyImageError) {
+        console.warn('[share-image] proxy image element load failed', normalizedSource, proxyImageError);
+      }
+    }
+
     try {
-      return await loadImageElement(proxyUrl);
-    } catch (proxyImageError) {
-      console.warn('[share-image] proxy image element load failed', normalizedSource, proxyImageError);
+      const objectUrl = await fetchImageBlobUrl(normalizedSource);
+      try {
+        const image = await loadImageElement(objectUrl);
+        image.__shareObjectUrl = objectUrl;
+        return image;
+      } catch (error) {
+        URL.revokeObjectURL(objectUrl);
+        console.error('[share-image] failed to decode proxied blob image', normalizedSource, error);
+        throw error;
+      }
+    } catch (proxyError) {
+      console.warn('[share-image] proxy blob load failed, falling back to direct url', normalizedSource, proxyError);
     }
   }
 
   try {
-    const objectUrl = await fetchImageBlobUrl(normalizedSource);
-    try {
-      const image = await loadImageElement(objectUrl);
-      image.__shareObjectUrl = objectUrl;
-      return image;
-    } catch (error) {
-      URL.revokeObjectURL(objectUrl);
-      console.error('[share-image] failed to decode proxied blob image', normalizedSource, error);
-      throw error;
-    }
-  } catch (proxyError) {
-    console.warn('[share-image] proxy blob load failed, falling back to direct url', normalizedSource, proxyError);
-  }
-
-  try {
-    return await loadImageElement(normalizedSource, {
-      crossOrigin: 'anonymous',
-      referrerPolicy: 'no-referrer',
-    });
+    return await loadImageElement(normalizedSource, DIRECT_SHARE_IMAGE_LOAD_OPTIONS);
   } catch (directError) {
     console.error('[share-image] direct image load failed', normalizedSource, directError);
     return null;
@@ -633,7 +680,7 @@ const renderShareImageBlob = async (animePage, options) => {
     Promise.all(animePage.map(async (anime) => {
       const source = resolveShareCoverImageUrl(anime);
       try {
-        return await loadRemoteImageAsset(source);
+        return await loadRemoteImageAsset(source, options.transport);
       } catch (error) {
         console.error('[share-image] image asset load failed', anime?.id, source, error);
         return null;
@@ -717,7 +764,7 @@ const renderShareImageBlob = async (animePage, options) => {
   }
 };
 
-const createShareImageFiles = async (selectedAnimes, onProgress) => {
+const createShareImageFiles = async (selectedAnimes, onProgress, transport = 'auto') => {
   const pages = chunkArray(selectedAnimes, SHARE_IMAGE_PAGE_SIZE).slice(0, SHARE_IMAGE_MAX_PAGES);
   const imageItems = [];
 
@@ -728,6 +775,7 @@ const createShareImageFiles = async (selectedAnimes, onProgress) => {
       totalPages: pages.length,
       totalItems: selectedAnimes.length,
       startNumber: pageIndex * SHARE_IMAGE_PAGE_SIZE + 1,
+      transport,
     });
     const fileName = `anitrigger-share-${pageIndex + 1}-of-${pages.length}.png`;
     imageItems.push({
@@ -772,6 +820,7 @@ function ShareScreen({
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 });
   const [generatedImages, setGeneratedImages] = useState([]);
   const [imageShareSupport, setImageShareSupport] = useState('unknown');
+  const [imageShareTransport, setImageShareTransport] = useState('auto');
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
     mobile: false,
@@ -823,23 +872,27 @@ function ShareScreen({
 
     if (!sampleCoverImageUrl) {
       setImageShareSupport('ready');
+      setImageShareTransport('auto');
       return () => {
         cancelled = true;
       };
     }
 
     setImageShareSupport('checking');
+    setImageShareTransport('auto');
 
-    probeShareImageProxy(sampleCoverImageUrl)
-      .then(() => {
+    resolveShareImageTransport(sampleCoverImageUrl)
+      .then((transport) => {
         if (!cancelled) {
           setImageShareSupport('ready');
+          setImageShareTransport(transport);
         }
       })
       .catch((error) => {
         console.error('[share-image] availability probe failed', sampleCoverImageUrl, error);
         if (!cancelled) {
           setImageShareSupport('unavailable');
+          setImageShareTransport('auto');
         }
       });
 
@@ -1047,14 +1100,18 @@ function ShareScreen({
       .map((anime) => resolveShareCoverImageUrl(anime))
       .find(Boolean);
 
+    let activeTransport = imageShareTransport;
     if (firstCoverImageUrl) {
       try {
-        await probeShareImageProxy(firstCoverImageUrl);
+        activeTransport = await resolveShareImageTransport(firstCoverImageUrl);
+        setImageShareSupport('ready');
+        setImageShareTransport(activeTransport);
       } catch (error) {
-        console.error('[share-image] proxy preflight failed', firstCoverImageUrl, error);
+        console.error('[share-image] image preflight failed', firstCoverImageUrl, error);
+        setImageShareSupport('unavailable');
         setNotice({
           type: 'error',
-          message: '共有画像サーバーに接続できません。バックエンド未起動、または API URL 設定の不整合を確認してください。',
+          message: '画像共有に必要な画像取得に失敗しました。バックエンド設定、または公開環境の画像読み込み制限を確認してください。',
         });
         return;
       }
@@ -1070,7 +1127,7 @@ function ShareScreen({
     try {
       const imageItems = await createShareImageFiles(selectedAnimes, (current, total) => {
         setImageProgress({ current, total });
-      });
+      }, activeTransport);
       setGeneratedImages(imageItems);
       setNotice({
         type: 'success',
@@ -1202,7 +1259,7 @@ function ShareScreen({
 
           {imageShareSupport === 'unavailable' && hasAnime && (
             <div className="bookmark-action-notice error">
-              画像共有サーバーに接続できません。この公開環境ではバックエンド未配置、または `VITE_API_BASE_URL` の設定不整合の可能性があります。
+              画像共有に必要な画像取得に失敗しました。この公開環境ではバックエンド未配置、`VITE_API_BASE_URL` の設定不整合、または外部画像の読み込み制限の可能性があります。
             </div>
           )}
 
