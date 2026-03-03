@@ -760,6 +760,7 @@ function ShareScreen({
   const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
   const [includeRatingInText, setIncludeRatingInText] = useState(false);
   const [notice, setNotice] = useState({ type: '', message: '' });
+  const [copyBanner, setCopyBanner] = useState({ visible: false, message: '' });
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 });
   const [generatedImages, setGeneratedImages] = useState([]);
@@ -832,6 +833,14 @@ function ShareScreen({
     }, 2600);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!copyBanner.visible) return;
+    const timer = setTimeout(() => {
+      setCopyBanner({ visible: false, message: '' });
+    }, 2200);
+    return () => clearTimeout(timer);
+  }, [copyBanner.visible, copyBanner.message]);
 
   useEffect(() => {
     if (isMethodMode) {
@@ -1031,37 +1040,6 @@ function ShareScreen({
     }
   };
 
-  const handleCopyText = async () => {
-    if (selectedAnimes.length === 0) {
-      setNotice({ type: 'error', message: '共有する作品を1件以上選択してください。' });
-      return;
-    }
-
-    const shareText = buildShareText(selectedAnimes, {
-      includeRating: includeRatingInText,
-    });
-
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        await navigator.share({
-          title: 'AniTrigger Share',
-          text: shareText,
-        });
-        setNotice({ type: 'success', message: `${selectedAnimes.length} 件を共有しました。` });
-        return;
-      } catch (error) {
-        if (error?.name === 'AbortError') return;
-      }
-    }
-
-    try {
-      await copyTextToClipboard(shareText);
-      setNotice({ type: 'success', message: '共有機能が使えないため、テキストをコピーしました。' });
-    } catch (_) {
-      setNotice({ type: 'error', message: '共有に失敗しました。ブラウザの権限をご確認ください。' });
-    }
-  };
-
   const handleCopyTextList = async () => {
     if (selectedAnimes.length === 0) {
       setNotice({ type: 'error', message: '共有する作品を1件以上選択してください。' });
@@ -1072,7 +1050,11 @@ function ShareScreen({
       await copyTextToClipboard(buildShareText(selectedAnimes, {
         includeRating: includeRatingInText,
       }));
-      setNotice({ type: 'success', message: `${selectedAnimes.length} 件の一覧をコピーしました。` });
+      setNotice({ type: '', message: '' });
+      setCopyBanner({
+        visible: true,
+        message: `${selectedAnimes.length} 件の一覧をコピーしました。`,
+      });
     } catch (_) {
       setNotice({ type: 'error', message: '一覧のコピーに失敗しました。ブラウザの権限をご確認ください。' });
     }
@@ -1256,6 +1238,12 @@ function ShareScreen({
 
   return (
     <>
+      {copyBanner.visible && (
+        <div className="share-copy-banner" role="status" aria-live="polite">
+          {copyBanner.message}
+        </div>
+      )}
+
       <main className="main-content share-screen-main mylist-page-main page-shell has-selection-dock">
         <div className="mylist-section-header bookmark-screen-header">
           <div>
@@ -1478,14 +1466,6 @@ function ShareScreen({
               <button
                 type="button"
                 className="share-dock-primary"
-                onClick={handleCopyText}
-                disabled={selectedAnimeIds.length === 0}
-              >
-                共有
-              </button>
-              <button
-                type="button"
-                className="share-dock-secondary"
                 onClick={handleCopyTextList}
                 disabled={selectedAnimeIds.length === 0}
               >

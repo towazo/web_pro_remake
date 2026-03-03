@@ -2753,6 +2753,24 @@ body {
     gap: 10px;
 }
 
+.share-copy-banner {
+    position: fixed;
+    top: max(16px, calc(12px + env(safe-area-inset-top)));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2300;
+    width: min(calc(100% - 24px), 520px);
+    border: 1px solid #1f6a2a;
+    background: rgba(245, 251, 246, 0.98);
+    color: #1f6a2a;
+    padding: 12px 16px;
+    font-size: 0.84rem;
+    font-weight: 800;
+    text-align: center;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+    animation: shareCopyBannerIn 0.18s ease-out;
+}
+
 .quick-nav-rail.share-screen-quick-nav.mobile {
     bottom: calc(164px + env(safe-area-inset-bottom));
 }
@@ -2790,6 +2808,17 @@ body {
 .share-dock-secondary:disabled {
     opacity: 0.45;
     cursor: default;
+}
+
+@keyframes shareCopyBannerIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -10px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
 }
 
 .bookmark-season-nav-buttons {
