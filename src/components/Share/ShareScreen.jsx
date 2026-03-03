@@ -106,6 +106,17 @@ const loadImageElement = (sourceUrl, options = {}) => new Promise((resolve, reje
   image.src = sourceUrl;
 });
 
+const canUseNativeFileShare = (files) => {
+  if (!Array.isArray(files) || files.length === 0) return false;
+  if (typeof navigator === 'undefined') return false;
+  if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return false;
+  try {
+    return navigator.canShare({ files });
+  } catch (_) {
+    return false;
+  }
+};
+
 const fetchImageBlobUrl = async (sourceUrl) => {
   const proxyUrl = buildShareImageProxyUrl(sourceUrl);
   if (!proxyUrl) {
@@ -760,6 +771,8 @@ function ShareScreen({
   });
   const generatedImagesRef = useRef([]);
   const generatedGalleryRef = useRef(null);
+  const pendingGalleryScrollRef = useRef(false);
+  const galleryScrollTimerRef = useRef(null);
   const listStartRef = useRef(null);
 
   const uniqueGenres = useMemo(() => {
@@ -783,12 +796,29 @@ function ShareScreen({
     return selectedAnimeIds.map((id) => animeById.get(id)).filter(Boolean);
   }, [animeList, selectedAnimeIds]);
 
+  const isLikelyMobileDevice = useMemo(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+    const userAgent = String(navigator.userAgent || '');
+    const coarsePointer = typeof window.matchMedia === 'function'
+      && window.matchMedia('(pointer: coarse)').matches;
+    const narrowViewport = typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 768px)').matches;
+    const touchEnabled = Number(navigator.maxTouchPoints || 0) > 0;
+    return coarsePointer || (touchEnabled && narrowViewport) || /android|iphone|ipad|ipod/i.test(userAgent);
+  }, []);
+
   useEffect(() => {
     generatedImagesRef.current = generatedImages;
   }, [generatedImages]);
 
   useEffect(() => () => {
     revokeGeneratedImageUrls(generatedImagesRef.current);
+  }, []);
+
+  useEffect(() => () => {
+    if (galleryScrollTimerRef.current) {
+      clearTimeout(galleryScrollTimerRef.current);
+    }
   }, []);
 
   useEffect(() => {
@@ -876,11 +906,72 @@ function ShareScreen({
   ]);
 
   const clearGeneratedImages = () => {
+    pendingGalleryScrollRef.current = false;
+    if (galleryScrollTimerRef.current) {
+      clearTimeout(galleryScrollTimerRef.current);
+      galleryScrollTimerRef.current = null;
+    }
     if (generatedImagesRef.current.length === 0) return;
     revokeGeneratedImageUrls(generatedImagesRef.current);
     generatedImagesRef.current = [];
     setGeneratedImages([]);
   };
+
+  const scrollGeneratedGalleryIntoView = (attempt = 0) => {
+    if (!pendingGalleryScrollRef.current) return;
+
+    const element = generatedGalleryRef.current;
+    if (!element) {
+      if (attempt >= 8) return;
+      galleryScrollTimerRef.current = setTimeout(() => {
+        scrollGeneratedGalleryIntoView(attempt + 1);
+      }, 60);
+      return;
+    }
+
+    const rect = element.getBoundingClientRect();
+    const absoluteTop = rect.top + (window.scrollY || window.pageYOffset || 0);
+    const targetTop = Math.max(0, absoluteTop - 16);
+    const distance = Math.abs((window.scrollY || window.pageYOffset || 0) - targetTop);
+
+    if (distance > 4) {
+      window.scrollTo({ top: targetTop, behavior: attempt === 0 ? 'smooth' : 'auto' });
+    }
+
+    if (attempt >= 8) {
+      pendingGalleryScrollRef.current = false;
+      galleryScrollTimerRef.current = null;
+      return;
+    }
+
+    galleryScrollTimerRef.current = setTimeout(() => {
+      const nextRect = element.getBoundingClientRect();
+      const nextAbsoluteTop = nextRect.top + (window.scrollY || window.pageYOffset || 0);
+      const nextTargetTop = Math.max(0, nextAbsoluteTop - 16);
+      const nextDistance = Math.abs((window.scrollY || window.pageYOffset || 0) - nextTargetTop);
+      if (nextDistance <= 4) {
+        pendingGalleryScrollRef.current = false;
+        galleryScrollTimerRef.current = null;
+        return;
+      }
+      scrollGeneratedGalleryIntoView(attempt + 1);
+    }, 120);
+  };
+
+  useEffect(() => {
+    if (generatedImages.length === 0 || !pendingGalleryScrollRef.current) return;
+
+    if (galleryScrollTimerRef.current) {
+      clearTimeout(galleryScrollTimerRef.current);
+      galleryScrollTimerRef.current = null;
+    }
+
+    const rafId = requestAnimationFrame(() => {
+      scrollGeneratedGalleryIntoView(0);
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [generatedImages.length]);
 
   const handleToggleGenre = (genre) => {
     setSelectedGenres((prev) => (
@@ -991,6 +1082,7 @@ function ShareScreen({
     if (selectedAnimes.length === 0 || isGeneratingImages) return;
 
     clearGeneratedImages();
+    pendingGalleryScrollRef.current = true;
     setIsGeneratingImages(true);
     setImageProgress({
       current: 0,
@@ -1006,10 +1098,8 @@ function ShareScreen({
         type: 'success',
         message: `${imageItems.length} 枚の画像を生成しました。`,
       });
-      requestAnimationFrame(() => {
-        generatedGalleryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
     } catch (_) {
+      pendingGalleryScrollRef.current = false;
       clearGeneratedImages();
       setNotice({
         type: 'error',
@@ -1020,23 +1110,67 @@ function ShareScreen({
     }
   };
 
-  const handleDownloadAllImages = () => {
+  const triggerBrowserDownload = (item, delayMs = 0) => {
+    window.setTimeout(() => {
+      const anchor = document.createElement('a');
+      anchor.href = item.previewUrl;
+      anchor.download = item.fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }, delayMs);
+  };
+
+  const handleDownloadAllImages = async () => {
     if (generatedImages.length === 0) return;
 
+    if (canUseNativeSaveGeneratedImages) {
+      try {
+        await navigator.share({
+          files: generatedImages.map((item) => item.file),
+        });
+        setNotice({
+          type: 'success',
+          message: '共有シートを利用しました。スマホ側で「画像を保存」を選ぶと写真アプリへ保存できます。',
+        });
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+
     generatedImages.forEach((item, index) => {
-      window.setTimeout(() => {
-        const anchor = document.createElement('a');
-        anchor.href = item.previewUrl;
-        anchor.download = item.fileName;
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-      }, index * 140);
+      triggerBrowserDownload(item, index * 140);
     });
 
     setNotice({
       type: 'success',
       message: `${generatedImages.length} 枚の保存を開始しました。`,
+    });
+  };
+
+  const handleDownloadGeneratedImage = async (item, index) => {
+    if (!item) return;
+
+    if (isLikelyMobileDevice && canUseNativeFileShare([item.file])) {
+      try {
+        await navigator.share({
+          files: [item.file],
+        });
+        setNotice({
+          type: 'success',
+          message: '共有シートを利用しました。スマホ側で「画像を保存」を選ぶと写真アプリへ保存できます。',
+        });
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+
+    triggerBrowserDownload(item, 0);
+    setNotice({
+      type: 'success',
+      message: `画像 ${index + 1} の保存を開始しました。`,
     });
   };
 
@@ -1053,15 +1187,13 @@ function ShareScreen({
   };
 
   const canShareGeneratedImages = useMemo(() => {
-    if (generatedImages.length === 0) return false;
-    if (typeof navigator === 'undefined') return false;
-    if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return false;
-    try {
-      return navigator.canShare({ files: generatedImages.map((item) => item.file) });
-    } catch (_) {
-      return false;
-    }
+    return canUseNativeFileShare(generatedImages.map((item) => item.file));
   }, [generatedImages]);
+
+  const canUseNativeSaveGeneratedImages = useMemo(() => {
+    if (!isLikelyMobileDevice) return false;
+    return canUseNativeFileShare(generatedImages.map((item) => item.file));
+  }, [generatedImages, isLikelyMobileDevice]);
 
   const handleShareGeneratedImages = async () => {
     if (!canShareGeneratedImages) return;
@@ -1273,7 +1405,12 @@ function ShareScreen({
             <div className="share-generated-gallery-header">
               <div>
                 <h4>生成した画像</h4>
-                <p>{generatedImages.length} 枚の画像を作成しました。必要なら個別保存もできます。</p>
+                <p>
+                  {generatedImages.length} 枚の画像を作成しました。
+                  {canUseNativeSaveGeneratedImages
+                    ? ' スマホでは保存時に共有シートが開くので、「画像を保存」を選んでください。'
+                    : ' 必要なら個別保存もできます。'}
+                </p>
               </div>
             </div>
             <div
@@ -1282,9 +1419,13 @@ function ShareScreen({
               {generatedImages.map((item, index) => (
                 <article key={item.fileName} className="share-generated-card">
                   <img src={item.previewUrl} alt={`共有画像 ${index + 1}`} />
-                  <a className="share-generated-download" href={item.previewUrl} download={item.fileName}>
+                  <button
+                    type="button"
+                    className="share-generated-download"
+                    onClick={() => handleDownloadGeneratedImage(item, index)}
+                  >
                     画像 {index + 1} を保存
-                  </a>
+                  </button>
                 </article>
               ))}
             </div>

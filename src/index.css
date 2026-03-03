@@ -2736,6 +2736,10 @@ body {
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0.03em;
+    padding: 0 12px;
+    cursor: pointer;
+    appearance: none;
+    font-family: inherit;
 }
 
 .share-generated-download:hover {
