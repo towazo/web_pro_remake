@@ -1,8 +1,5 @@
 ﻿import { useState, useEffect, useMemo, useRef } from 'react';
 
-// Constants & Multi-language data
-import { translateGenre } from './constants/animeData';
-
 // Services
 import { buildFeaturedSliderState } from './services/animeService';
 import { fetchLibrarySnapshot, saveLibrarySnapshot } from './services/libraryService';
@@ -31,25 +28,23 @@ import StatsSection from './components/Stats/StatsSection';
 import HomeStatsCustomizeScreen from './components/Stats/HomeStatsCustomizeScreen';
 import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
 import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
+import ShareScreen from './components/Share/ShareScreen';
+import AnimeFilterPanel from './components/Shared/AnimeFilterPanel';
 import {
   readHomeStatsCardBackgroundsFromStorage,
   sanitizeHomeStatsCardBackgrounds,
   writeHomeStatsCardBackgroundsToStorage,
 } from './utils/homeStatsBackgrounds';
+import {
+  buildFilteredAnimeList,
+  normalizeAnimeRating,
+} from './utils/animeList';
 
 /**
  * Main App Component
  * Responsible for routing, global state management, and data orchestration.
  */
 function App() {
-  const normalizeAnimeRating = (value) => {
-    const parsed = Number(value);
-    if (!Number.isInteger(parsed)) return null;
-    if (parsed < 1 || parsed > 5) return null;
-    return parsed;
-  };
-  const resolveAnimeTitle = (anime) => anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
-
   const sanitizeAnimeList = (list) => filterDisplayEligibleAnimeList(Array.isArray(list) ? list : [], {
     // Keep legacy items that do not include format/country metadata.
     allowUnknownFormat: true,
@@ -73,10 +68,9 @@ function App() {
   const [featuredSliderState, setFeaturedSliderState] = useState(() => buildFeaturedSliderState(animeList));
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenres, setSelectedGenres] = useState([]);
+  const [minRating, setMinRating] = useState('');
   const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year', 'rating'
   const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
-  const [includeRatingInCopy, setIncludeRatingInCopy] = useState(false);
-  const [mylistCopyNotice, setMylistCopyNotice] = useState({ type: '', message: '' });
   const [homeStatsCardBackgrounds, setHomeStatsCardBackgrounds] = useState(() =>
     readHomeStatsCardBackgroundsFromStorage()
   );
@@ -320,19 +314,11 @@ function App() {
       window.removeEventListener('scroll', requestUpdate);
       window.removeEventListener('resize', requestUpdate);
     };
-  }, [view, animeList.length, searchQuery, selectedGenres, sortKey, sortOrder]);
+  }, [view, animeList.length, minRating, searchQuery, selectedGenres, sortKey, sortOrder]);
 
   useEffect(() => {
     setSelectedAnimeIds((prev) => prev.filter((id) => animeList.some((anime) => anime.id === id)));
   }, [animeList]);
-
-  useEffect(() => {
-    if (!mylistCopyNotice.message) return;
-    const timer = setTimeout(() => {
-      setMylistCopyNotice({ type: '', message: '' });
-    }, 2200);
-    return () => clearTimeout(timer);
-  }, [mylistCopyNotice]);
 
   // 3. Initial Data Acquisition (Hydration) - Empty for Clean Start
 
@@ -476,61 +462,9 @@ function App() {
     ));
   };
 
-  const handleClearMyListGenre = () => {
+  const handleClearMyListFilters = () => {
     setSelectedGenres([]);
-  };
-
-  const copyTextToClipboard = async (text) => {
-    const hasClipboardApi = typeof navigator !== 'undefined'
-      && typeof window !== 'undefined'
-      && window.isSecureContext
-      && typeof navigator?.clipboard?.writeText === 'function';
-    if (hasClipboardApi) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-
-    if (typeof document === 'undefined') {
-      throw new Error('clipboard_unavailable');
-    }
-
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.top = '-1000px';
-    textarea.style.left = '-1000px';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const copied = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    if (!copied) {
-      throw new Error('copy_failed');
-    }
-  };
-
-  const handleCopyMyList = async () => {
-    if (filteredList.length === 0) {
-      setMylistCopyNotice({ type: 'error', message: 'コピー対象の作品がありません。' });
-      return;
-    }
-
-    const lines = filteredList.map((anime) => {
-      const title = resolveAnimeTitle(anime);
-      const rating = normalizeAnimeRating(anime?.rating);
-      if (includeRatingInCopy && rating !== null) {
-        return `・${title} ★${rating}`;
-      }
-      return `・${title}`;
-    });
-
-    try {
-      await copyTextToClipboard(lines.join('\n'));
-      setMylistCopyNotice({ type: 'success', message: `${filteredList.length} 件をコピーしました。` });
-    } catch (_) {
-      setMylistCopyNotice({ type: 'error', message: 'コピーに失敗しました。ブラウザの権限をご確認ください。' });
-    }
+    setMinRating('');
   };
 
   // 5. Data Derived States (Filters/Computed)
@@ -547,54 +481,14 @@ function App() {
   }, [uniqueGenres]);
 
   const filteredList = useMemo(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase();
-    const hasGenreFilter = selectedGenres.length > 0;
-    let result = animeList.filter(anime => {
-      const titleNative = String(anime?.title?.native || "").toLowerCase();
-      const titleRomaji = String(anime?.title?.romaji || "").toLowerCase();
-      const titleEnglish = String(anime?.title?.english || "").toLowerCase();
-      const animeGenres = Array.isArray(anime?.genres) ? anime.genres : [];
-
-      const matchesSearch = normalizedSearch.length === 0
-        || titleNative.includes(normalizedSearch)
-        || titleRomaji.includes(normalizedSearch)
-        || titleEnglish.includes(normalizedSearch);
-      const matchesGenre = !hasGenreFilter || selectedGenres.every((genre) => animeGenres.includes(genre));
-
-      return matchesSearch && matchesGenre;
+    return buildFilteredAnimeList(animeList, {
+      searchQuery,
+      selectedGenres,
+      minRating,
+      sortKey,
+      sortOrder,
     });
-
-    // Apply Sorting
-    result.sort((a, b) => {
-      let valA, valB;
-
-      switch (sortKey) {
-        case 'title':
-          valA = resolveAnimeTitle(a).toLowerCase();
-          valB = resolveAnimeTitle(b).toLowerCase();
-          break;
-        case 'year':
-          valA = a.seasonYear || 0;
-          valB = b.seasonYear || 0;
-          break;
-        case 'rating':
-          valA = normalizeAnimeRating(a.rating) || 0;
-          valB = normalizeAnimeRating(b.rating) || 0;
-          break;
-        case 'added':
-        default:
-          valA = a.addedAt || 0;
-          valB = b.addedAt || 0;
-          break;
-      }
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [animeList, searchQuery, selectedGenres, sortKey, sortOrder]);
+  }, [animeList, minRating, searchQuery, selectedGenres, sortKey, sortOrder]);
 
   const currentSeasonInfo = useMemo(() => getCurrentSeasonInfo(), []);
   const nextSeasonInfo = useMemo(() => getNextSeasonInfo(currentSeasonInfo), [currentSeasonInfo]);
@@ -625,6 +519,8 @@ function App() {
 
   const isAddView = view === 'add' || view === 'addCurrent' || view === 'addNext';
   const isHomeView = view === 'home' || view === 'homeCustomize';
+  const isShareView = view === 'shareMethod' || view === 'shareImage' || view === 'shareText';
+  const isMyListSectionView = view === 'mylist' || isShareView;
   const activeBrowsePreset = view === 'addCurrent'
     ? currentSeasonAddPreset
     : view === 'addNext'
@@ -667,7 +563,7 @@ function App() {
         </button>
         <button
           type="button"
-          className={`global-view-nav-button ${view === 'mylist' ? 'active' : ''}`}
+          className={`global-view-nav-button ${isMyListSectionView ? 'active' : ''}`}
           onClick={() => navigateTo('mylist')}
         >
           マイリスト
@@ -727,6 +623,16 @@ function App() {
           onSave={handleSaveHomeStatsCardBackgrounds}
           onBackHome={() => navigateTo('home')}
         />
+      ) : isShareView ? (
+        <ShareScreen
+          key={view}
+          mode={view === 'shareImage' ? 'image' : view === 'shareText' ? 'text' : 'method'}
+          animeList={animeList}
+          onUpdateRating={handleUpdateAnimeRating}
+          onBackToMyList={() => navigateTo('mylist')}
+          onBackToMethod={() => navigateTo('shareMethod')}
+          onSelectMode={(mode) => navigateTo(mode === 'image' ? 'shareImage' : 'shareText')}
+        />
       ) : view === 'mylist' ? (
           <main className={`main-content mylist-page-main page-shell${isSelectionMode ? ' has-selection-dock' : ' has-bottom-home-nav'}`}>
             <div className="mylist-section-header bookmark-screen-header">
@@ -735,36 +641,20 @@ function App() {
                 <p className="bookmark-screen-desc page-main-subtitle">登録済み作品の検索・絞り込み・並び替え</p>
               </div>
               <div className="bookmark-screen-actions mylist-screen-actions">
-                <div className="mylist-copy-controls">
-                  <label className="mylist-copy-rating-toggle">
-                    <input
-                      type="checkbox"
-                      checked={includeRatingInCopy}
-                      onChange={(event) => setIncludeRatingInCopy(event.target.checked)}
-                    />
-                    <span>評価を含める</span>
-                  </label>
-                  <button
-                    type="button"
-                    className="mylist-copy-button"
-                    onClick={handleCopyMyList}
-                    disabled={filteredList.length === 0}
-                  >
-                    一覧をコピー
-                  </button>
-                </div>
                 <button className="bookmark-screen-add" onClick={() => navigateTo('add')}>
                   <span className="bookmark-screen-add-icon">＋</span>
                   <span>作品を追加</span>
                 </button>
+                <button
+                  type="button"
+                  className="mylist-share-button"
+                  onClick={() => navigateTo('shareMethod')}
+                  disabled={animeList.length === 0}
+                >
+                  作品を共有
+                </button>
               </div>
             </div>
-
-            {mylistCopyNotice.message && (
-              <div className={`bookmark-action-notice ${mylistCopyNotice.type}`}>
-                {mylistCopyNotice.message}
-              </div>
-            )}
 
             <div className="controls">
               <div className="search-box">
@@ -797,44 +687,17 @@ function App() {
 
             </div>
 
-            <div className="bookmark-genre-filter-section mylist-genre-filter-section">
-              <div className="bookmark-genre-filter-header">
-                <p className="bookmark-genre-filter-title">ジャンル絞り込み</p>
-                <button
-                  type="button"
-                  className="bookmark-genre-filter-clear"
-                  onClick={handleClearMyListGenre}
-                  disabled={selectedGenres.length === 0}
-                >
-                  クリア
-                </button>
-              </div>
-              <p className="bookmark-genre-filter-selected">
-                {selectedGenres.length > 0
-                  ? `選択中: ${selectedGenres.map((genre) => translateGenre(genre)).join(' / ')}`
-                  : 'ジャンル未選択（すべて表示）'}
-              </p>
-              <p className="bookmark-genre-filter-note">複数選択時は「すべて含む」で絞り込みます。</p>
-              {uniqueGenres.length > 0 ? (
-                <div className="bookmark-genre-filter-chips">
-                  {uniqueGenres.map((genre) => {
-                    const isActive = selectedGenres.includes(genre);
-                    return (
-                      <button
-                        key={genre}
-                        type="button"
-                        className={`bookmark-genre-chip ${isActive ? 'active' : ''}`}
-                        onClick={() => handleToggleMyListGenre(genre)}
-                      >
-                        {translateGenre(genre)}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="bookmark-genre-filter-empty">ジャンル情報がある作品はまだありません。</p>
-              )}
-            </div>
+            <AnimeFilterPanel
+              uniqueGenres={uniqueGenres}
+              selectedGenres={selectedGenres}
+              minRating={minRating}
+              onToggleGenre={handleToggleMyListGenre}
+              onMinRatingChange={setMinRating}
+              onClearFilters={handleClearMyListFilters}
+              sectionClassName="mylist-genre-filter-section"
+              title="絞り込み"
+              contextId="mylist"
+            />
 
             <div className="results-count">
               {filteredList.length} 作品が見つかりました
@@ -974,7 +837,7 @@ function App() {
       )}
 
       {view === 'mylist' && !isSelectionMode && quickNavState.visible && (
-        <aside className={`quick-nav-rail ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
+        <aside className={`quick-nav-rail mylist-quick-nav ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
           <button
             type="button"
             className="quick-nav-button"

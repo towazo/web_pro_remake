@@ -633,6 +633,7 @@ body {
     border-radius: 0;
     /* Sharp corners for stylish look */
     overflow: hidden;
+    position: relative;
     display: flex;
     flex-direction: column;
     transition: transform 0.2s ease;
@@ -654,8 +655,13 @@ body {
     transform: none;
 }
 
-.anime-card.selected {
-    box-shadow: inset 0 0 0 3px #000;
+.anime-card.selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 3px solid #000;
+    pointer-events: none;
+    z-index: 14;
 }
 
 .card-image-wrapper {
@@ -2348,6 +2354,30 @@ body {
     font-weight: 700;
 }
 
+.bookmark-rating-filter-row {
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bookmark-rating-filter-label {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #111;
+    white-space: nowrap;
+}
+
+.bookmark-rating-filter-select {
+    min-height: 34px;
+    border: 1px solid #bcbcbc;
+    background: #fff;
+    color: #111;
+    padding: 0 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
 .bookmark-genre-filter-chips {
     display: flex;
     flex-wrap: wrap;
@@ -2469,6 +2499,291 @@ body {
 }
 
 .mylist-copy-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.mylist-share-button {
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    min-height: 46px;
+    padding: 0 18px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+}
+
+.mylist-share-button:hover:not(:disabled) {
+    background: #222;
+    transform: translateY(-1px);
+}
+
+.mylist-share-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+}
+
+.share-method-guide {
+    margin: 0 0 18px;
+    border: 1px solid #ececec;
+    background: #fafafa;
+    padding: 16px;
+}
+
+.share-method-guide-title {
+    margin: 0 0 8px;
+    font-size: 0.86rem;
+    font-weight: 900;
+    color: #111;
+}
+
+.share-method-guide-text,
+.share-method-guide-note {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #444;
+    line-height: 1.55;
+    font-weight: 700;
+}
+
+.share-method-guide-note {
+    margin-top: 10px;
+    color: #666;
+}
+
+.share-method-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.share-method-card {
+    border: 1px solid #000;
+    background: #fff;
+    min-height: 190px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.share-method-card:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 22px rgba(0, 0, 0, 0.08);
+}
+
+.share-method-card:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.share-method-card-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.share-method-card-title {
+    font-size: 1.05rem;
+    font-weight: 900;
+    color: #111;
+}
+
+.share-method-card-text {
+    font-size: 0.84rem;
+    color: #444;
+    line-height: 1.65;
+    font-weight: 700;
+}
+
+.share-inline-toggle {
+    border: 1px solid #000;
+    background: #fff;
+    color: #111;
+    min-height: 46px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+}
+
+.share-inline-toggle input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+}
+
+.share-inline-action {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid #000;
+    background: #fff;
+    color: #111;
+    font-size: 0.76rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.share-inline-action:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.share-inline-action:hover:not(:disabled) {
+    background: #f5f5f5;
+}
+
+.share-progress-panel {
+    margin: 0 0 14px;
+    border: 1px solid #ddd5b3;
+    background: #fff9df;
+    color: #5a4d00;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.share-generated-gallery {
+    margin: 0 0 18px;
+    border: 3px solid #111;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%);
+    padding: 16px;
+    box-shadow: 12px 12px 0 rgba(0, 0, 0, 0.09);
+}
+
+.share-generated-gallery-header {
+    padding-bottom: 10px;
+    border-bottom: 2px solid #111;
+}
+
+.share-generated-gallery-header h4 {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    font-weight: 900;
+    color: #111;
+}
+
+.share-generated-gallery-header p {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #555;
+    line-height: 1.55;
+    font-weight: 700;
+}
+
+.share-generated-gallery-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 420px));
+    justify-content: flex-start;
+    gap: 14px;
+}
+
+.share-generated-gallery-grid.single-item {
+    grid-template-columns: minmax(0, 420px);
+}
+
+.share-generated-card {
+    border: 2px solid #111;
+    background: #fff;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.1);
+}
+
+.share-generated-card img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 2px solid #111;
+    background: #fff;
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+    image-rendering: auto;
+}
+
+.share-generated-download {
+    min-height: 40px;
+    border: 2px solid #000;
+    background: #000;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+}
+
+.share-generated-download:hover {
+    background: #222;
+}
+
+.share-action-dock-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.quick-nav-rail.share-screen-quick-nav.mobile {
+    bottom: calc(164px + env(safe-area-inset-bottom));
+}
+
+.quick-nav-rail.mylist-quick-nav.mobile {
+    bottom: calc(92px + env(safe-area-inset-bottom));
+}
+
+.share-dock-primary,
+.share-dock-secondary {
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #000;
+    font-size: 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+    background: #fff;
+    color: #000;
+}
+
+.share-dock-primary {
+    background: #000;
+    color: #fff;
+}
+
+.share-dock-primary:hover:not(:disabled) {
+    background: #222;
+}
+
+.share-dock-secondary:hover:not(:disabled) {
+    background: #f5f5f5;
+}
+
+.share-dock-primary:disabled,
+.share-dock-secondary:disabled {
     opacity: 0.45;
     cursor: default;
 }
@@ -3079,6 +3394,12 @@ body {
         padding: 0 12px;
     }
 
+    .mylist-share-button,
+    .share-inline-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+
     .bookmark-screen-desc {
         font-size: var(--fs-caption);
         line-height: 1.55;
@@ -3227,6 +3548,28 @@ body {
         padding: 0 10px;
     }
 
+    .share-method-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .share-generated-gallery-grid,
+    .share-generated-gallery-grid.single-item {
+        grid-template-columns: 1fr;
+    }
+
+    .bookmark-rating-filter-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .bookmark-rating-filter-label {
+        white-space: normal;
+    }
+
+    .bookmark-rating-filter-select {
+        width: 100%;
+    }
+
     .bookmark-genre-filter-section {
         padding: 10px;
     }
@@ -3242,6 +3585,38 @@ body {
 
     .bookmark-bottom-nav {
         grid-template-columns: 1fr;
+    }
+
+    .share-action-dock {
+        padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+        gap: 6px;
+    }
+
+    .share-action-dock .selection-action-dock-count {
+        font-size: 0.78rem;
+    }
+
+    .share-action-dock-buttons {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .share-dock-primary,
+    .share-dock-secondary {
+        min-height: 42px;
+        padding: 0 10px;
+        font-size: 0.74rem;
+        line-height: 1.2;
+    }
+
+    .quick-nav-rail.share-screen-quick-nav.mobile {
+        bottom: calc(188px + env(safe-area-inset-bottom));
+    }
+
+    .quick-nav-rail.mylist-quick-nav.mobile {
+        bottom: calc(96px + env(safe-area-inset-bottom));
     }
 
     .mylist-section-header+.controls {

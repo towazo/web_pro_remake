@@ -19,11 +19,13 @@ function AnimeCard({
   onToggleSelect,
   onLongPress,
   onUpdateRating,
+  allowRatingEditInSelectionMode = false,
 }) {
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const rating = normalizeRating(anime?.rating);
-  const canEditRating = typeof onUpdateRating === 'function' && !isSelectionMode;
+  const canEditRating = typeof onUpdateRating === 'function'
+    && (!isSelectionMode || allowRatingEditInSelectionMode);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {

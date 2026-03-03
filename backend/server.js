@@ -17,6 +17,7 @@ const ALLOWED_ORIGINS = (
     : [APP_ORIGIN || 'http://localhost:5173']
 );
 const ALLOWED_ORIGIN_SET = new Set(ALLOWED_ORIGINS);
+const ALLOWED_SHARE_IMAGE_HOST_SUFFIXES = ['.anilist.co', '.anili.st'];
 
 const DATA_DIR = path.join(__dirname, 'data');
 const libraryStore = createLibraryStore({
@@ -48,6 +49,23 @@ const parseOriginFromReferer = (referer) => {
     return new URL(referer).origin;
   } catch (_) {
     return '';
+  }
+};
+
+const parseAllowedShareImageUrl = (rawUrl) => {
+  if (!rawUrl) return null;
+  try {
+    const parsed = new URL(String(rawUrl));
+    const { protocol, hostname } = parsed;
+    const normalizedHost = String(hostname || '').toLowerCase();
+    if (!['https:', 'http:'].includes(protocol)) return null;
+    const isAllowedHost = normalizedHost === 'anilist.co'
+      || normalizedHost === 'anili.st'
+      || ALLOWED_SHARE_IMAGE_HOST_SUFFIXES.some((suffix) => normalizedHost.endsWith(suffix));
+    if (!isAllowedHost) return null;
+    return parsed;
+  } catch (_) {
+    return null;
   }
 };
 
@@ -112,6 +130,51 @@ app.get('/api/library', async (_req, res, next) => {
       bookmarkList: store.bookmarkList,
       updatedAt: store.updatedAt,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/share-image-proxy', async (req, res, next) => {
+  const targetUrl = parseAllowedShareImageUrl(req.query?.url);
+  if (!targetUrl) {
+    res.status(400).json({ error: 'Invalid share image url.', code: 'INVALID_SHARE_IMAGE_URL' });
+    return;
+  }
+
+  try {
+    const upstream = await fetch(targetUrl, {
+      headers: {
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'User-Agent': 'AniTriggerShareImageProxy/1.0',
+        Referer: 'https://anilist.co/',
+      },
+    });
+
+    if (!upstream.ok) {
+      res.status(502).json({
+        error: `Upstream image request failed (${upstream.status}).`,
+        code: 'SHARE_IMAGE_UPSTREAM_FAILED',
+      });
+      return;
+    }
+
+    const contentType = String(upstream.headers.get('content-type') || '').toLowerCase();
+    if (!contentType.startsWith('image/')) {
+      res.status(415).json({
+        error: 'Upstream response was not an image.',
+        code: 'SHARE_IMAGE_INVALID_CONTENT_TYPE',
+      });
+      return;
+    }
+
+    const cacheControl = String(upstream.headers.get('cache-control') || '').trim();
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', cacheControl || 'public, max-age=86400');
+    res.send(buffer);
   } catch (error) {
     next(error);
   }
