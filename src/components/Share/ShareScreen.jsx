@@ -12,6 +12,7 @@ import {
   SHARE_IMAGE_SELECTION_LIMIT,
 } from '../../utils/animeList';
 import { translateGenre } from '../../constants/animeData';
+import { joinApiPath } from '../../services/apiBase';
 
 const SORT_OPTIONS = [
   { value: 'added', label: '追加順' },
@@ -29,7 +30,6 @@ const SHARE_IMAGE_FOOTER_HEIGHT = 64;
 const SHARE_IMAGE_GRID_GAP = 28;
 const SHARE_IMAGE_GRID_COLUMNS = 3;
 const SHARE_IMAGE_GRID_ROWS = 2;
-const SHARE_IMAGE_PROXY_PATH = '/api/share-image-proxy';
 const SHARE_LOGO_PATH = '/images/logo.png';
 let shareLogoPromise = null;
 
@@ -128,7 +128,7 @@ const fetchImageBlobUrl = async (sourceUrl) => {
 const buildShareImageProxyUrl = (sourceUrl) => {
   const normalizedSource = String(sourceUrl || '').trim();
   if (!normalizedSource) return '';
-  return `${SHARE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(normalizedSource)}`;
+  return `${joinApiPath('/share-image-proxy')}?url=${encodeURIComponent(normalizedSource)}`;
 };
 
 const probeShareImageProxy = async (sourceUrl) => {
@@ -771,6 +771,7 @@ function ShareScreen({
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 });
   const [generatedImages, setGeneratedImages] = useState([]);
+  const [imageShareSupport, setImageShareSupport] = useState('unknown');
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
     mobile: false,
@@ -813,6 +814,39 @@ function ShareScreen({
   useEffect(() => {
     setSelectedGenres((prev) => prev.filter((genre) => uniqueGenres.includes(genre)));
   }, [uniqueGenres]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sampleCoverImageUrl = animeList
+      .map((anime) => resolveShareCoverImageUrl(anime))
+      .find(Boolean);
+
+    if (!sampleCoverImageUrl) {
+      setImageShareSupport('ready');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setImageShareSupport('checking');
+
+    probeShareImageProxy(sampleCoverImageUrl)
+      .then(() => {
+        if (!cancelled) {
+          setImageShareSupport('ready');
+        }
+      })
+      .catch((error) => {
+        console.error('[share-image] availability probe failed', sampleCoverImageUrl, error);
+        if (!cancelled) {
+          setImageShareSupport('unavailable');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [animeList]);
 
   useEffect(() => {
     if (!notice.message) return;
@@ -1020,7 +1054,7 @@ function ShareScreen({
         console.error('[share-image] proxy preflight failed', firstCoverImageUrl, error);
         setNotice({
           type: 'error',
-          message: '共有画像用の画像サーバーに接続できません。バックエンドを再起動してから、もう一度お試しください。',
+          message: '共有画像サーバーに接続できません。バックエンド未起動、または API URL 設定の不整合を確認してください。',
         });
         return;
       }
@@ -1119,6 +1153,7 @@ function ShareScreen({
 
   if (isMethodMode) {
     const hasAnime = animeList.length > 0;
+    const canUseImageShare = hasAnime && imageShareSupport !== 'unavailable';
 
     return (
       <>
@@ -1142,7 +1177,7 @@ function ShareScreen({
               type="button"
               className="share-method-card"
               onClick={() => onSelectMode('image')}
-              disabled={!hasAnime}
+              disabled={!canUseImageShare}
             >
               <span className="share-method-card-badge">画像</span>
               <strong className="share-method-card-title">画像で共有</strong>
@@ -1164,6 +1199,12 @@ function ShareScreen({
               </span>
             </button>
           </div>
+
+          {imageShareSupport === 'unavailable' && hasAnime && (
+            <div className="bookmark-action-notice error">
+              画像共有サーバーに接続できません。この公開環境ではバックエンド未配置、または `VITE_API_BASE_URL` の設定不整合の可能性があります。
+            </div>
+          )}
 
           {!hasAnime && (
             <div className="empty-state">共有できる作品がまだありません</div>

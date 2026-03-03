@@ -1,13 +1,6 @@
-const resolveApiBase = () => {
-  const raw = String(import.meta.env?.VITE_API_BASE_URL || '/api').trim();
-  if (!raw) return '/api';
-  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
-};
+import { API_BASE, joinApiPath } from './apiBase';
 
-const API_BASE = resolveApiBase();
 const IS_DEV = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
-
-const joinApiPath = (path) => `${API_BASE}${path}`;
 
 const sanitizeCollection = (list) => {
   if (!Array.isArray(list)) return [];
