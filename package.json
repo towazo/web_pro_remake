@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -k -n server,client -c yellow,cyan \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite",
-    "dev:server": "node backend/server.js",
+    "dev:server": "node backend/devServer.js",
     "server": "node backend/server.js",
     "build": "vite build",
     "preview": "vite preview"
