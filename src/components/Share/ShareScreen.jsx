@@ -1186,32 +1186,10 @@ function ShareScreen({
     window.scrollTo({ top: docH, behavior: 'smooth' });
   };
 
-  const canShareGeneratedImages = useMemo(() => {
-    return canUseNativeFileShare(generatedImages.map((item) => item.file));
-  }, [generatedImages]);
-
   const canUseNativeSaveGeneratedImages = useMemo(() => {
     if (!isLikelyMobileDevice) return false;
     return canUseNativeFileShare(generatedImages.map((item) => item.file));
   }, [generatedImages, isLikelyMobileDevice]);
-
-  const handleShareGeneratedImages = async () => {
-    if (!canShareGeneratedImages) return;
-
-    try {
-      await navigator.share({
-        title: 'AniTrigger Share',
-        text: `${selectedAnimes.length} 作品を共有`,
-        files: generatedImages.map((item) => item.file),
-      });
-    } catch (error) {
-      if (error?.name === 'AbortError') return;
-      setNotice({
-        type: 'error',
-        message: '共有に失敗しました。保存した画像を各アプリから共有してください。',
-      });
-    }
-  };
 
   if (isMethodMode) {
     const hasAnime = animeList.length > 0;
@@ -1462,11 +1440,6 @@ function ShareScreen({
           {isImageMode ? (
             generatedImages.length > 0 ? (
               <>
-                {canShareGeneratedImages && (
-                  <button type="button" className="share-dock-primary" onClick={handleShareGeneratedImages}>
-                    画像を共有
-                  </button>
-                )}
                 <button type="button" className="share-dock-primary" onClick={handleDownloadAllImages}>
                   画像を保存
                 </button>
