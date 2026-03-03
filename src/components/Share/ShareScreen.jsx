@@ -135,73 +135,6 @@ const buildShareImageProxyUrl = (sourceUrl) => {
   return `${joinApiPath('/share-image-proxy')}?url=${encodeURIComponent(normalizedSource)}`;
 };
 
-const probeShareImageProxy = async (sourceUrl) => {
-  const proxyUrl = buildShareImageProxyUrl(sourceUrl);
-  if (!proxyUrl) {
-    throw new Error('share_image_proxy_url_missing');
-  }
-
-  const response = await fetch(proxyUrl, {
-    method: 'GET',
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    throw new Error(`share_image_proxy_probe_failed_${response.status}`);
-  }
-
-  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-  if (!contentType.startsWith('image/')) {
-    throw new Error('share_image_proxy_probe_invalid_content_type');
-  }
-
-  return true;
-};
-
-const probeDirectShareImage = async (sourceUrl) => {
-  const normalizedSource = String(sourceUrl || '').trim();
-  if (!normalizedSource) {
-    throw new Error('share_image_direct_url_missing');
-  }
-
-  const image = await loadImageElement(normalizedSource, DIRECT_SHARE_IMAGE_LOAD_OPTIONS);
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) {
-      throw new Error('canvas_context_unavailable');
-    }
-    context.drawImage(image, 0, 0, 1, 1);
-    context.getImageData(0, 0, 1, 1);
-    return true;
-  } finally {
-    closeImageAsset(image);
-  }
-};
-
-const resolveShareImageTransport = async (sourceUrl) => {
-  let proxyError = null;
-  try {
-    await probeShareImageProxy(sourceUrl);
-    return 'proxy';
-  } catch (error) {
-    proxyError = error;
-    console.warn('[share-image] proxy probe failed, checking direct image access', sourceUrl, error);
-  }
-
-  try {
-    await probeDirectShareImage(sourceUrl);
-    return 'direct';
-  } catch (directError) {
-    const error = new Error('share_image_transport_unavailable');
-    error.proxyError = proxyError;
-    error.directError = directError;
-    throw error;
-  }
-};
-
 const loadShareLogoAsset = () => {
   if (!shareLogoPromise) {
     shareLogoPromise = loadImageElement(SHARE_LOGO_PATH);
@@ -819,8 +752,6 @@ function ShareScreen({
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 });
   const [generatedImages, setGeneratedImages] = useState([]);
-  const [imageShareSupport, setImageShareSupport] = useState('unknown');
-  const [imageShareTransport, setImageShareTransport] = useState('auto');
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
     mobile: false,
@@ -863,43 +794,6 @@ function ShareScreen({
   useEffect(() => {
     setSelectedGenres((prev) => prev.filter((genre) => uniqueGenres.includes(genre)));
   }, [uniqueGenres]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const sampleCoverImageUrl = animeList
-      .map((anime) => resolveShareCoverImageUrl(anime))
-      .find(Boolean);
-
-    if (!sampleCoverImageUrl) {
-      setImageShareSupport('ready');
-      setImageShareTransport('auto');
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setImageShareSupport('checking');
-    setImageShareTransport('auto');
-
-    resolveShareImageTransport(sampleCoverImageUrl)
-      .then((transport) => {
-        if (!cancelled) {
-          setImageShareSupport('ready');
-          setImageShareTransport(transport);
-        }
-      })
-      .catch((error) => {
-        console.error('[share-image] availability probe failed', sampleCoverImageUrl, error);
-        if (!cancelled) {
-          setImageShareSupport('unavailable');
-          setImageShareTransport('auto');
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [animeList]);
 
   useEffect(() => {
     if (!notice.message) return;
@@ -1096,27 +990,6 @@ function ShareScreen({
   const handleGenerateImages = async () => {
     if (selectedAnimes.length === 0 || isGeneratingImages) return;
 
-    const firstCoverImageUrl = selectedAnimes
-      .map((anime) => resolveShareCoverImageUrl(anime))
-      .find(Boolean);
-
-    let activeTransport = imageShareTransport;
-    if (firstCoverImageUrl) {
-      try {
-        activeTransport = await resolveShareImageTransport(firstCoverImageUrl);
-        setImageShareSupport('ready');
-        setImageShareTransport(activeTransport);
-      } catch (error) {
-        console.error('[share-image] image preflight failed', firstCoverImageUrl, error);
-        setImageShareSupport('unavailable');
-        setNotice({
-          type: 'error',
-          message: '画像共有に必要な画像取得に失敗しました。バックエンド設定、または公開環境の画像読み込み制限を確認してください。',
-        });
-        return;
-      }
-    }
-
     clearGeneratedImages();
     setIsGeneratingImages(true);
     setImageProgress({
@@ -1127,7 +1000,7 @@ function ShareScreen({
     try {
       const imageItems = await createShareImageFiles(selectedAnimes, (current, total) => {
         setImageProgress({ current, total });
-      }, activeTransport);
+      });
       setGeneratedImages(imageItems);
       setNotice({
         type: 'success',
@@ -1210,7 +1083,7 @@ function ShareScreen({
 
   if (isMethodMode) {
     const hasAnime = animeList.length > 0;
-    const canUseImageShare = hasAnime && imageShareSupport !== 'unavailable';
+    const canUseImageShare = hasAnime;
 
     return (
       <>
@@ -1256,12 +1129,6 @@ function ShareScreen({
               </span>
             </button>
           </div>
-
-          {imageShareSupport === 'unavailable' && hasAnime && (
-            <div className="bookmark-action-notice error">
-              画像共有に必要な画像取得に失敗しました。この公開環境ではバックエンド未配置、`VITE_API_BASE_URL` の設定不整合、または外部画像の読み込み制限の可能性があります。
-            </div>
-          )}
 
           {!hasAnime && (
             <div className="empty-state">共有できる作品がまだありません</div>
