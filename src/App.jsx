@@ -40,6 +40,39 @@ import {
   normalizeAnimeRating,
 } from './utils/animeList';
 
+const ONBOARDING_STEPS = [
+  {
+    key: 'intro',
+    title: 'AniTriggerへようこそ',
+    description: 'このサイトでは、視聴したアニメをマイリストに登録し、記録・振り返り・共有をすることができます。',
+  },
+  {
+    key: 'mylist',
+    title: 'マイリスト機能',
+    description: '視聴した作品を登録して、評価や履歴を管理できます。',
+  },
+  {
+    key: 'bookmark',
+    title: 'ブックマーク機能',
+    description: '気になる作品や今期・来季のアニメをまとめて確認できます。',
+  },
+  {
+    key: 'add',
+    title: '作品追加機能',
+    description: '検索・年代リストなどから作品を追加できます。',
+  },
+  {
+    key: 'share',
+    title: '共有機能',
+    description: '登録した作品を画像やテキストでSNSなどへ共有できます。',
+  },
+  {
+    key: 'start',
+    title: '作品を追加してみよう',
+    description: '今季の作品をまとめて確認するか、タイトル検索で追加を始められます。',
+  },
+];
+
 /**
  * Main App Component
  * Responsible for routing, global state management, and data orchestration.
@@ -82,11 +115,16 @@ function App() {
   });
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
+  const [sharePresetAnimeIds, setSharePresetAnimeIds] = useState([]);
+  const [isOnboardingDismissed, setIsOnboardingDismissed] = useState(false);
+  const [isOnboardingCurrentSeasonFlow, setIsOnboardingCurrentSeasonFlow] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
   const [isRefreshingFeatured, setIsRefreshingFeatured] = useState(false);
   const [isServerLibraryReady, setIsServerLibraryReady] = useState(false);
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
+  const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
 
   const navigateTo = (nextView, options = {}) => {
     if (!APP_VIEW_SET.has(nextView)) return;
@@ -95,7 +133,10 @@ function App() {
       return;
     }
 
-    const { replace = false } = options;
+    const { replace = false, force = false } = options;
+    if (isOnboardingActive && !force && nextView !== 'home') {
+      return;
+    }
     const targetHash = APP_VIEW_HASHES[nextView] || '#/';
     const currentHash = window.location.hash || '#/';
     const isSameView = view === nextView && currentHash === targetHash;
@@ -320,6 +361,29 @@ function App() {
     setSelectedAnimeIds((prev) => prev.filter((id) => animeList.some((anime) => anime.id === id)));
   }, [animeList]);
 
+  useEffect(() => {
+    setSharePresetAnimeIds((prev) => prev.filter((id) => animeList.some((anime) => anime.id === id)));
+  }, [animeList]);
+
+  useEffect(() => {
+    if (animeList.length === 0) return;
+    setIsOnboardingDismissed(false);
+  }, [animeList.length]);
+
+  useEffect(() => {
+    if (!isOnboardingActive || view === 'home' || typeof window === 'undefined') return;
+    const forcedHome = 'home';
+    const state = { ...(window.history.state || {}), appView: forcedHome };
+    window.history.replaceState(state, '', APP_VIEW_HASHES[forcedHome] || '#/');
+    navigationTypeRef.current = 'pop';
+    setView(forcedHome);
+  }, [isOnboardingActive, view]);
+
+  useEffect(() => {
+    if (view === 'addCurrent') return;
+    setIsOnboardingCurrentSeasonFlow(false);
+  }, [view]);
+
   // 3. Initial Data Acquisition (Hydration) - Empty for Clean Start
 
   // 4. Action Handlers
@@ -440,6 +504,41 @@ function App() {
     setSelectedAnimeIds([]);
   };
 
+  const handleOpenShareMethod = (initialIds = []) => {
+    const mylistIdSet = new Set(animeList.map((anime) => anime.id));
+    const normalizedIds = Array.from(new Set(
+      (Array.isArray(initialIds) ? initialIds : []).filter((id) => mylistIdSet.has(id))
+    ));
+    setSharePresetAnimeIds(normalizedIds);
+    navigateTo('shareMethod');
+  };
+
+  const handleOnboardingPrev = () => {
+    setOnboardingStep((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleOnboardingNext = () => {
+    setOnboardingStep((prev) => Math.min(ONBOARDING_STEPS.length - 1, prev + 1));
+  };
+
+  const handleOnboardingAddCurrent = () => {
+    setIsOnboardingDismissed(true);
+    setIsOnboardingCurrentSeasonFlow(true);
+    navigateTo('addCurrent', { force: true });
+  };
+
+  const handleOnboardingSearchAdd = () => {
+    setIsOnboardingDismissed(true);
+    setIsOnboardingCurrentSeasonFlow(false);
+    navigateTo('add', { force: true });
+  };
+
+  const handleOnboardingCancel = () => {
+    setIsOnboardingDismissed(true);
+    setIsOnboardingCurrentSeasonFlow(false);
+    navigateTo('home', { replace: true, force: true });
+  };
+
   const handleBulkRemoveSelected = () => {
     if (selectedAnimeIds.length === 0) return;
 
@@ -489,6 +588,19 @@ function App() {
       sortOrder,
     });
   }, [animeList, minRating, searchQuery, selectedGenres, sortKey, sortOrder]);
+  const selectedAnimeIdSet = useMemo(() => new Set(selectedAnimeIds), [selectedAnimeIds]);
+  const visibleAnimeIds = useMemo(() => filteredList.map((anime) => anime.id), [filteredList]);
+  const isAllVisibleSelected = visibleAnimeIds.length > 0
+    && visibleAnimeIds.every((id) => selectedAnimeIdSet.has(id));
+
+  const handleSelectAllVisibleAnime = () => {
+    if (visibleAnimeIds.length === 0) return;
+    setSelectedAnimeIds((prev) => {
+      const nextSet = new Set(prev);
+      visibleAnimeIds.forEach((id) => nextSet.add(id));
+      return Array.from(nextSet);
+    });
+  };
 
   const currentSeasonInfo = useMemo(() => getCurrentSeasonInfo(), []);
   const nextSeasonInfo = useMemo(() => getNextSeasonInfo(currentSeasonInfo), [currentSeasonInfo]);
@@ -521,13 +633,26 @@ function App() {
   const isHomeView = view === 'home' || view === 'homeCustomize';
   const isShareView = view === 'shareMethod' || view === 'shareImage' || view === 'shareText';
   const isMyListSectionView = view === 'mylist' || isShareView;
+  const shouldShowHomeOnboarding = view === 'home' && isOnboardingActive;
+  const isOnboardingNavigationLocked = shouldShowHomeOnboarding;
+  const isLastOnboardingStep = onboardingStep >= ONBOARDING_STEPS.length - 1;
+  const activeOnboardingStep = ONBOARDING_STEPS[Math.min(onboardingStep, ONBOARDING_STEPS.length - 1)];
   const activeBrowsePreset = view === 'addCurrent'
     ? currentSeasonAddPreset
     : view === 'addNext'
       ? nextSeasonAddPreset
       : null;
-  const addViewBackTarget = activeBrowsePreset ? 'bookmarks' : 'home';
-  const addViewBackLabel = activeBrowsePreset ? '← ブックマークへ戻る' : '← ホームへ戻る';
+  const isOnboardingCurrentAddBackToHome = view === 'addCurrent' && isOnboardingCurrentSeasonFlow;
+  const addViewBackTarget = isOnboardingCurrentAddBackToHome
+    ? 'home'
+    : activeBrowsePreset
+      ? 'bookmarks'
+      : 'home';
+  const addViewBackLabel = isOnboardingCurrentAddBackToHome
+    ? '← ホームに戻る'
+    : activeBrowsePreset
+      ? '← ブックマークへ戻る'
+      : '← ホームへ戻る';
   const addViewTitle = view === 'addCurrent'
     ? '今期放送中作品の追加'
     : view === 'addNext'
@@ -543,12 +668,21 @@ function App() {
     setHomeStatsCardBackgrounds(sanitizeHomeStatsCardBackgrounds(nextBackgrounds));
   };
 
+  useEffect(() => {
+    if (!shouldShowHomeOnboarding) return;
+    setOnboardingStep(0);
+  }, [view, shouldShowHomeOnboarding]);
+
   // 6. UI Render
   return (
     <div className="app-container">
       {/* Navigation Header */}
       <header className="app-header">
-        <div className="logo" onClick={() => navigateTo('home')} style={{ cursor: 'pointer' }}>
+        <div
+          className={`logo${isOnboardingNavigationLocked ? ' nav-locked' : ''}`}
+          onClick={isOnboardingNavigationLocked ? undefined : () => navigateTo('home')}
+          style={{ cursor: isOnboardingNavigationLocked ? 'default' : 'pointer' }}
+        >
           <img src="/images/logo.png" alt="AniTrigger" style={{ height: '120px' }} />
         </div>
       </header>
@@ -558,6 +692,7 @@ function App() {
           type="button"
           className={`global-view-nav-button ${isHomeView ? 'active' : ''}`}
           onClick={() => navigateTo('home')}
+          disabled={isOnboardingNavigationLocked}
         >
           ホーム
         </button>
@@ -565,6 +700,7 @@ function App() {
           type="button"
           className={`global-view-nav-button ${isMyListSectionView ? 'active' : ''}`}
           onClick={() => navigateTo('mylist')}
+          disabled={isOnboardingNavigationLocked}
         >
           マイリスト
         </button>
@@ -572,6 +708,7 @@ function App() {
           type="button"
           className={`global-view-nav-button ${view === 'bookmarks' ? 'active' : ''}`}
           onClick={() => navigateTo('bookmarks')}
+          disabled={isOnboardingNavigationLocked}
         >
           ブックマーク
         </button>
@@ -579,6 +716,7 @@ function App() {
           type="button"
           className={`global-view-nav-button ${isAddView ? 'active' : ''}`}
           onClick={() => navigateTo('add')}
+          disabled={isOnboardingNavigationLocked}
         >
           作品の追加
         </button>
@@ -628,6 +766,7 @@ function App() {
           key={view}
           mode={view === 'shareImage' ? 'image' : view === 'shareText' ? 'text' : 'method'}
           animeList={animeList}
+          initialSelectedAnimeIds={sharePresetAnimeIds}
           onUpdateRating={handleUpdateAnimeRating}
           onBackToMyList={() => navigateTo('mylist')}
           onBackToMethod={() => navigateTo('shareMethod')}
@@ -648,7 +787,7 @@ function App() {
                 <button
                   type="button"
                   className="mylist-share-button"
-                  onClick={() => navigateTo('shareMethod')}
+                  onClick={() => handleOpenShareMethod()}
                   disabled={animeList.length === 0}
                 >
                   作品を共有
@@ -720,7 +859,7 @@ function App() {
                   anime={anime}
                   onRemove={handleRemoveAnime}
                   isSelectionMode={isSelectionMode}
-                  isSelected={selectedAnimeIds.includes(anime.id)}
+                  isSelected={selectedAnimeIdSet.has(anime.id)}
                   onToggleSelect={handleToggleAnimeSelection}
                   onLongPress={handleLongPressAnime}
                   onUpdateRating={handleUpdateAnimeRating}
@@ -732,6 +871,53 @@ function App() {
               <div className="empty-state">該当する作品がありません</div>
             )}
           </main>
+      ) : shouldShowHomeOnboarding ? (
+        <main className="main-content onboarding-main page-shell">
+          <section className="onboarding-panel">
+            <p className="onboarding-step-badge">
+              初回ガイド {onboardingStep + 1}/{ONBOARDING_STEPS.length}
+            </p>
+            <h3 className="onboarding-title">{activeOnboardingStep.title}</h3>
+            {activeOnboardingStep.description && (
+              <p className="onboarding-description">{activeOnboardingStep.description}</p>
+            )}
+            {Array.isArray(activeOnboardingStep.features) && activeOnboardingStep.features.length > 0 && (
+              <ul className="onboarding-feature-list">
+                {activeOnboardingStep.features.map((feature) => (
+                  <li key={feature}>{feature}</li>
+                ))}
+              </ul>
+            )}
+
+            {isLastOnboardingStep ? (
+              <div className="onboarding-actions final-step">
+                <button type="button" className="onboarding-action-primary" onClick={handleOnboardingAddCurrent}>
+                  今季のアニメを追加
+                </button>
+                <button type="button" className="onboarding-action-secondary" onClick={handleOnboardingSearchAdd}>
+                  検索して追加
+                </button>
+                <button type="button" className="onboarding-action-cancel" onClick={handleOnboardingCancel}>
+                  キャンセル
+                </button>
+              </div>
+            ) : (
+              <div className="onboarding-actions">
+                <button
+                  type="button"
+                  className="onboarding-action-secondary"
+                  onClick={handleOnboardingPrev}
+                  disabled={onboardingStep === 0}
+                >
+                  戻る
+                </button>
+                <button type="button" className="onboarding-action-primary" onClick={handleOnboardingNext}>
+                  次へ
+                </button>
+              </div>
+            )}
+          </section>
+        </main>
       ) : (
         <>
           <HeroSlider
@@ -742,6 +928,12 @@ function App() {
           />
 
           <main className="main-content">
+            <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
+
+            <p className="page-guide-text">
+              目的に合わせて移動できます。視聴済みは「マイリスト」、あとで見たい作品は「ブックマーク」で管理してください。
+            </p>
+
             <div className="bookmark-entry-bar">
               <button
                 type="button"
@@ -782,11 +974,14 @@ function App() {
               </button>
             </div>
 
-            <p className="page-guide-text">
-              目的に合わせて移動できます。視聴済みは「マイリスト」、あとで見たい作品は「ブックマーク」で管理してください。
-            </p>
-
-            <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
+            <button
+              type="button"
+              className="home-share-shortcut"
+              onClick={() => handleOpenShareMethod()}
+              disabled={animeList.length === 0}
+            >
+              作品を共有
+            </button>
 
             <div className="home-stats-customize-launch">
               <button
@@ -809,6 +1004,22 @@ function App() {
         <div className="selection-action-dock" role="region" aria-label="選択モード操作">
           <p className="selection-action-dock-count">{selectedAnimeIds.length} 件を選択中</p>
           <div className="selection-action-dock-buttons">
+            <button
+              type="button"
+              className="selection-toolbar-select-all"
+              onClick={handleSelectAllVisibleAnime}
+              disabled={visibleAnimeIds.length === 0 || isAllVisibleSelected}
+            >
+              すべて選択
+            </button>
+            <button
+              type="button"
+              className="selection-toolbar-share"
+              onClick={() => handleOpenShareMethod(selectedAnimeIds)}
+              disabled={selectedAnimeIds.length === 0}
+            >
+              選択した作品を共有
+            </button>
             <button
               type="button"
               className="selection-toolbar-delete"

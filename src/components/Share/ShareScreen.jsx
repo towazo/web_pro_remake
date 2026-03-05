@@ -740,9 +740,17 @@ const revokeGeneratedImageUrls = (items) => {
   });
 };
 
+const normalizeSelectedAnimeIds = (candidateIds, animeList) => {
+  const validIdSet = new Set((Array.isArray(animeList) ? animeList : []).map((anime) => anime.id));
+  return Array.from(new Set(
+    (Array.isArray(candidateIds) ? candidateIds : []).filter((id) => validIdSet.has(id))
+  ));
+};
+
 function ShareScreen({
   mode = 'method',
   animeList = [],
+  initialSelectedAnimeIds = [],
   onUpdateRating,
   onBackToMyList,
   onBackToMethod,
@@ -757,7 +765,9 @@ function ShareScreen({
   const [minRating, setMinRating] = useState('');
   const [sortKey, setSortKey] = useState('added');
   const [sortOrder, setSortOrder] = useState('desc');
-  const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
+  const [selectedAnimeIds, setSelectedAnimeIds] = useState(() => (
+    normalizeSelectedAnimeIds(initialSelectedAnimeIds, animeList)
+  ));
   const [includeRatingInText, setIncludeRatingInText] = useState(false);
   const [notice, setNotice] = useState({ type: '', message: '' });
   const [copyBanner, setCopyBanner] = useState({ visible: false, message: '' });
@@ -796,6 +806,7 @@ function ShareScreen({
     const animeById = new Map(animeList.map((anime) => [anime.id, anime]));
     return selectedAnimeIds.map((id) => animeById.get(id)).filter(Boolean);
   }, [animeList, selectedAnimeIds]);
+  const isImageSelectionOverLimit = selectedAnimeIds.length > SHARE_IMAGE_SELECTION_LIMIT;
 
   const isLikelyMobileDevice = useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
@@ -841,6 +852,10 @@ function ShareScreen({
     }, 2200);
     return () => clearTimeout(timer);
   }, [copyBanner.visible, copyBanner.message]);
+
+  useEffect(() => {
+    setSelectedAnimeIds((prev) => normalizeSelectedAnimeIds(prev, animeList));
+  }, [animeList]);
 
   useEffect(() => {
     if (isMethodMode) {
@@ -1061,7 +1076,7 @@ function ShareScreen({
   };
 
   const handleGenerateImages = async () => {
-    if (selectedAnimes.length === 0 || isGeneratingImages) return;
+    if (selectedAnimes.length === 0 || isGeneratingImages || isImageSelectionOverLimit) return;
 
     clearGeneratedImages();
     pendingGalleryScrollRef.current = true;
@@ -1175,7 +1190,8 @@ function ShareScreen({
 
   if (isMethodMode) {
     const hasAnime = animeList.length > 0;
-    const canUseImageShare = hasAnime;
+    const hasInitialSelection = selectedAnimeIds.length > 0;
+    const canUseImageShare = hasAnime && !isImageSelectionOverLimit;
 
     return (
       <>
@@ -1189,9 +1205,12 @@ function ShareScreen({
 
           <section className="share-method-guide">
             <p className="share-method-guide-title">ガイド</p>
-            <p className="share-method-guide-text">1〜24作品なら画像共有がおすすめです。</p>
-            <p className="share-method-guide-text">25作品以上なら文字共有がおすすめです。</p>
+            <p className="share-method-guide-text">1〜{SHARE_IMAGE_SELECTION_LIMIT}作品なら画像共有がおすすめです。</p>
+            <p className="share-method-guide-text">{SHARE_IMAGE_SELECTION_LIMIT + 1}作品以上なら文字共有がおすすめです。</p>
             <p className="share-method-guide-note">現在の登録作品数: {animeList.length} 件</p>
+            {hasInitialSelection && (
+              <p className="share-method-guide-note">現在の選択作品数: {selectedAnimeIds.length} 件</p>
+            )}
           </section>
 
           <div className="share-method-grid">
@@ -1222,6 +1241,12 @@ function ShareScreen({
             </button>
           </div>
 
+          {isImageSelectionOverLimit && (
+            <div className="share-limit-warning" role="status" aria-live="polite">
+              画像で共有できる作品数の上限（{SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。文字共有を利用するか、選択数を減らしてください。
+            </div>
+          )}
+
           {!hasAnime && (
             <div className="empty-state">共有できる作品がまだありません</div>
           )}
@@ -1250,7 +1275,9 @@ function ShareScreen({
             <h3 className="page-main-title">{isImageMode ? '画像で共有' : '文字で共有'}</h3>
             <p className="page-main-subtitle">
               {isImageMode
-                ? `共有したい作品を ${SHARE_IMAGE_SELECTION_LIMIT} 件まで選択してください。`
+                ? isImageSelectionOverLimit
+                  ? `画像共有の上限（${SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。選択数を減らしてください。`
+                  : `共有したい作品を ${SHARE_IMAGE_SELECTION_LIMIT} 件まで選択してください。`
                 : '共有したい作品を選択してください。'}
             </p>
           </div>
@@ -1274,6 +1301,12 @@ function ShareScreen({
         {notice.message && (
           <div className={`bookmark-action-notice ${notice.type}`}>
             {notice.message}
+          </div>
+        )}
+
+        {isImageMode && isImageSelectionOverLimit && (
+          <div className="share-limit-warning" role="status" aria-live="polite">
+            画像で共有できる作品数の上限（{SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。
           </div>
         )}
 
@@ -1444,9 +1477,9 @@ function ShareScreen({
                   type="button"
                   className="share-dock-primary"
                   onClick={handleGenerateImages}
-                  disabled={selectedAnimeIds.length === 0 || isGeneratingImages}
+                  disabled={selectedAnimeIds.length === 0 || isGeneratingImages || isImageSelectionOverLimit}
                 >
-                  {isGeneratingImages ? '画像を生成中...' : '画像を生成'}
+                  {isGeneratingImages ? '画像を生成中...' : isImageSelectionOverLimit ? '上限超過で生成不可' : '画像を生成'}
                 </button>
                 <button
                   type="button"
