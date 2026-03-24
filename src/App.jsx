@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useMemo, useRef } from 'react';
 
 // Services
-import { buildFeaturedSliderState } from './services/animeService';
+import { buildFeaturedSliderState, fetchAnimeDetailsByIds } from './services/animeService';
 import { fetchLibrarySnapshot, saveLibrarySnapshot } from './services/libraryService';
 import { APP_VIEW_HASHES, APP_VIEW_SET, getViewFromLocation } from './utils/appView';
 import {
@@ -29,7 +29,7 @@ import HomeStatsCustomizeScreen from './components/Stats/HomeStatsCustomizeScree
 import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
 import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
 import ShareScreen from './components/Share/ShareScreen';
-import AnimeFilterPanel from './components/Shared/AnimeFilterPanel';
+import AnimeFilterDialog from './components/Shared/AnimeFilterDialog';
 import {
   readHomeStatsCardBackgroundsFromStorage,
   sanitizeHomeStatsCardBackgrounds,
@@ -39,6 +39,13 @@ import {
   buildFilteredAnimeList,
   normalizeAnimeRating,
 } from './utils/animeList';
+import { warmAniListTagTranslations } from './services/tagCatalogService';
+import useTagTranslationVersion from './hooks/useTagTranslationVersion';
+import {
+  collectAnimeFilterOptions,
+  hasAnimeTagMetadata,
+  normalizeAnimeTags,
+} from './utils/animeFilters';
 
 const ONBOARDING_STEPS = [
   {
@@ -84,10 +91,15 @@ function App() {
     allowUnknownCountry: true,
   }).map((anime) => {
     const normalizedRating = normalizeAnimeRating(anime?.rating);
-    if ((anime?.rating ?? null) === normalizedRating) {
+    const hasTagList = Array.isArray(anime?.tags);
+    if ((anime?.rating ?? null) === normalizedRating && !hasTagList) {
       return anime;
     }
-    return { ...anime, rating: normalizedRating };
+    const nextAnime = { ...anime, rating: normalizedRating };
+    if (hasTagList) {
+      nextAnime.tags = normalizeAnimeTags(anime.tags);
+    }
+    return nextAnime;
   });
 
   // Initialize state from localStorage if available
@@ -101,7 +113,10 @@ function App() {
   const [featuredSliderState, setFeaturedSliderState] = useState(() => buildFeaturedSliderState(animeList));
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenres, setSelectedGenres] = useState([]);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
   const [minRating, setMinRating] = useState('');
+  const [filterMatchMode, setFilterMatchMode] = useState('and');
   const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year', 'rating'
   const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
   const [homeStatsCardBackgrounds, setHomeStatsCardBackgrounds] = useState(() =>
@@ -124,7 +139,9 @@ function App() {
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
+  const tagEnrichmentAttemptedIdsRef = useRef(new Set());
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
+  const tagTranslationVersion = useTagTranslationVersion();
 
   const navigateTo = (nextView, options = {}) => {
     if (!APP_VIEW_SET.has(nextView)) return;
@@ -212,6 +229,12 @@ function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    warmAniListTagTranslations().catch((error) => {
+      console.error('Failed to warm AniList tag translations:', error);
+    });
   }, []);
 
   // 1. Storage Persistence
@@ -355,7 +378,7 @@ function App() {
       window.removeEventListener('scroll', requestUpdate);
       window.removeEventListener('resize', requestUpdate);
     };
-  }, [view, animeList.length, minRating, searchQuery, selectedGenres, sortKey, sortOrder]);
+  }, [view, animeList.length, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
 
   useEffect(() => {
     setSelectedAnimeIds((prev) => prev.filter((id) => animeList.some((anime) => anime.id === id)));
@@ -369,6 +392,57 @@ function App() {
     if (animeList.length === 0) return;
     setIsOnboardingDismissed(false);
   }, [animeList.length]);
+
+  useEffect(() => {
+    const pendingIds = Array.from(new Set(
+      [...animeList, ...bookmarkList]
+        .filter((anime) => anime?.id && !hasAnimeTagMetadata(anime))
+        .map((anime) => anime.id)
+    )).filter((id) => !tagEnrichmentAttemptedIdsRef.current.has(id));
+
+    if (pendingIds.length === 0) return undefined;
+
+    const batchIds = pendingIds.slice(0, 12);
+    batchIds.forEach((id) => tagEnrichmentAttemptedIdsRef.current.add(id));
+
+    let cancelled = false;
+    const applyEnrichedTags = (list, enrichedMap) => {
+      let changed = false;
+      const nextList = list.map((anime) => {
+        if (hasAnimeTagMetadata(anime)) return anime;
+        const enriched = enrichedMap.get(anime.id);
+        if (!enriched || !Array.isArray(enriched.tags)) return anime;
+        changed = true;
+        return { ...anime, tags: normalizeAnimeTags(enriched.tags) };
+      });
+      return changed ? nextList : list;
+    };
+
+    const run = async () => {
+      const results = await fetchAnimeDetailsByIds(batchIds, {
+        timeoutMs: 12000,
+        maxAttempts: 3,
+        baseDelayMs: 400,
+        maxRetryDelayMs: 1200,
+      });
+      if (cancelled) return;
+
+      const enrichedMap = new Map(
+        results
+          .filter((anime) => anime && Array.isArray(anime.tags))
+          .map((anime) => [anime.id, anime])
+      );
+      if (enrichedMap.size === 0) return;
+
+      setAnimeList((prev) => applyEnrichedTags(prev, enrichedMap));
+      setBookmarkList((prev) => applyEnrichedTags(prev, enrichedMap));
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [animeList, bookmarkList]);
 
   useEffect(() => {
     if (!isOnboardingActive || view === 'home' || typeof window === 'undefined') return;
@@ -555,39 +629,53 @@ function App() {
     setSelectedAnimeIds([]);
   };
 
-  const handleToggleMyListGenre = (genre) => {
-    setSelectedGenres((prev) => (
-      prev.includes(genre) ? prev.filter((item) => item !== genre) : [...prev, genre]
-    ));
+  const handleApplyMyListFilters = (nextFilters) => {
+    setSelectedGenres(Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : []);
+    setSelectedTags(Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : []);
+    setSelectedYear(String(nextFilters?.selectedYear || '').trim());
+    setMinRating(nextFilters?.minRating || '');
+    setFilterMatchMode(nextFilters?.matchMode || 'and');
   };
 
   const handleClearMyListFilters = () => {
     setSelectedGenres([]);
+    setSelectedTags([]);
+    setSelectedYear('');
     setMinRating('');
+    setFilterMatchMode('and');
   };
 
   // 5. Data Derived States (Filters/Computed)
-  const uniqueGenres = useMemo(() => {
-    const genres = new Set();
-    animeList.forEach(anime => {
-      anime.genres?.forEach(g => genres.add(g));
-    });
-    return Array.from(genres).sort((a, b) => a.localeCompare(b));
-  }, [animeList]);
+  const myListFilterOptions = useMemo(
+    () => collectAnimeFilterOptions(animeList),
+    [animeList, tagTranslationVersion]
+  );
+  const uniqueGenres = myListFilterOptions.genres;
+  const uniqueTags = myListFilterOptions.tags;
+  const uniqueYears = myListFilterOptions.years;
 
   useEffect(() => {
     setSelectedGenres((prev) => prev.filter((genre) => uniqueGenres.includes(genre)));
-  }, [uniqueGenres]);
+    setSelectedTags((prev) => prev.filter((tag) => uniqueTags.includes(tag)));
+    setSelectedYear((prev) => {
+      const year = Number(prev);
+      if (!Number.isFinite(year)) return '';
+      return uniqueYears.includes(year) ? String(year) : '';
+    });
+  }, [uniqueGenres, uniqueTags, uniqueYears]);
 
   const filteredList = useMemo(() => {
     return buildFilteredAnimeList(animeList, {
       searchQuery,
       selectedGenres,
+      selectedTags,
+      selectedYear,
       minRating,
+      matchMode: filterMatchMode,
       sortKey,
       sortOrder,
     });
-  }, [animeList, minRating, searchQuery, selectedGenres, sortKey, sortOrder]);
+  }, [animeList, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
   const selectedAnimeIdSet = useMemo(() => new Set(selectedAnimeIds), [selectedAnimeIds]);
   const visibleAnimeIds = useMemo(() => filteredList.map((anime) => anime.id), [filteredList]);
   const isAllVisibleSelected = visibleAnimeIds.length > 0
@@ -780,13 +868,16 @@ function App() {
                 <p className="bookmark-screen-desc page-main-subtitle">登録済み作品の検索・絞り込み・並び替え</p>
               </div>
               <div className="bookmark-screen-actions mylist-screen-actions">
-                <button className="bookmark-screen-add" onClick={() => navigateTo('add')}>
+                <button
+                  className="bookmark-screen-add page-action-button page-action-primary page-action-strong"
+                  onClick={() => navigateTo('add')}
+                >
                   <span className="bookmark-screen-add-icon">＋</span>
                   <span>作品を追加</span>
                 </button>
                 <button
                   type="button"
-                  className="mylist-share-button"
+                  className="mylist-share-button page-action-button page-action-secondary"
                   onClick={() => handleOpenShareMethod()}
                   disabled={animeList.length === 0}
                 >
@@ -826,16 +917,23 @@ function App() {
 
             </div>
 
-            <AnimeFilterPanel
-              uniqueGenres={uniqueGenres}
-              selectedGenres={selectedGenres}
-              minRating={minRating}
-              onToggleGenre={handleToggleMyListGenre}
-              onMinRatingChange={setMinRating}
-              onClearFilters={handleClearMyListFilters}
-              sectionClassName="mylist-genre-filter-section"
-              title="絞り込み"
+            <AnimeFilterDialog
               contextId="mylist"
+              title="絞り込み条件"
+              emptySummaryText="ジャンル・タグ・放送年・評価で絞り込めます。"
+              helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
+              appliedGenres={selectedGenres}
+              appliedTags={selectedTags}
+              appliedYear={selectedYear}
+              appliedMinRating={minRating}
+              appliedMatchMode={filterMatchMode}
+              availableGenres={uniqueGenres}
+              availableTags={uniqueTags}
+              availableYears={uniqueYears}
+              showSeasons={false}
+              showMinRating
+              onApply={handleApplyMyListFilters}
+              onClear={handleClearMyListFilters}
             />
 
             <div className="results-count">

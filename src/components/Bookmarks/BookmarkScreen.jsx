@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
+import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
+import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
+import {
+  collectAnimeFilterOptions,
+  filterAnimeCollection,
+  sortAnimeCollection,
+} from '../../utils/animeFilters';
 
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
@@ -31,6 +38,9 @@ function BookmarkScreen({
   const [ratingTargetId, setRatingTargetId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenres, setSelectedGenres] = useState([]);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
+  const [filterMatchMode, setFilterMatchMode] = useState('and');
   const [sortKey, setSortKey] = useState('added');
   const [sortOrder, setSortOrder] = useState('desc');
   const [quickNavState, setQuickNavState] = useState({
@@ -45,77 +55,34 @@ function BookmarkScreen({
   );
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
+  const tagTranslationVersion = useTagTranslationVersion();
 
   const sortedBookmarks = useMemo(() => {
     const safeList = Array.isArray(bookmarkList) ? [...bookmarkList] : [];
     return safeList.sort((a, b) => (b.bookmarkedAt || 0) - (a.bookmarkedAt || 0));
   }, [bookmarkList]);
 
-  const uniqueGenres = useMemo(() => {
-    const genreSet = new Set();
-    sortedBookmarks.forEach((anime) => {
-      (anime?.genres || []).forEach((genre) => {
-        if (typeof genre === 'string' && genre.trim().length > 0) {
-          genreSet.add(genre);
-        }
-      });
-    });
-    return Array.from(genreSet).sort((a, b) => a.localeCompare(b));
-  }, [sortedBookmarks]);
+  const bookmarkFilterOptions = useMemo(
+    () => collectAnimeFilterOptions(sortedBookmarks),
+    [sortedBookmarks, tagTranslationVersion]
+  );
+  const uniqueGenres = bookmarkFilterOptions.genres;
+  const uniqueTags = bookmarkFilterOptions.tags;
+  const uniqueYears = bookmarkFilterOptions.years;
 
   const filteredBookmarks = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const hasGenreFilter = selectedGenres.length > 0;
-
-    const filtered = sortedBookmarks.filter((anime) => {
-      const titleNative = String(anime?.title?.native || '').toLowerCase();
-      const titleRomaji = String(anime?.title?.romaji || '').toLowerCase();
-      const titleEnglish = String(anime?.title?.english || '').toLowerCase();
-      const matchesSearch = query.length === 0
-        || titleNative.includes(query)
-        || titleRomaji.includes(query)
-        || titleEnglish.includes(query);
-
-      if (!matchesSearch) return false;
-      if (!hasGenreFilter) return true;
-
-      const animeGenres = Array.isArray(anime?.genres) ? anime.genres : [];
-      return selectedGenres.every((genre) => animeGenres.includes(genre));
+    return sortAnimeCollection(filterAnimeCollection(sortedBookmarks, {
+      searchQuery,
+      selectedGenres,
+      selectedTags,
+      selectedYear,
+      matchMode: filterMatchMode,
+    }), {
+      sortKey,
+      sortOrder,
+      addedAtFields: ['bookmarkedAt', 'addedAt'],
     });
-
-    const sorted = [...filtered];
-    sorted.sort((a, b) => {
-      if (sortKey === 'title') {
-        const titleA = getBookmarkAnimeTitle(a).toLowerCase();
-        const titleB = getBookmarkAnimeTitle(b).toLowerCase();
-        const compareResult = titleA.localeCompare(titleB, 'ja');
-        return sortOrder === 'asc' ? compareResult : compareResult * -1;
-      }
-
-      let valueA = 0;
-      let valueB = 0;
-      switch (sortKey) {
-        case 'year':
-          valueA = Number(a?.seasonYear) || 0;
-          valueB = Number(b?.seasonYear) || 0;
-          break;
-        case 'rating':
-          valueA = normalizeRating(a?.rating) || 0;
-          valueB = normalizeRating(b?.rating) || 0;
-          break;
-        case 'added':
-        default:
-          valueA = Number(a?.bookmarkedAt) || Number(a?.addedAt) || 0;
-          valueB = Number(b?.bookmarkedAt) || Number(b?.addedAt) || 0;
-          break;
-      }
-
-      if (valueA < valueB) return sortOrder === 'asc' ? -1 : 1;
-      if (valueA > valueB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return sorted;
-  }, [sortedBookmarks, searchQuery, selectedGenres, sortKey, sortOrder]);
+  }, [sortedBookmarks, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
 
   useEffect(() => {
     setSelectedBookmarkIds((prev) =>
@@ -130,7 +97,13 @@ function BookmarkScreen({
 
   useEffect(() => {
     setSelectedGenres((prev) => prev.filter((genre) => uniqueGenres.includes(genre)));
-  }, [uniqueGenres]);
+    setSelectedTags((prev) => prev.filter((tag) => uniqueTags.includes(tag)));
+    setSelectedYear((prev) => {
+      const year = Number(prev);
+      if (!Number.isFinite(year)) return '';
+      return uniqueYears.includes(year) ? String(year) : '';
+    });
+  }, [uniqueGenres, uniqueTags, uniqueYears]);
 
   useEffect(() => {
     if (ratingTargetId == null) return;
@@ -211,7 +184,7 @@ function BookmarkScreen({
       window.removeEventListener('scroll', requestUpdate);
       window.removeEventListener('resize', requestUpdate);
     };
-  }, [isSelectionMode, filteredBookmarks.length, searchQuery, selectedGenres, sortKey, sortOrder]);
+  }, [isSelectionMode, filteredBookmarks.length, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -315,14 +288,18 @@ function BookmarkScreen({
     setPendingRatingById((prev) => ({ ...prev, [animeId]: normalizeRating(rating) }));
   };
 
-  const handleToggleGenreFilter = (genre) => {
-    setSelectedGenres((prev) => (
-      prev.includes(genre) ? prev.filter((item) => item !== genre) : [...prev, genre]
-    ));
+  const handleApplyFilters = (nextFilters) => {
+    setSelectedGenres(Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : []);
+    setSelectedTags(Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : []);
+    setSelectedYear(String(nextFilters?.selectedYear || '').trim());
+    setFilterMatchMode(nextFilters?.matchMode || 'and');
   };
 
-  const handleClearGenreFilter = () => {
+  const handleClearFilters = () => {
     setSelectedGenres([]);
+    setSelectedTags([]);
+    setSelectedYear('');
+    setFilterMatchMode('and');
   };
 
   const handleScrollToTop = () => {
@@ -349,20 +326,24 @@ function BookmarkScreen({
           <div className="bookmark-season-nav-buttons" role="group" aria-label="シーズン別追加ページ">
             <button
               type="button"
-              className="bookmark-season-nav-button"
+              className="bookmark-season-nav-button page-action-button page-action-primary page-action-season"
               onClick={onOpenCurrentSeasonAdd}
             >
               今期作品を追加
             </button>
             <button
               type="button"
-              className="bookmark-season-nav-button"
+              className="bookmark-season-nav-button page-action-button page-action-primary page-action-season"
               onClick={onOpenNextSeasonAdd}
             >
               来季作品を追加
             </button>
           </div>
-          <button type="button" className="bookmark-screen-add" onClick={onOpenBookmarkAdd}>
+          <button
+            type="button"
+            className="bookmark-screen-add page-action-button page-action-primary page-action-strong"
+            onClick={onOpenBookmarkAdd}
+          >
             <span className="bookmark-screen-add-icon">＋</span>
             <span>作品を追加</span>
           </button>
@@ -401,44 +382,23 @@ function BookmarkScreen({
             </div>
           </div>
 
-          <div className="bookmark-genre-filter-section">
-            <div className="bookmark-genre-filter-header">
-              <p className="bookmark-genre-filter-title">ジャンル絞り込み</p>
-              <button
-                type="button"
-                className="bookmark-genre-filter-clear"
-                onClick={handleClearGenreFilter}
-                disabled={selectedGenres.length === 0}
-              >
-                クリア
-              </button>
-            </div>
-            <p className="bookmark-genre-filter-selected">
-              {selectedGenres.length > 0
-                ? `選択中: ${selectedGenres.map((genre) => translateGenre(genre)).join(' / ')}`
-                : 'ジャンル未選択（すべて表示）'}
-            </p>
-            <p className="bookmark-genre-filter-note">複数選択時は「すべて含む」で絞り込みます。</p>
-            {uniqueGenres.length > 0 ? (
-              <div className="bookmark-genre-filter-chips">
-                {uniqueGenres.map((genre) => {
-                  const isActive = selectedGenres.includes(genre);
-                  return (
-                    <button
-                      key={genre}
-                      type="button"
-                      className={`bookmark-genre-chip ${isActive ? 'active' : ''}`}
-                      onClick={() => handleToggleGenreFilter(genre)}
-                    >
-                      {translateGenre(genre)}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="bookmark-genre-filter-empty">ジャンル情報がある作品はまだありません。</p>
-            )}
-          </div>
+          <AnimeFilterDialog
+            contextId="bookmarks"
+            title="絞り込み条件"
+            emptySummaryText="ジャンル・タグ・放送年で絞り込めます。"
+            helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年は追加条件として扱います。"
+            appliedGenres={selectedGenres}
+            appliedTags={selectedTags}
+            appliedYear={selectedYear}
+            appliedMatchMode={filterMatchMode}
+            availableGenres={uniqueGenres}
+            availableTags={uniqueTags}
+            availableYears={uniqueYears}
+            showSeasons={false}
+            showMinRating={false}
+            onApply={handleApplyFilters}
+            onClear={handleClearFilters}
+          />
 
           <div className="results-count">
             {filteredBookmarks.length} 作品が見つかりました
@@ -465,7 +425,7 @@ function BookmarkScreen({
         </div>
       ) : filteredBookmarks.length === 0 ? (
         <div className="bookmark-empty bookmark-filter-empty">
-          条件に一致する作品が見つかりませんでした。検索語やジャンルを調整してください。
+          条件に一致する作品が見つかりませんでした。検索語やジャンル・タグ・年を調整してください。
         </div>
       ) : (
         <div className="bookmark-list-grid">

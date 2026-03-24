@@ -41,6 +41,11 @@ const ANIME_QUERY = `
       averageScore
       episodes
       genres
+      tags {
+        id
+        name
+        isMediaSpoiler
+      }
       format
       countryOfOrigin
       bannerImage
@@ -83,6 +88,11 @@ const ANIME_LIST_QUERY = `
         averageScore
         episodes
         genres
+        tags {
+          id
+          name
+          isMediaSpoiler
+        }
         format
         countryOfOrigin
         description
@@ -115,6 +125,11 @@ const ANIME_BY_ID_QUERY = `
       averageScore
       episodes
       genres
+      tags {
+        id
+        name
+        isMediaSpoiler
+      }
       format
       countryOfOrigin
       bannerImage
@@ -176,6 +191,11 @@ const ANIME_BY_YEAR_QUERY = `
         }
         episodes
         genres
+        tags {
+          id
+          name
+          isMediaSpoiler
+        }
         format
         countryOfOrigin
         description
@@ -233,10 +253,27 @@ const ANIME_BY_START_DATE_QUERY = `
         }
         episodes
         genres
+        tags {
+          id
+          name
+          isMediaSpoiler
+        }
         format
         countryOfOrigin
         description
       }
+    }
+  }
+`;
+
+const MEDIA_TAG_COLLECTION_QUERY = `
+  query {
+    MediaTagCollection {
+      id
+      name
+      description
+      category
+      isAdult
     }
   }
 `;
@@ -892,6 +929,47 @@ export const fetchAnimeDetails = async (title, options = {}) => {
   return null;
 };
 
+export const fetchAniListTagCatalog = async (options = {}) => {
+  try {
+    const result = await postAniListGraphQL(
+      MEDIA_TAG_COLLECTION_QUERY,
+      undefined,
+      {
+        timeoutMs: Math.max(4000, Number(options.timeoutMs) || 9000),
+        maxAttempts: Math.max(1, Number(options.maxAttempts) || 2),
+        baseDelayMs: Math.max(80, Number(options.baseDelayMs) || 250),
+        maxRetryDelayMs: Math.max(200, Number(options.maxRetryDelayMs) || 900),
+        signal: options.signal,
+        onRetry: options.onRetry,
+      }
+    );
+
+    if (!result?.ok) return [];
+
+    return (Array.isArray(result?.data?.MediaTagCollection) ? result.data.MediaTagCollection : [])
+      .map((tag) => {
+        const id = Number(tag?.id);
+        const name = String(tag?.name || '').trim();
+        if (!name) return null;
+
+        return {
+          id: Number.isFinite(id) ? id : null,
+          name,
+          description: String(tag?.description || '').trim(),
+          category: String(tag?.category || '').trim(),
+          isAdult: Boolean(tag?.isAdult),
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.name.localeCompare(right.name, 'en'));
+  } catch (error) {
+    if (!isAbortError(error)) {
+      console.error('Error fetching AniList tag catalog:', error);
+    }
+    return [];
+  }
+};
+
 export const fetchAnimeDetailsById = async (id, options = {}) => {
   const {
     allowUnknownFormat = true,
@@ -926,6 +1004,74 @@ export const fetchAnimeDetailsById = async (id, options = {}) => {
       console.error(`Error fetching by id ${id}:`, error);
     }
     return null;
+  }
+};
+
+export const fetchAnimeDetailsByIds = async (ids, options = {}) => {
+  const safeIds = Array.isArray(ids)
+    ? ids
+      .map((id) => Number(id))
+      .filter((id, index, source) => Number.isFinite(id) && source.indexOf(id) === index)
+    : [];
+  if (safeIds.length === 0) return [];
+
+  const {
+    allowUnknownFormat = true,
+    allowUnknownCountry = true,
+    allowedFormats: allowedFormatsOption,
+    formatIn: formatInOption,
+    countryOfOrigin: countryOfOriginOption,
+    ...requestOptions
+  } = options || {};
+  const allowedFormats = resolveAllowedFormats(allowedFormatsOption || formatInOption, DEFAULT_YEAR_FORMATS);
+  const { country: countryPreference } = resolveCountryPreference(
+    { countryOfOrigin: countryOfOriginOption },
+    DEFAULT_COUNTRY_OF_ORIGIN
+  );
+  const fields = [
+    'id',
+    'title { native romaji english }',
+    'coverImage { extraLarge large }',
+    'season',
+    'seasonYear',
+    'status',
+    'startDate { year month day }',
+    'averageScore',
+    'episodes',
+    'genres',
+    'tags { id name isMediaSpoiler }',
+    'format',
+    'countryOfOrigin',
+    'bannerImage',
+    'description',
+  ].join('\n');
+  const variables = {};
+  const queryParts = safeIds.map((id, index) => {
+    variables[`id${index}`] = id;
+    return `m${index}: Media(id: $id${index}, type: ANIME) {\n${fields}\n}`;
+  });
+  const query = `query(${safeIds.map((_, index) => `$id${index}: Int`).join(', ')}) {\n${queryParts.join('\n')}\n}`;
+
+  try {
+    const result = await postAniListGraphQL(query, variables, requestOptions);
+    if (!result.ok) return [];
+
+    return safeIds.map((_, index) => {
+      const media = result.data?.[`m${index}`] ?? null;
+      return isDisplayEligibleAnime(media, {
+        allowUnknownFormat,
+        allowUnknownCountry,
+        allowedFormats,
+        countryOfOrigin: countryPreference || undefined,
+      })
+        ? media
+        : null;
+    });
+  } catch (error) {
+    if (!isAbortError(error)) {
+      console.error('Error fetching by ids:', error);
+    }
+    return [];
   }
 };
 
@@ -1475,6 +1621,7 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
     'averageScore',
     'episodes',
     'genres',
+    'tags { id name isMediaSpoiler }',
     'format',
     'countryOfOrigin',
     'bannerImage',

@@ -8,6 +8,12 @@ import {
     searchAnimeList,
 } from '../../services/animeService';
 import { translateGenre } from '../../constants/animeData';
+import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
+import {
+    collectAnimeFilterOptions,
+    filterAnimeCollection,
+} from '../../utils/animeFilters';
+import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
 
 const ANILIST_SEASON_TO_FILTER_KEY = {
     WINTER: 'winter',
@@ -527,15 +533,17 @@ function AddAnimeScreen({
     const [bulkInterruptedHistoryActive, setBulkInterruptedHistoryActive] = useState(false);
     const [bulkHistoryRestored, setBulkHistoryRestored] = useState(false);
     const [bulkHistoryBootstrapped, setBulkHistoryBootstrapped] = useState(false);
-    const [browseYearDraft, setBrowseYearDraft] = useState(() => (
-        normalizedBrowsePreset ? String(normalizedBrowsePreset.year) : ''
-    ));
     const [selectedBrowseYear, setSelectedBrowseYear] = useState(() => (
         normalizedBrowsePreset ? normalizedBrowsePreset.year : null
+    ));
+    const [browseYearDraft, setBrowseYearDraft] = useState(() => (
+        normalizedBrowsePreset ? String(normalizedBrowsePreset.year) : ''
     ));
     const [browseRatingById, setBrowseRatingById] = useState({});
     const [browsePage, setBrowsePage] = useState(1);
     const [browseGenreFilters, setBrowseGenreFilters] = useState([]);
+    const [browseTagFilters, setBrowseTagFilters] = useState([]);
+    const [browseMatchMode, setBrowseMatchMode] = useState('and');
     const [browseSeasonFilters, setBrowseSeasonFilters] = useState(() => (
         normalizedBrowsePreset?.seasonKey ? [normalizedBrowsePreset.seasonKey] : []
     ));
@@ -610,6 +618,10 @@ function AddAnimeScreen({
         }
         return parsed;
     };
+    const getDefaultBrowseSeasonFilters = React.useCallback(() => (
+        normalizedBrowsePreset?.seasonKey ? [normalizedBrowsePreset.seasonKey] : []
+    ), [normalizedBrowsePreset]);
+    const browseDraftYear = parseBrowseYear(browseYearDraft);
     const browseYearOptions = React.useMemo(
         () => Array.from({ length: currentYear - 1960 + 1 }, (_, idx) => currentYear - idx),
         [currentYear]
@@ -638,13 +650,25 @@ function AddAnimeScreen({
         [suggestions, selectedSuggestionIdSet]
     );
     const selectedSuggestionCount = selectedSuggestions.length;
+    const tagTranslationVersion = useTagTranslationVersion();
+    const browseFilterOptions = React.useMemo(
+        () => collectAnimeFilterOptions(browseResults, { includeSeasons: false }),
+        [browseResults, tagTranslationVersion]
+    );
     const browseGenreOptions = React.useMemo(() => {
-        const genreSet = new Set(browseGenreFilters);
-        browseResults.forEach((anime) => {
-            (anime.genres || []).forEach((g) => genreSet.add(g));
-        });
-        return Array.from(genreSet).sort((a, b) => a.localeCompare(b));
-    }, [browseResults, browseGenreFilters]);
+        const genreSet = new Set([
+            ...browseFilterOptions.genres,
+            ...browseGenreFilters
+        ]);
+        return Array.from(genreSet);
+    }, [browseFilterOptions.genres, browseGenreFilters]);
+    const browseTagOptions = React.useMemo(() => {
+        const tagSet = new Set([
+            ...browseFilterOptions.tags,
+            ...browseTagFilters
+        ]);
+        return Array.from(tagSet);
+    }, [browseFilterOptions.tags, browseTagFilters]);
     const browseDataKey = React.useMemo(() => {
         if (!Number.isFinite(Number(selectedBrowseYear))) return '';
         if (!normalizedBrowsePreset) {
@@ -1093,7 +1117,7 @@ function AddAnimeScreen({
             window.removeEventListener('scroll', requestUpdate);
             window.removeEventListener('resize', requestUpdate);
         };
-    }, [entryTab, selectedBrowseYear, browseLoading, browsePage, browseGenreFilters, browseSeasonFilters, browseResults.length]);
+    }, [entryTab, selectedBrowseYear, browseLoading, browsePage, browseGenreFilters, browseTagFilters, browseSeasonFilters, browseMatchMode, browseResults.length]);
 
     useEffect(() => {
         if (!toast.visible) return;
@@ -1200,21 +1224,25 @@ function AddAnimeScreen({
     useEffect(() => {
         if (normalizedBrowsePreset) {
             setEntryTab('browse');
-            setBrowseYearDraft(String(normalizedBrowsePreset.year));
             setSelectedBrowseYear(normalizedBrowsePreset.year);
+            setBrowseYearDraft(String(normalizedBrowsePreset.year));
             setBrowsePage(1);
             setBrowseGenreFilters([]);
-            setBrowseSeasonFilters(normalizedBrowsePreset.seasonKey ? [normalizedBrowsePreset.seasonKey] : []);
+            setBrowseTagFilters([]);
+            setBrowseMatchMode('and');
+            setBrowseSeasonFilters(getDefaultBrowseSeasonFilters());
             return;
         }
 
         setEntryTab(initialEntryTab === 'browse' ? 'browse' : 'search');
-        setBrowseYearDraft('');
         setSelectedBrowseYear(null);
+        setBrowseYearDraft('');
         setBrowsePage(1);
         setBrowseGenreFilters([]);
+        setBrowseTagFilters([]);
+        setBrowseMatchMode('and');
         setBrowseSeasonFilters([]);
-    }, [normalizedBrowsePreset, initialEntryTab]);
+    }, [normalizedBrowsePreset, initialEntryTab, getDefaultBrowseSeasonFilters]);
 
     useEffect(() => {
         if (!selectedBrowseYear) return;
@@ -1575,18 +1603,32 @@ function AddAnimeScreen({
         return SEASON_FILTER_OPTIONS.filter((option) => seasonSet.has(option.key));
     }, [browseResults, browseSeasonFilters, isBrowsePresetLocked, normalizedBrowsePreset]);
 
+    useEffect(() => {
+        setBrowseGenreFilters((prev) => prev.filter((genre) => browseGenreOptions.includes(genre)));
+        setBrowseTagFilters((prev) => prev.filter((tag) => browseTagOptions.includes(tag)));
+        if (isBrowsePresetLocked && normalizedBrowsePreset?.seasonKey) {
+            setBrowseSeasonFilters([normalizedBrowsePreset.seasonKey]);
+            return;
+        }
+        setBrowseSeasonFilters((prev) => prev.filter((seasonKey) => (
+            browseSeasonOptions.some((season) => season.key === seasonKey)
+        )));
+    }, [
+        browseGenreOptions,
+        browseTagOptions,
+        browseSeasonOptions,
+        isBrowsePresetLocked,
+        normalizedBrowsePreset
+    ]);
+
     const browseVisibleResults = React.useMemo(() => (
-        browseResults.filter((anime) => {
-            if (browseGenreFilters.length > 0) {
-                const animeGenres = Array.isArray(anime?.genres) ? anime.genres : [];
-                const hasGenreMatch = browseGenreFilters.every((genre) => animeGenres.includes(genre));
-                if (!hasGenreMatch) return false;
-            }
-            if (browseSeasonFilters.length === 0) return true;
-            const seasonKey = getSeasonKeyForAnime(anime);
-            return browseSeasonFilters.includes(seasonKey);
+        filterAnimeCollection(browseResults, {
+            selectedGenres: browseGenreFilters,
+            selectedTags: browseTagFilters,
+            selectedSeasons: browseSeasonFilters,
+            matchMode: browseMatchMode
         })
-    ), [browseResults, browseGenreFilters, browseSeasonFilters]);
+    ), [browseResults, browseGenreFilters, browseTagFilters, browseSeasonFilters, browseMatchMode]);
 
     const browsePagedResults = React.useMemo(() => {
         const current = Math.max(1, Number(browsePage) || 1);
@@ -1621,49 +1663,88 @@ function AddAnimeScreen({
         setEntryTab(nextTab);
     };
 
-    const handleBrowseYearApply = () => {
-        if (isBrowsePresetLocked) return;
-        const year = parseBrowseYear(browseYearDraft);
-        if (!Number.isFinite(year)) {
-            setToast({ visible: true, message: '年を選択してください。', type: 'warning' });
+    const handleBrowseYearSubmit = () => {
+        const resolvedYear = isBrowsePresetLocked
+            ? normalizedBrowsePreset?.year
+            : browseDraftYear;
+
+        if (!Number.isFinite(resolvedYear)) {
+            setToast({ visible: true, message: '年代を選択してください。', type: 'warning' });
             return;
         }
-        setSelectedBrowseYear(year);
-        setBrowsePage(1);
-        setBrowseReloadToken((prev) => prev + 1);
-    };
 
-    const handleBrowseGenreToggle = (genre) => {
+        const hasBrowseRefinements = browseGenreFilters.length > 0
+            || browseTagFilters.length > 0
+            || browseMatchMode !== 'and'
+            || (!isBrowsePresetLocked && browseSeasonFilters.length > 0);
+        const shouldOnlyScroll = selectedBrowseYear === resolvedYear
+            && browseResults.length > 0
+            && !browseError
+            && !hasBrowseRefinements;
+
+        if (shouldOnlyScroll) {
+            requestAnimationFrame(() => {
+                scrollToBrowseResultsTop('smooth');
+            });
+            return;
+        }
+
         startBrowseUiTransition(140);
-        setBrowseGenreFilters((prev) => {
-            const exists = prev.includes(genre);
-            const next = exists ? prev.filter((g) => g !== genre) : [...prev, genre];
-            return next;
-        });
+        setBrowseYearDraft(String(resolvedYear));
         setBrowsePage(1);
+        setBrowseGenreFilters([]);
+        setBrowseTagFilters([]);
+        setBrowseMatchMode('and');
+        setBrowseSeasonFilters(getDefaultBrowseSeasonFilters());
+
+        if (selectedBrowseYear !== resolvedYear) {
+            setSelectedBrowseYear(resolvedYear);
+            return;
+        }
+
+        if (browseResults.length === 0 || browseError) {
+            setBrowseReloadToken((prev) => prev + 1);
+        }
     };
 
-    const handleBrowseGenreClear = () => {
+    const handleApplyBrowseFilters = (nextFilters) => {
+        const resolvedYear = isBrowsePresetLocked
+            ? normalizedBrowsePreset?.year
+            : selectedBrowseYear;
+
+        if (!Number.isFinite(resolvedYear)) {
+            setToast({ visible: true, message: '先に年代を選択してください。', type: 'warning' });
+            return false;
+        }
+
+        startBrowseUiTransition(140);
+
+        const nextGenres = Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : [];
+        const nextTags = Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : [];
+        const nextSeasons = isBrowsePresetLocked
+            ? (normalizedBrowsePreset?.seasonKey ? [normalizedBrowsePreset.seasonKey] : [])
+            : (Array.isArray(nextFilters?.selectedSeasons) ? nextFilters.selectedSeasons : []);
+
+        setBrowseGenreFilters(nextGenres);
+        setBrowseTagFilters(nextTags);
+        setBrowseSeasonFilters(nextSeasons);
+        setBrowseMatchMode(nextFilters?.matchMode || 'and');
+        setBrowsePage(1);
+
+        return true;
+    };
+
+    const handleClearBrowseFilters = () => {
         startBrowseUiTransition(140);
         setBrowseGenreFilters([]);
+        setBrowseTagFilters([]);
+        setBrowseMatchMode('and');
         setBrowsePage(1);
-    };
-
-    const handleBrowseSeasonToggle = (seasonKey) => {
-        if (isBrowsePresetLocked) return;
-        startBrowseUiTransition(140);
-        setBrowseSeasonFilters((prev) => {
-            const exists = prev.includes(seasonKey);
-            return exists ? prev.filter((key) => key !== seasonKey) : [...prev, seasonKey];
-        });
-        setBrowsePage(1);
-    };
-
-    const handleBrowseSeasonClear = () => {
-        if (isBrowsePresetLocked) return;
-        startBrowseUiTransition(140);
+        if (isBrowsePresetLocked) {
+            setBrowseSeasonFilters(getDefaultBrowseSeasonFilters());
+            return;
+        }
         setBrowseSeasonFilters([]);
-        setBrowsePage(1);
     };
     const handleBrowseRetry = () => {
         if (browseLoading) return;
@@ -3085,16 +3166,7 @@ function AddAnimeScreen({
             ? (mode === 'bulk'
                 ? '複数作品をまとめて追加できます。必要時のみ詳細ガイドを確認してください。'
                 : '作品名を直接入力して追加する導線です。')
-            : '年とジャンルから思い出しながら探す導線です。';
-    const browseGenreSummaryText = browseGenreFilters.length > 0
-        ? `選択中: ${browseGenreFilters.map((genre) => translateGenre(genre)).join(' / ')}`
-        : 'ジャンル未選択（表示中の作品をすべて表示）';
-    const browseSeasonSummaryText = browseSeasonFilters.length > 0
-        ? `選択中: ${SEASON_FILTER_OPTIONS
-            .filter((season) => browseSeasonFilters.includes(season.key))
-            .map((season) => season.label)
-            .join(' / ')}`
-        : '放送時期未選択（表示中の作品をすべて表示）';
+            : '年代から一覧で探し、必要に応じて絞り込みを追加できる探索導線です。';
     const browseCurrentPage = Math.max(1, Number(browsePageInfo.currentPage) || browsePage);
     const browseLastPage = Math.max(1, Number(browsePageInfo.lastPage) || browseCurrentPage);
     const browsePerPage = Math.max(1, Number(browsePageInfo.perPage) || YEAR_PER_PAGE);
@@ -3110,6 +3182,32 @@ function AddAnimeScreen({
     const bulkAlreadyAddedLabel = bulkTarget === 'bookmark'
         ? '登録済み・重複（視聴済み / ブックマーク済み）'
         : '登録済み・重複';
+    const hasBrowseYearDraft = Number.isFinite(browseDraftYear);
+    const hasBrowseRefinements = browseGenreFilters.length > 0
+        || browseTagFilters.length > 0
+        || browseMatchMode !== 'and'
+        || (!isBrowsePresetLocked && browseSeasonFilters.length > 0);
+    const isCurrentBrowseYearSelected = hasBrowseYearDraft && browseDraftYear === selectedBrowseYear;
+    const disableBrowseYearSubmit = browseLoading
+        || !hasBrowseYearDraft
+        || (
+            isCurrentBrowseYearSelected
+            && browseResults.length > 0
+            && !browseError
+            && !hasBrowseRefinements
+        );
+    const browseYearActionLabel = isCurrentBrowseYearSelected && hasBrowseRefinements
+        ? '一覧に戻す'
+        : (
+            isCurrentBrowseYearSelected && browseResults.length > 0 && !browseError
+                ? 'この年代を表示中'
+                : (isCurrentBrowseYearSelected ? '一覧を再表示' : '一覧を表示')
+        );
+    const browseFilterTriggerDisabled = !selectedBrowseYear || browseLoading;
+    const browseFilterTriggerTitle = !selectedBrowseYear
+        ? '先に年代を選択してください'
+        : (browseLoading ? '一覧の読み込み完了後に利用できます' : '');
+    const showBrowseFilterPanel = isBrowsePresetLocked || Boolean(selectedBrowseYear && !browseLoading && browseResults.length > 0);
     const browseResultsTitle = normalizedBrowsePreset?.title || `${selectedBrowseYear}年の作品`;
     const browsePaginationLabel = normalizedBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
     const isBrowseBusy = browseLoading || browsePageSwitching;
@@ -3265,9 +3363,9 @@ function AddAnimeScreen({
                                         </>
                                     ) : (
                                         <>
-                                            <li>まず年を選択して「一覧を表示」を押してください</li>
-                                            <li>ジャンルは複数選択時に「すべて含む（AND）」で絞り込みます</li>
-                                            <li>放送時期は複数選択時に「いずれか一致（OR）」で絞り込みます</li>
+                                            <li>まず年代を選択して「一覧を表示」を押してください</li>
+                                            <li>一覧が表示されたあとで必要に応じて「絞り込む」を使ってください</li>
+                                            <li>年代を切り替えると絞り込み条件はリセットされます</li>
                                             <li>表示された一覧から作品を追加してください</li>
                                         </>
                                     )}
@@ -3950,43 +4048,103 @@ function AddAnimeScreen({
             {entryTab === 'browse' && (
                 <div className="entry-browse-section">
                     <div className="browse-control-panel">
-                        {isBrowsePresetLocked ? (
-                            <div className="browse-guide-note">
-                                {normalizedBrowsePreset?.description || '対象シーズンの作品を表示しています。'}
-                            </div>
-                        ) : (
-                            <>
+                        {!isBrowsePresetLocked && (
+                            <div className="browse-primary-panel">
+                                <div className="browse-panel-head">
+                                    <div>
+                                        <div className="browse-panel-title">年代を選択して一覧を表示</div>
+                                        <p className="browse-panel-text">
+                                            年代を選び、「一覧を表示」で作品一覧を表示します。
+                                        </p>
+                                    </div>
+                                    {selectedBrowseYear && (
+                                        <div className="browse-current-year">{selectedBrowseYear}年を表示中</div>
+                                    )}
+                                </div>
                                 <div className="browse-year-controls">
                                     <select
                                         className="browse-year-select"
                                         value={browseYearDraft}
-                                        onChange={(e) => setBrowseYearDraft(e.target.value)}
+                                        onChange={(event) => setBrowseYearDraft(event.target.value)}
                                         disabled={browseLoading}
+                                        aria-label="年代を選択"
                                     >
-                                        <option value="">年を選択してください</option>
+                                        <option value="">年代を選択してください</option>
                                         {browseYearOptions.map((year) => (
-                                            <option key={year} value={year}>{year}年</option>
+                                            <option key={year} value={year}>
+                                                {year}年
+                                            </option>
                                         ))}
                                     </select>
                                     <button
-                                        className="action-button primary-button browse-apply-button"
-                                        onClick={handleBrowseYearApply}
-                                        disabled={browseLoading}
                                         type="button"
+                                        className="action-button browse-apply-button"
+                                        onClick={handleBrowseYearSubmit}
+                                        disabled={disableBrowseYearSubmit}
                                     >
-                                        一覧を表示
+                                        {browseYearActionLabel}
                                     </button>
                                 </div>
+                            </div>
+                        )}
 
-                                <div className="browse-guide-note">
-                                    ピンポイント検索は「検索で追加」をご利用ください。
+                        {showBrowseFilterPanel && (
+                            <div className="browse-secondary-panel">
+                                <div className="browse-panel-head">
+                                    <div>
+                                        <div className="browse-panel-title">必要に応じて絞り込む</div>
+                                        <p className="browse-panel-text">
+                                            {selectedBrowseYear
+                                                ? `${selectedBrowseYear}年の作品から、ジャンル・タグ・放送時期でさらに絞り込めます。`
+                                                : '年代を選択すると、ここからジャンル・タグ・放送時期で絞り込めます。'}
+                                        </p>
+                                    </div>
                                 </div>
-                            </>
+                                <AnimeFilterDialog
+                                    contextId={selectedBrowseYear ? `browse-${selectedBrowseYear}` : 'browse'}
+                                    title="絞り込み条件"
+                                    emptySummaryText={selectedBrowseYear
+                                        ? 'ジャンル・タグ・放送時期でさらに絞り込めます。'
+                                        : '先に年代を選択してください。'}
+                                    helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送時期は追加条件として扱います。"
+                                    staticNotice={isBrowsePresetLocked
+                                        ? 'このページでは放送年と放送時期が固定されています。'
+                                        : (selectedBrowseYear ? `${selectedBrowseYear}年の一覧に条件を追加します。` : '')}
+                                    applyLabel="条件を適用"
+                                    appliedGenres={browseGenreFilters}
+                                    appliedTags={browseTagFilters}
+                                    appliedYear={selectedBrowseYear || ''}
+                                    appliedSeasons={browseSeasonFilters}
+                                    appliedMatchMode={browseMatchMode}
+                                    availableGenres={browseGenreOptions}
+                                    availableTags={browseTagOptions}
+                                    availableSeasons={browseSeasonOptions}
+                                    showYear={false}
+                                    showSeasons
+                                    showMinRating={false}
+                                    disableSeasonSelection={browseLoading || isBrowsePresetLocked}
+                                    emptyGenresText={selectedBrowseYear
+                                        ? '表示中の作品からジャンルを読み込み中です。'
+                                        : '年代を選ぶとジャンル候補が表示されます。'}
+                                    emptyTagsText={selectedBrowseYear
+                                        ? '表示中の作品からタグを読み込み中です。'
+                                        : '年代を選ぶとタグ候補が表示されます。'}
+                                    emptySeasonsText={selectedBrowseYear
+                                        ? '表示中の作品から放送時期を読み込み中です。'
+                                        : '年代を選ぶと放送時期候補が表示されます。'}
+                                    includeYearChip={false}
+                                    includeSeasonChip={!isBrowsePresetLocked}
+                                    triggerDisabled={browseFilterTriggerDisabled}
+                                    triggerTitle={browseFilterTriggerTitle}
+                                    onApply={handleApplyBrowseFilters}
+                                    onClear={handleClearBrowseFilters}
+                                />
+                            </div>
                         )}
                     </div>
 
                     {!selectedBrowseYear ? (
-                        <div className="browse-empty-state">上のプルダウンで年を選び、「一覧を表示」を押してください。</div>
+                        <div className="browse-empty-state">年代を選択すると、作品一覧がここに表示されます。</div>
                     ) : (
                         <div className="browse-results-area" ref={browseResultsTopRef}>
                             <div className="browse-results-header">
@@ -4003,85 +4161,6 @@ function AddAnimeScreen({
                                     ) : (
                                         <>0 件</>
                                     )}
-                                </div>
-                            </div>
-                            <div className="browse-genre-section">
-                                <div className="browse-filter-title">絞り込み条件</div>
-                                <div className="browse-filter-grid">
-                                    <div className="browse-filter-group">
-                                        <div className="browse-genre-header">
-                                            <div className="browse-genre-title">ジャンル</div>
-                                            {browseGenreFilters.length > 0 && (
-                                                <button
-                                                    type="button"
-                                                    className="browse-clear-filters-button"
-                                                    onClick={handleBrowseGenreClear}
-                                                    disabled={browseLoading}
-                                                >
-                                                    解除
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="browse-genre-selected">{browseGenreSummaryText}</div>
-                                        <div className="browse-filter-hint">複数選択時は「すべて含む」で絞り込みます。</div>
-                                        {browseGenreOptions.length > 0 ? (
-                                            <div className="browse-genre-chips">
-                                                {browseGenreOptions.map((genre) => {
-                                                    const selected = browseGenreFilters.includes(genre);
-                                                    return (
-                                                        <button
-                                                            key={genre}
-                                                            type="button"
-                                                            className={`browse-genre-chip ${selected ? 'active' : ''}`}
-                                                            onClick={() => handleBrowseGenreToggle(genre)}
-                                                            disabled={browseLoading}
-                                                        >
-                                                            {translateGenre(genre)}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <div className="browse-genre-empty">表示中の作品からジャンルを読み込み中です。</div>
-                                        )}
-                                    </div>
-
-                                    <div className="browse-filter-group">
-                                        <div className="browse-genre-header">
-                                            <div className="browse-genre-title">放送時期</div>
-                                            {browseSeasonFilters.length > 0 && !isBrowsePresetLocked && (
-                                                <button
-                                                    type="button"
-                                                    className="browse-clear-filters-button"
-                                                    onClick={handleBrowseSeasonClear}
-                                                    disabled={browseLoading}
-                                                >
-                                                    解除
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="browse-genre-selected">{browseSeasonSummaryText}</div>
-                                        {browseSeasonOptions.length > 0 ? (
-                                            <div className="browse-genre-chips">
-                                                {browseSeasonOptions.map((season) => {
-                                                    const selected = browseSeasonFilters.includes(season.key);
-                                                    return (
-                                                        <button
-                                                            key={season.key}
-                                                            type="button"
-                                                            className={`browse-genre-chip ${selected ? 'active' : ''}`}
-                                                            onClick={() => handleBrowseSeasonToggle(season.key)}
-                                                            disabled={browseLoading || isBrowsePresetLocked}
-                                                        >
-                                                            {season.label}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <div className="browse-genre-empty">表示中の作品から放送時期を読み込み中です。</div>
-                                        )}
-                                    </div>
                                 </div>
                             </div>
 

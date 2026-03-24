@@ -2596,8 +2596,403 @@ body {
     font-weight: 600;
 }
 
+.anime-filter-panel {
+    margin: 0 0 16px;
+}
+
+.anime-filter-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.anime-filter-open-button,
+.anime-filter-reset-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    border: 1px solid #bcc2cb;
+    background: #fff;
+    color: #111;
+    padding: 0 12px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+    box-shadow: none;
+}
+
+.anime-filter-open-button {
+    background: #f6f7f9;
+    border-color: #aeb5bf;
+}
+
+.anime-filter-open-button:hover:not(:disabled),
+.anime-filter-reset-button:hover:not(:disabled) {
+    background: #fff;
+    border-color: #111;
+}
+
+.anime-filter-open-button:disabled,
+.anime-filter-reset-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.anime-filter-summary-card {
+    margin: 12px 0 0;
+    border: 1px solid #e1e5ea;
+    background: linear-gradient(180deg, #fbfcfd 0%, #f6f7f9 100%);
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+}
+
+.anime-filter-summary-title {
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: #5e6670;
+}
+
+.anime-filter-summary-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+}
+
+.anime-filter-summary-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    border: 1px solid #cfd5dc;
+    background: #fff;
+    color: #111;
+    padding: 9px 12px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    box-shadow: 0 6px 16px rgba(17, 17, 17, 0.06);
+}
+
+.anime-filter-summary-chip.removable {
+    padding-right: 34px;
+}
+
+.anime-filter-summary-chip-label {
+    line-height: 1.35;
+}
+
+.anime-filter-summary-chip.meta {
+    border-color: #111;
+    background: #111;
+    color: #fff;
+    box-shadow: none;
+}
+
+.anime-filter-summary-chip-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 18px;
+    height: 18px;
+    border: 1px solid #c8ced6;
+    background: #fff;
+    color: #111;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 900;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.anime-filter-summary-chip-remove:hover {
+    background: #111;
+    color: #fff;
+    border-color: #111;
+}
+
+.anime-filter-empty-summary {
+    margin: 10px 0 0;
+    font-size: 0.78rem;
+    color: #666;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.anime-filter-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 12, 12, 0.48);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 3200;
+}
+
+.anime-filter-modal {
+    width: min(760px, 100%);
+    max-height: min(82vh, 780px);
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 3201;
+}
+
+body.filter-modal-open {
+    overflow: hidden;
+}
+
+body.filter-modal-open .quick-nav-rail,
+body.filter-modal-open .browse-quick-nav-rail,
+body.filter-modal-open .bookmark-selection-dock,
+body.filter-modal-open .bookmark-bottom-nav,
+body.filter-modal-open .screen-bottom-home-nav,
+body.filter-modal-open .add-toast {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.anime-filter-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid #ececec;
+}
+
+.anime-filter-modal-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 900;
+    color: #111;
+}
+
+.anime-filter-modal-helper,
+.anime-filter-modal-static-note {
+    margin: 8px 0 0;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    font-weight: 600;
+}
+
+.anime-filter-modal-helper {
+    color: #555;
+}
+
+.anime-filter-modal-static-note {
+    color: #7a5228;
+    background: #faf2e7;
+    border: 1px solid #ead7bd;
+    padding: 8px 10px;
+}
+
+.anime-filter-close-button {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    border: 1px solid #cfcfcf;
+    background: #fff;
+    color: #111;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.anime-filter-modal-body {
+    padding: 18px 20px;
+    overflow-y: auto;
+    display: grid;
+    gap: 14px;
+}
+
+.anime-filter-section {
+    border: 1px solid #ececec;
+    background: #fafafa;
+    padding: 14px;
+}
+
+.anime-filter-section-title {
+    display: block;
+    margin: 0 0 10px;
+    font-size: 0.82rem;
+    font-weight: 900;
+    color: #111;
+}
+
+.anime-filter-match-toggle {
+    display: inline-flex;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+}
+
+.anime-filter-match-button {
+    min-width: 72px;
+    min-height: 38px;
+    border: 0;
+    background: transparent;
+    color: #555;
+    font-size: 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.anime-filter-match-button.active {
+    background: #111;
+    color: #fff;
+    box-shadow: inset 0 0 0 1px #111;
+}
+
+.anime-filter-select {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid #c9c9c9;
+    background: #fff;
+    color: #111;
+    padding: 0 12px;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.anime-filter-option-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.anime-filter-option-list-scroll {
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.anime-filter-chip-button {
+    border: 1px solid #bdbdbd;
+    background: #fff;
+    color: #111;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.anime-filter-chip-button.active {
+    border-color: #111;
+    background: #111;
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.08);
+}
+
+.anime-filter-chip-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.anime-filter-empty-text {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #666;
+    font-weight: 600;
+}
+
+.anime-filter-error-message {
+    border: 1px solid #e5bcbc;
+    background: #fff5f5;
+    color: #9f2d2d;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.anime-filter-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px 20px;
+    border-top: 1px solid #ececec;
+}
+
+.anime-filter-footer-button {
+    min-height: 40px;
+    border: 1px solid #111;
+    padding: 0 16px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.anime-filter-footer-button.secondary {
+    background: #fff;
+    color: #111;
+    border-color: #c3c3c3;
+}
+
+.anime-filter-footer-button.primary {
+    background: #111;
+    color: #fff;
+}
+
 .bookmark-filter-empty {
     margin-top: 0;
+}
+
+@media (max-width: 768px) {
+    .anime-filter-toolbar {
+        align-items: flex-start;
+    }
+
+    .anime-filter-open-button,
+    .anime-filter-reset-button {
+        width: auto;
+        justify-content: center;
+    }
+
+    .anime-filter-modal-backdrop {
+        padding: 12px;
+        align-items: flex-end;
+    }
+
+    .anime-filter-modal {
+        width: 100%;
+        max-height: 88vh;
+    }
+
+    .anime-filter-modal-header,
+    .anime-filter-modal-body,
+    .anime-filter-modal-footer {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .anime-filter-modal-footer {
+        flex-direction: column-reverse;
+    }
+
+    .anime-filter-footer-button {
+        width: 100%;
+    }
 }
 
 .mylist-genre-filter-section {
@@ -2640,10 +3035,11 @@ body {
     display: flex;
     align-items: stretch;
     gap: 10px;
+    flex-wrap: wrap;
 }
 
 .mylist-screen-actions {
-    align-items: center;
+    align-items: stretch;
 }
 
 .mylist-copy-controls {
@@ -2722,6 +3118,71 @@ body {
 }
 
 .mylist-share-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+}
+
+.page-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid #000;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    text-align: center;
+}
+
+.page-action-primary {
+    background: #111;
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+.page-action-primary:hover:not(:disabled) {
+    background: #222;
+    transform: translateY(-1px);
+}
+
+.page-action-strong {
+    min-height: 52px;
+    padding: 0 18px;
+    font-size: 0.88rem;
+}
+
+.page-action-season {
+    min-height: 48px;
+    padding: 0 14px;
+    font-size: 0.78rem;
+    background: linear-gradient(180deg, #1d1d1d 0%, #050505 100%);
+}
+
+.page-action-season:hover:not(:disabled) {
+    background: linear-gradient(180deg, #2a2a2a 0%, #111111 100%);
+}
+
+.page-action-secondary {
+    min-height: 44px;
+    padding: 0 16px;
+    border-color: #b9c0ca;
+    background: linear-gradient(180deg, #f7f8fb 0%, #edf1f5 100%);
+    color: #1d2430;
+    box-shadow: 0 4px 12px rgba(19, 24, 33, 0.08);
+    font-size: 0.8rem;
+}
+
+.page-action-secondary:hover:not(:disabled) {
+    background: #fff;
+    border-color: #6c7480;
+    color: #111;
+    transform: translateY(-1px);
+}
+
+.page-action-button:disabled {
     opacity: 0.45;
     cursor: default;
     transform: none;
@@ -3024,7 +3485,7 @@ body {
 .bookmark-season-nav-buttons {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
     min-width: 280px;
 }
 
@@ -3960,6 +4421,37 @@ body {
 
     .bookmark-bottom-nav-button.primary:hover {
         background: #000;
+    }
+
+    .page-action-primary:hover:not(:disabled) {
+        background: #111;
+        transform: none;
+    }
+
+    .page-action-season:hover:not(:disabled) {
+        background: linear-gradient(180deg, #1d1d1d 0%, #050505 100%);
+    }
+
+    .page-action-secondary:hover:not(:disabled) {
+        background: linear-gradient(180deg, #f7f8fb 0%, #edf1f5 100%);
+        border-color: #b9c0ca;
+        color: #1d2430;
+        transform: none;
+    }
+
+    .anime-filter-open-button:hover:not(:disabled),
+    .anime-filter-reset-button:hover:not(:disabled) {
+        background: #f6f7f9;
+        border-color: #aeb5bf;
+    }
+
+    .browse-apply-button:hover:not(:disabled) {
+        background: #111 !important;
+        transform: none;
+    }
+
+    .sort-order-button:hover {
+        background: #eef1f5;
     }
 
     .screen-bottom-home-button:hover {
@@ -5154,9 +5646,47 @@ body {
 }
 
 .browse-control-panel {
+    display: grid;
+    gap: 14px;
+}
+
+.browse-primary-panel,
+.browse-secondary-panel {
     border: 1px solid #e6e6e6;
     background: #fafafa;
     padding: 14px;
+}
+
+.browse-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.browse-panel-title {
+    font-size: 0.96rem;
+    font-weight: 900;
+    color: #111;
+}
+
+.browse-panel-text {
+    margin: 6px 0 0;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: #555;
+    font-weight: 600;
+}
+
+.browse-current-year {
+    border: 1px solid #111;
+    background: #fff;
+    color: #111;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
 .browse-year-controls {
@@ -5179,12 +5709,30 @@ body {
     min-width: 150px;
     margin-top: 0 !important;
     padding: 0 18px !important;
+    border: 1px solid #111 !important;
+    background: #111 !important;
+    color: #fff !important;
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.14);
+}
+
+.browse-apply-button:hover:not(:disabled) {
+    background: #222 !important;
+    transform: translateY(-1px);
+}
+
+.browse-apply-button:disabled {
+    border-color: #d4d4d4 !important;
+    background: #ececec !important;
+    color: #8a8a8a !important;
+    box-shadow: none;
 }
 
 .browse-guide-note {
-    margin-top: 10px;
+    margin-top: 12px;
     font-size: 0.82rem;
     color: #666;
+    line-height: 1.6;
+    font-weight: 600;
 }
 
 .browse-empty-state {
@@ -5686,7 +6234,7 @@ body {
     }
 
     .browse-control-panel {
-        padding: 12px;
+        gap: 12px;
     }
 
     .entry-guide-inline {
@@ -5765,6 +6313,15 @@ body {
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
+    }
+
+    .browse-panel-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .browse-current-year {
+        align-self: flex-start;
     }
 
     .browse-year-select {
@@ -6963,20 +7520,21 @@ body {
     display: flex;
     align-items: stretch;
     gap: 0;
-    border: 1px solid var(--border-strong);
-    background: #fff;
+    border: 1px solid #bcc2cb;
+    background: #f7f8fa;
     flex: 0 0 auto;
     width: fit-content;
     min-width: unset;
     overflow: visible;
+    box-shadow: 0 4px 12px rgba(20, 25, 34, 0.06);
 }
 
 .sort-box select {
     border: none;
     padding: 0 16px;
-    height: 52px;
-    font-size: 0.95rem;
-    font-weight: 700;
+    height: 48px;
+    font-size: 0.9rem;
+    font-weight: 800;
     background: transparent;
     cursor: pointer;
     width: auto;
@@ -6998,14 +7556,14 @@ body {
 }
 
 .sort-order-button {
-    width: 52px;
-    min-width: 52px;
-    min-height: 52px;
-    height: 52px;
+    width: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    height: 48px;
     border: none;
-    border-left: 1px solid var(--border-strong);
-    background: transparent;
-    font-size: 1.1rem;
+    border-left: 1px solid #c8ced7;
+    background: #eef1f5;
+    font-size: 1rem;
     font-weight: bold;
     cursor: pointer;
     transition: all 0.2s;
@@ -7025,7 +7583,7 @@ body {
 }
 
 .sort-order-button:hover {
-    background: #f5f5f5;
+    background: #e3e8ee;
 }
 
 /* Enhanced Responsive Controls */
