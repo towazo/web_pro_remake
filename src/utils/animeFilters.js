@@ -267,12 +267,16 @@ export const buildAppliedAnimeFilterChips = (filters = {}, options = {}) => {
   const chips = [];
 
   if (includeModeChip && (selectedGenres.length > 0 || selectedTags.length > 0)) {
+    const nextMode = matchMode === 'or' ? 'and' : 'or';
     chips.push({
       key: 'mode',
       label: matchMode.toUpperCase(),
       kind: 'meta',
       value: matchMode,
       removable: false,
+      switchable: true,
+      switchValue: nextMode,
+      switchLabel: nextMode.toUpperCase(),
     });
   }
 

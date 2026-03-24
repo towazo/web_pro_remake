@@ -2607,6 +2607,29 @@ body {
     flex-wrap: wrap;
 }
 
+.anime-filter-loading-inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.anime-filter-loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #d3d7dd;
+    border-top-color: #111;
+    border-radius: 50%;
+    animation: browseSpinnerSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+.anime-filter-loading-text {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #111;
+    line-height: 1.5;
+}
+
 .anime-filter-open-button,
 .anime-filter-reset-button {
     display: inline-flex;
@@ -2684,6 +2707,10 @@ body {
     padding-right: 34px;
 }
 
+.anime-filter-summary-chip.switchable {
+    padding-right: 52px;
+}
+
 .anime-filter-summary-chip-label {
     line-height: 1.35;
 }
@@ -2693,6 +2720,12 @@ body {
     background: #111;
     color: #fff;
     box-shadow: none;
+    min-width: 72px;
+}
+
+.anime-filter-summary-chip.meta .anime-filter-summary-chip-label {
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
 }
 
 .anime-filter-summary-chip-remove {
@@ -2713,6 +2746,35 @@ body {
     font-weight: 900;
     cursor: pointer;
     transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.anime-filter-summary-chip-switch {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    min-width: 30px;
+    height: 20px;
+    border: 1px solid #fff;
+    background: #fff;
+    color: #111;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.anime-filter-summary-chip-switch:hover {
+    background: #f3f3f3;
+    color: #111;
+    border-color: #fff;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.24);
 }
 
 .anime-filter-summary-chip-remove:hover {
@@ -2836,7 +2898,7 @@ body.filter-modal-open .add-toast {
 
 .anime-filter-match-toggle {
     display: inline-flex;
-    border: 1px solid #d0d0d0;
+    border: 1px solid #111;
     background: #fff;
 }
 
@@ -2845,30 +2907,29 @@ body.filter-modal-open .add-toast {
     min-width: 72px;
     min-height: 38px;
     border: 0;
-    background: transparent;
-    color: #555;
+    background: #fff;
+    color: #111;
     font-size: 0.8rem;
     font-weight: 800;
     cursor: pointer;
     user-select: none;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
-    transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+    transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+}
+
+.anime-filter-match-button + .anime-filter-match-button {
+    border-left: 1px solid #d0d0d0;
+}
+
+.anime-filter-match-button:hover:not(.active) {
+    background: #f5f5f5;
 }
 
 .anime-filter-match-button.active {
-    background: linear-gradient(180deg, #fffaf0 0%, #f3ead6 100%);
-    color: #111;
-    box-shadow: inset 0 0 0 1px #111;
-}
-
-.anime-filter-match-button.active::after {
-    content: "";
-    position: absolute;
-    inset-inline: 10px;
-    bottom: 6px;
-    height: 2px;
     background: #111;
+    color: #fff;
+    box-shadow: inset 0 0 0 1px #111;
 }
 
 .anime-filter-select {
@@ -2933,9 +2994,9 @@ body.filter-modal-open .add-toast {
 
 .anime-filter-chip-button.active {
     border-color: #111;
-    background: linear-gradient(180deg, #fffdf7 0%, #f4ede0 100%);
-    color: #111;
-    box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.08), 0 8px 16px rgba(17, 17, 17, 0.06);
+    background: #111;
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.08), 0 8px 16px rgba(17, 17, 17, 0.16);
     padding-right: 28px;
 }
 
@@ -2947,7 +3008,7 @@ body.filter-modal-open .add-toast {
     transform: translateY(-50%);
     font-size: 0.72rem;
     font-weight: 900;
-    color: #111;
+    color: #fff;
 }
 
 .anime-filter-chip-button:disabled {
@@ -2960,6 +3021,12 @@ body.filter-modal-open .add-toast {
     font-size: 0.78rem;
     color: #666;
     font-weight: 600;
+}
+
+.anime-filter-loading-state {
+    border: 1px solid #e7e0cf;
+    background: #fffdf8;
+    padding: 10px 12px;
 }
 
 .anime-filter-error-message {

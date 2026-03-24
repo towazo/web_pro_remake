@@ -653,6 +653,10 @@ function App() {
   const uniqueGenres = myListFilterOptions.genres;
   const uniqueTags = myListFilterOptions.tags;
   const uniqueYears = myListFilterOptions.years;
+  const isMyListTagInfoLoading = useMemo(
+    () => animeList.some((anime) => anime?.id && !Array.isArray(anime?.tags)),
+    [animeList]
+  );
 
   useEffect(() => {
     setSelectedGenres((prev) => prev.filter((genre) => uniqueGenres.includes(genre)));
@@ -930,6 +934,8 @@ function App() {
               availableGenres={uniqueGenres}
               availableTags={uniqueTags}
               availableYears={uniqueYears}
+              isLoadingTags={isMyListTagInfoLoading}
+              loadingTagsText="タグ候補を取得中です…"
               showSeasons={false}
               showMinRating
               onApply={handleApplyMyListFilters}

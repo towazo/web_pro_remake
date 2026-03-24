@@ -69,6 +69,10 @@ function BookmarkScreen({
   const uniqueGenres = bookmarkFilterOptions.genres;
   const uniqueTags = bookmarkFilterOptions.tags;
   const uniqueYears = bookmarkFilterOptions.years;
+  const isBookmarkTagInfoLoading = useMemo(
+    () => sortedBookmarks.some((anime) => anime?.id && !Array.isArray(anime?.tags)),
+    [sortedBookmarks]
+  );
 
   const filteredBookmarks = useMemo(() => {
     return sortAnimeCollection(filterAnimeCollection(sortedBookmarks, {
@@ -394,6 +398,8 @@ function BookmarkScreen({
             availableGenres={uniqueGenres}
             availableTags={uniqueTags}
             availableYears={uniqueYears}
+            isLoadingTags={isBookmarkTagInfoLoading}
+            loadingTagsText="タグ候補を取得中です…"
             showSeasons={false}
             showMinRating={false}
             onApply={handleApplyFilters}

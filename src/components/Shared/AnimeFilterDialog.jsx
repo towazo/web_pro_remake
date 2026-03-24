@@ -41,6 +41,12 @@ function AnimeFilterDialog({
   requireYearSelection = false,
   disableYearSelection = false,
   disableSeasonSelection = false,
+  isLoadingGenres = false,
+  isLoadingTags = false,
+  isLoadingSeasons = false,
+  loadingGenresText = 'ジャンル候補を取得中です…',
+  loadingTagsText = 'タグ候補を取得中です…',
+  loadingSeasonsText = '放送時期候補を取得中です…',
   emptyGenresText = 'ジャンル情報がある作品はまだありません。',
   emptyTagsText = 'タグ情報がある作品はまだありません。',
   emptySeasonsText = '放送時期の情報がある作品はまだありません。',
@@ -211,6 +217,31 @@ function AnimeFilterDialog({
     if (result === false) return;
   };
 
+  const handleSummaryChipSwitch = (chip) => {
+    if (!chip?.switchable || typeof onApply !== 'function') return;
+
+    const nextFilters = {
+      selectedGenres: normalizeArray(appliedGenres),
+      selectedTags: normalizeArray(appliedTags),
+      selectedYear: appliedYear ? String(appliedYear) : '',
+      selectedSeasons: normalizeArray(appliedSeasons),
+      minRating: normalizeMinRatingFilter(appliedMinRating),
+      matchMode: normalizeFilterMatchMode(chip.switchValue),
+    };
+
+    const result = onApply(nextFilters);
+    if (result === false) return;
+  };
+
+  const renderLoadingState = (label) => (
+    <div className="anime-filter-loading-state" role="status" aria-live="polite">
+      <div className="anime-filter-loading-inline">
+        <span className="anime-filter-loading-spinner" aria-hidden="true" />
+        <span className="anime-filter-loading-text">{label}</span>
+      </div>
+    </div>
+  );
+
   return (
     <div className="anime-filter-panel">
       <div className="anime-filter-toolbar">
@@ -243,9 +274,19 @@ function AnimeFilterDialog({
             {appliedChips.map((chip) => (
               <span
                 key={chip.key}
-                className={`anime-filter-summary-chip ${chip.kind || ''} ${chip.removable ? 'removable' : ''}`.trim()}
+                className={`anime-filter-summary-chip ${chip.kind || ''} ${chip.removable ? 'removable' : ''} ${chip.switchable ? 'switchable' : ''}`.trim()}
               >
                 <span className="anime-filter-summary-chip-label">{chip.label}</span>
+                {chip.switchable && (
+                  <button
+                    type="button"
+                    className="anime-filter-summary-chip-switch"
+                    onClick={() => handleSummaryChipSwitch(chip)}
+                    aria-label={`一致条件を${chip.switchLabel}に切り替える`}
+                  >
+                    {chip.switchLabel}
+                  </button>
+                )}
                 {chip.removable && (
                   <button
                     type="button"
@@ -384,6 +425,8 @@ function AnimeFilterDialog({
                         );
                       })}
                     </div>
+                  ) : isLoadingSeasons ? (
+                    renderLoadingState(loadingSeasonsText)
                   ) : (
                     <p className="anime-filter-empty-text">{emptySeasonsText}</p>
                   )}
@@ -410,6 +453,8 @@ function AnimeFilterDialog({
                         );
                       })}
                     </div>
+                  ) : isLoadingGenres ? (
+                    renderLoadingState(loadingGenresText)
                   ) : (
                     <p className="anime-filter-empty-text">{emptyGenresText}</p>
                   )}
@@ -437,6 +482,8 @@ function AnimeFilterDialog({
                         );
                       })}
                     </div>
+                  ) : isLoadingTags ? (
+                    renderLoadingState(loadingTagsText)
                   ) : (
                     <p className="anime-filter-empty-text">{emptyTagsText}</p>
                   )}
