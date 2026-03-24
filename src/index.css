@@ -2841,6 +2841,7 @@ body.filter-modal-open .add-toast {
 }
 
 .anime-filter-match-button {
+    position: relative;
     min-width: 72px;
     min-height: 38px;
     border: 0;
@@ -2856,9 +2857,18 @@ body.filter-modal-open .add-toast {
 }
 
 .anime-filter-match-button.active {
-    background: #111;
-    color: #fff;
+    background: linear-gradient(180deg, #fffaf0 0%, #f3ead6 100%);
+    color: #111;
     box-shadow: inset 0 0 0 1px #111;
+}
+
+.anime-filter-match-button.active::after {
+    content: "";
+    position: absolute;
+    inset-inline: 10px;
+    bottom: 6px;
+    height: 2px;
+    background: #111;
 }
 
 .anime-filter-select {
@@ -2881,14 +2891,37 @@ body.filter-modal-open .add-toast {
 .anime-filter-option-list-scroll {
     max-height: 220px;
     overflow-y: auto;
-    padding-right: 2px;
+    padding-right: 8px;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: #8d949d #eef1f4;
+}
+
+.anime-filter-option-list-scroll::-webkit-scrollbar {
+    width: 10px;
+}
+
+.anime-filter-option-list-scroll::-webkit-scrollbar-track {
+    background: #eef1f4;
+    border-left: 1px solid #dde2e7;
+}
+
+.anime-filter-option-list-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #a6adb7 0%, #7c8590 100%);
+    border: 2px solid #eef1f4;
+    border-radius: 999px;
+}
+
+.anime-filter-option-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #8f98a3 0%, #68717c 100%);
 }
 
 .anime-filter-chip-button {
+    position: relative;
     border: 1px solid #bdbdbd;
     background: #fff;
     color: #111;
-    padding: 6px 10px;
+    padding: 6px 12px;
     font-size: 0.78rem;
     font-weight: 700;
     cursor: pointer;
@@ -2900,9 +2933,21 @@ body.filter-modal-open .add-toast {
 
 .anime-filter-chip-button.active {
     border-color: #111;
-    background: #111;
-    color: #fff;
-    box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.08);
+    background: linear-gradient(180deg, #fffdf7 0%, #f4ede0 100%);
+    color: #111;
+    box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.08), 0 8px 16px rgba(17, 17, 17, 0.06);
+    padding-right: 28px;
+}
+
+.anime-filter-chip-button.active::after {
+    content: "✓";
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    font-size: 0.72rem;
+    font-weight: 900;
+    color: #111;
 }
 
 .anime-filter-chip-button:disabled {
@@ -3490,19 +3535,26 @@ body.filter-modal-open .add-toast {
 }
 
 .bookmark-season-nav-button {
-    border: 1px solid #000;
-    background: #fff;
-    color: #000;
     min-height: 46px;
-    padding: 0 10px;
-    font-size: 0.75rem;
+    padding: 0 12px;
+    font-size: 0.78rem;
     font-weight: 800;
-    cursor: pointer;
     white-space: nowrap;
 }
 
-.bookmark-season-nav-button:hover {
-    background: #f5f5f5;
+.bookmark-season-nav-button:hover:not(:disabled) {
+    background: #fff;
+    border-color: #6c7480;
+    color: #111;
+}
+
+.bookmark-season-nav-button:focus-visible,
+.bookmark-season-nav-button:active {
+    background: linear-gradient(180deg, #f7f8fb 0%, #edf1f5 100%);
+    border-color: #6c7480;
+    color: #111;
+    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
+    transform: none;
 }
 
 .bookmark-screen-add,

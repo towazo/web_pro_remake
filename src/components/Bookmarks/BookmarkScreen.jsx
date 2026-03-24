@@ -326,14 +326,14 @@ function BookmarkScreen({
           <div className="bookmark-season-nav-buttons" role="group" aria-label="シーズン別追加ページ">
             <button
               type="button"
-              className="bookmark-season-nav-button page-action-button page-action-primary page-action-season"
+              className="bookmark-season-nav-button page-action-button page-action-secondary"
               onClick={onOpenCurrentSeasonAdd}
             >
               今期作品を追加
             </button>
             <button
               type="button"
-              className="bookmark-season-nav-button page-action-button page-action-primary page-action-season"
+              className="bookmark-season-nav-button page-action-button page-action-secondary"
               onClick={onOpenNextSeasonAdd}
             >
               来季作品を追加

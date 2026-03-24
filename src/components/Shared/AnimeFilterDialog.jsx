@@ -394,7 +394,7 @@ function AnimeFilterDialog({
                 <section className="anime-filter-section">
                   <div className="anime-filter-section-title">ジャンル</div>
                   {availableGenres.length > 0 ? (
-                    <div className="anime-filter-option-list">
+                    <div className="anime-filter-option-list anime-filter-option-list-scroll">
                       {availableGenres.map((genre) => {
                         const isActive = draftGenres.includes(genre);
                         return (

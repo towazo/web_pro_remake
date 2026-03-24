@@ -58,7 +58,7 @@ export const normalizeFilterMatchMode = (value) => (
   String(value || '').trim().toLowerCase() === 'or' ? 'or' : 'and'
 );
 
-export const hasAnimeTagMetadata = (anime) => Array.isArray(anime?.tags);
+export const hasAnimeTagMetadata = (anime) => normalizeAnimeTags(anime?.tags).length > 0;
 
 export const normalizeAnimeTags = (tags) => {
   if (!Array.isArray(tags)) return [];
