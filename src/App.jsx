@@ -25,6 +25,7 @@ import {
 import HeroSlider from './components/Hero/HeroSlider';
 import AnimeCard from './components/Cards/AnimeCard';
 import StatsSection from './components/Stats/StatsSection';
+import WatchRankingSection from './components/Stats/WatchRankingSection';
 import HomeStatsCustomizeScreen from './components/Stats/HomeStatsCustomizeScreen';
 import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
 import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
@@ -36,8 +37,10 @@ import {
   writeHomeStatsCardBackgroundsToStorage,
 } from './utils/homeStatsBackgrounds';
 import {
+  ANIME_SORT_OPTIONS,
   buildFilteredAnimeList,
   normalizeAnimeRating,
+  normalizeAnimeWatchCount,
 } from './utils/animeList';
 import { warmAniListTagTranslations } from './services/tagCatalogService';
 import useTagTranslationVersion from './hooks/useTagTranslationVersion';
@@ -85,26 +88,48 @@ const ONBOARDING_STEPS = [
  * Responsible for routing, global state management, and data orchestration.
  */
 function App() {
-  const sanitizeAnimeList = (list) => filterDisplayEligibleAnimeList(Array.isArray(list) ? list : [], {
+  const sanitizeAnimeList = (list, options = {}) => filterDisplayEligibleAnimeList(Array.isArray(list) ? list : [], {
     // Keep legacy items that do not include format/country metadata.
     allowUnknownFormat: true,
     allowUnknownCountry: true,
   }).map((anime) => {
     const normalizedRating = normalizeAnimeRating(anime?.rating);
     const hasTagList = Array.isArray(anime?.tags);
-    if ((anime?.rating ?? null) === normalizedRating && !hasTagList) {
+    const hasDefaultWatchCount = Object.prototype.hasOwnProperty.call(options, 'defaultWatchCount');
+    const normalizedWatchCount = normalizeAnimeWatchCount(anime?.watchCount, {
+      minimum: options.minimumWatchCount ?? 0,
+      ...(hasDefaultWatchCount ? { defaultValue: options.defaultWatchCount } : {}),
+    });
+    const currentWatchCount = Object.prototype.hasOwnProperty.call(anime || {}, 'watchCount')
+      ? anime.watchCount
+      : hasDefaultWatchCount
+        ? undefined
+        : null;
+
+    if ((anime?.rating ?? null) === normalizedRating && !hasTagList && currentWatchCount === normalizedWatchCount) {
       return anime;
     }
+
     const nextAnime = { ...anime, rating: normalizedRating };
     if (hasTagList) {
       nextAnime.tags = normalizeAnimeTags(anime.tags);
     }
+    if (normalizedWatchCount === null) {
+      delete nextAnime.watchCount;
+    } else {
+      nextAnime.watchCount = normalizedWatchCount;
+    }
     return nextAnime;
   });
+  const sanitizeWatchedAnimeList = (list) => sanitizeAnimeList(list, {
+    minimumWatchCount: 1,
+    defaultWatchCount: 1,
+  });
+  const sanitizeBookmarkAnimeList = (list) => sanitizeAnimeList(list);
 
   // Initialize state from localStorage if available
-  const [animeList, setAnimeList] = useState(() => sanitizeAnimeList(readListFromStorage(ANIME_LIST_STORAGE_KEY)));
-  const [bookmarkList, setBookmarkList] = useState(() => sanitizeAnimeList(readListFromStorage(BOOKMARK_LIST_STORAGE_KEY)));
+  const [animeList, setAnimeList] = useState(() => sanitizeWatchedAnimeList(readListFromStorage(ANIME_LIST_STORAGE_KEY)));
+  const [bookmarkList, setBookmarkList] = useState(() => sanitizeBookmarkAnimeList(readListFromStorage(BOOKMARK_LIST_STORAGE_KEY)));
 
   const [view, setView] = useState(() => {
     if (typeof window === 'undefined') return 'home';
@@ -201,8 +226,8 @@ function App() {
         const payload = await fetchLibrarySnapshot();
         if (cancelled) return;
 
-        const remoteAnimeList = sanitizeAnimeList(payload?.animeList);
-        const remoteBookmarkList = sanitizeAnimeList(payload?.bookmarkList);
+        const remoteAnimeList = sanitizeWatchedAnimeList(payload?.animeList);
+        const remoteBookmarkList = sanitizeBookmarkAnimeList(payload?.bookmarkList);
         const hasRemoteData = remoteAnimeList.length > 0 || remoteBookmarkList.length > 0;
         const hasLocalData = animeList.length > 0 || bookmarkList.length > 0;
 
@@ -211,8 +236,8 @@ function App() {
           setBookmarkList(remoteBookmarkList);
         } else if (hasLocalData) {
           await saveLibrarySnapshot({
-            animeList: sanitizeAnimeList(animeList),
-            bookmarkList: sanitizeAnimeList(bookmarkList),
+            animeList: sanitizeWatchedAnimeList(animeList),
+            bookmarkList: sanitizeBookmarkAnimeList(bookmarkList),
           });
           if (cancelled) return;
         }
@@ -258,8 +283,8 @@ function App() {
 
     serverSaveDebounceRef.current = setTimeout(() => {
       saveLibrarySnapshot({
-        animeList: sanitizeAnimeList(animeList),
-        bookmarkList: sanitizeAnimeList(bookmarkList),
+        animeList: sanitizeWatchedAnimeList(animeList),
+        bookmarkList: sanitizeBookmarkAnimeList(bookmarkList),
       })
         .catch((syncError) => {
           console.error('Failed to save server library:', syncError);
@@ -497,10 +522,14 @@ function App() {
       return { success: false, message: 'その作品は既に追加されています。' };
     }
     const rating = normalizeAnimeRating(options?.rating ?? data?.rating);
+    const watchCount = normalizeAnimeWatchCount(options?.watchCount ?? data?.watchCount, {
+      minimum: 1,
+      defaultValue: 1,
+    });
     // Add timestamp for "added" sort
-    const animeWithDate = { ...data, rating, addedAt: Date.now() };
-    setAnimeList(prev => sanitizeAnimeList([animeWithDate, ...prev]));
-    setBookmarkList(prev => sanitizeAnimeList(prev.filter((anime) => anime.id !== data.id)));
+    const animeWithDate = { ...data, rating, watchCount, addedAt: Date.now() };
+    setAnimeList(prev => sanitizeWatchedAnimeList([animeWithDate, ...prev]));
+    setBookmarkList(prev => sanitizeBookmarkAnimeList(prev.filter((anime) => anime.id !== data.id)));
     return { success: true };
   };
 
@@ -525,6 +554,27 @@ function App() {
     });
   };
 
+  const handleUpdateAnimeWatchCount = (id, watchCount) => {
+    const normalizedWatchCount = normalizeAnimeWatchCount(watchCount, {
+      minimum: 1,
+      defaultValue: 1,
+    });
+    setAnimeList((prev) => {
+      let changed = false;
+      const next = prev.map((anime) => {
+        if (anime.id !== id) return anime;
+        const currentWatchCount = normalizeAnimeWatchCount(anime?.watchCount, {
+          minimum: 1,
+          defaultValue: 1,
+        });
+        if (currentWatchCount === normalizedWatchCount) return anime;
+        changed = true;
+        return { ...anime, watchCount: normalizedWatchCount };
+      });
+      return changed ? sanitizeWatchedAnimeList(next) : prev;
+    });
+  };
+
   const handleToggleBookmark = (data) => {
     if (!data || typeof data.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
@@ -539,12 +589,12 @@ function App() {
 
     const exists = bookmarkList.some((anime) => anime.id === data.id);
     if (exists) {
-      setBookmarkList((prev) => sanitizeAnimeList(prev.filter((anime) => anime.id !== data.id)));
+      setBookmarkList((prev) => sanitizeBookmarkAnimeList(prev.filter((anime) => anime.id !== data.id)));
       return { success: true, action: 'removed' };
     }
 
     const bookmarkItem = { ...data, bookmarkedAt: Date.now() };
-    setBookmarkList((prev) => sanitizeAnimeList([bookmarkItem, ...prev.filter((anime) => anime.id !== data.id)]));
+    setBookmarkList((prev) => sanitizeBookmarkAnimeList([bookmarkItem, ...prev.filter((anime) => anime.id !== data.id)]));
     return { success: true, action: 'added' };
   };
 
@@ -558,7 +608,7 @@ function App() {
     if (!anime || typeof anime.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
     }
-    return handleAddAnime(anime, { rating: options?.rating });
+    return handleAddAnime(anime, { rating: options?.rating, watchCount: 1 });
   };
 
   const handleLongPressAnime = (id) => {
@@ -635,6 +685,8 @@ function App() {
     setSelectedYear(String(nextFilters?.selectedYear || '').trim());
     setMinRating(nextFilters?.minRating || '');
     setFilterMatchMode(nextFilters?.matchMode || 'and');
+    setSortKey(nextFilters?.sortKey || 'added');
+    setSortOrder(nextFilters?.sortOrder === 'asc' ? 'asc' : 'desc');
   };
 
   const handleClearMyListFilters = () => {
@@ -643,6 +695,8 @@ function App() {
     setSelectedYear('');
     setMinRating('');
     setFilterMatchMode('and');
+    setSortKey('added');
+    setSortOrder('desc');
   };
 
   // 5. Data Derived States (Filters/Computed)
@@ -860,6 +914,7 @@ function App() {
           animeList={animeList}
           initialSelectedAnimeIds={sharePresetAnimeIds}
           onUpdateRating={handleUpdateAnimeRating}
+          onUpdateWatchCount={handleUpdateAnimeWatchCount}
           onBackToMyList={() => navigateTo('mylist')}
           onBackToMethod={() => navigateTo('shareMethod')}
           onSelectMode={(mode) => navigateTo(mode === 'image' ? 'shareImage' : 'shareText')}
@@ -900,37 +955,20 @@ function App() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-
-              <div className="sort-box">
-                <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-                  <option value="added">追加順</option>
-                  <option value="title">タイトル順</option>
-                  <option value="year">放送年順</option>
-                  <option value="rating">評価順</option>
-                </select>
-                <button
-                  type="button"
-                  className="sort-order-button"
-                  onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                  title={sortOrder === 'asc' ? '昇順' : '降順'}
-                  aria-label={sortOrder === 'asc' ? '昇順で並び替え' : '降順で並び替え'}
-                >
-                  {sortOrder === 'asc' ? '↑' : '↓'}
-                </button>
-              </div>
-
             </div>
 
             <AnimeFilterDialog
               contextId="mylist"
               title="絞り込み条件"
-              emptySummaryText="ジャンル・タグ・放送年・評価で絞り込めます。"
-              helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
+              emptySummaryText="ジャンル・タグ・放送年・評価・並び替えを設定できます。"
+              helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年・評価・並び替えは追加条件として扱います。"
               appliedGenres={selectedGenres}
               appliedTags={selectedTags}
               appliedYear={selectedYear}
               appliedMinRating={minRating}
               appliedMatchMode={filterMatchMode}
+              appliedSortKey={sortKey}
+              appliedSortOrder={sortOrder}
               availableGenres={uniqueGenres}
               availableTags={uniqueTags}
               availableYears={uniqueYears}
@@ -938,6 +976,11 @@ function App() {
               loadingTagsText="タグ候補を取得中です…"
               showSeasons={false}
               showMinRating
+              showSort
+              sortOptions={ANIME_SORT_OPTIONS}
+              includeSortChip
+              defaultSortKey="added"
+              defaultSortOrder="desc"
               onApply={handleApplyMyListFilters}
               onClear={handleClearMyListFilters}
             />
@@ -967,6 +1010,7 @@ function App() {
                   onToggleSelect={handleToggleAnimeSelection}
                   onLongPress={handleLongPressAnime}
                   onUpdateRating={handleUpdateAnimeRating}
+                  onUpdateWatchCount={handleUpdateAnimeWatchCount}
                 />
               ))}
             </div>
@@ -1087,13 +1131,15 @@ function App() {
               作品を共有
             </button>
 
+            <WatchRankingSection animeList={animeList} />
+
             <div className="home-stats-customize-launch">
               <button
                 type="button"
                 className="home-stats-customize-launch-button"
                 onClick={() => navigateTo('homeCustomize')}
               >
-                画像を選択してカスタマイズ
+                設定
               </button>
             </div>
           </main>

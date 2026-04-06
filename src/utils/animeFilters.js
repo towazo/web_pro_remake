@@ -9,6 +9,14 @@ export const MIN_RATING_FILTER_OPTIONS = [
   { value: '5', label: '5以上' },
 ];
 
+export const ANIME_SORT_OPTIONS = [
+  { value: 'added', label: '追加順' },
+  { value: 'title', label: 'タイトル順' },
+  { value: 'year', label: '放送年順' },
+  { value: 'rating', label: '評価順' },
+  { value: 'watchCount', label: '視聴回数順' },
+];
+
 export const FILTER_MATCH_MODE_OPTIONS = [
   { value: 'and', label: 'AND' },
   { value: 'or', label: 'OR' },
@@ -45,6 +53,25 @@ export const normalizeAnimeRating = (value) => {
   if (!Number.isInteger(parsed)) return null;
   if (parsed < 1 || parsed > 5) return null;
   return parsed;
+};
+
+export const normalizeAnimeWatchCount = (value, options = {}) => {
+  const minimumCandidate = Number(options.minimum);
+  const minimum = Number.isInteger(minimumCandidate) && minimumCandidate > 0 ? minimumCandidate : 0;
+  const parsed = Number(value);
+  if (Number.isInteger(parsed) && parsed >= minimum) return parsed;
+
+  if (!Object.prototype.hasOwnProperty.call(options, 'defaultValue')) {
+    return null;
+  }
+
+  if (options.defaultValue === null) {
+    return null;
+  }
+
+  const fallback = Number(options.defaultValue);
+  if (!Number.isInteger(fallback) || fallback < minimum) return null;
+  return fallback;
 };
 
 export const normalizeMinRatingFilter = (value) => {
@@ -234,6 +261,10 @@ export const sortAnimeCollection = (animeList, options = {}) => {
         valueLeft = normalizeAnimeRating(left?.rating) || 0;
         valueRight = normalizeAnimeRating(right?.rating) || 0;
         break;
+      case 'watchCount':
+        valueLeft = normalizeAnimeWatchCount(left?.watchCount, { minimum: 0, defaultValue: 0 }) || 0;
+        valueRight = normalizeAnimeWatchCount(right?.watchCount, { minimum: 0, defaultValue: 0 }) || 0;
+        break;
       case 'added':
       default:
         valueLeft = getAddedValue(left);
@@ -264,6 +295,15 @@ export const buildAppliedAnimeFilterChips = (filters = {}, options = {}) => {
   const includeYearChip = options.includeYearChip !== false;
   const includeSeasonChip = options.includeSeasonChip !== false;
   const includeMinRatingChip = options.includeMinRatingChip !== false;
+  const includeSortChip = options.includeSortChip === true;
+  const sortOptions = Array.isArray(options.sortOptions) && options.sortOptions.length > 0
+    ? options.sortOptions
+    : ANIME_SORT_OPTIONS;
+  const sortLabelMap = new Map(sortOptions.map((option) => [option.value, option.label]));
+  const selectedSortKey = String(filters.sortKey || options.defaultSortKey || 'added');
+  const selectedSortOrder = String(filters.sortOrder || options.defaultSortOrder || 'desc') === 'asc' ? 'asc' : 'desc';
+  const defaultSortKey = String(options.defaultSortKey || 'added');
+  const defaultSortOrder = String(options.defaultSortOrder || 'desc') === 'asc' ? 'asc' : 'desc';
   const chips = [];
 
   if (includeModeChip && (selectedGenres.length > 0 || selectedTags.length > 0)) {
@@ -329,6 +369,20 @@ export const buildAppliedAnimeFilterChips = (filters = {}, options = {}) => {
       kind: 'rating',
       value: normalizedMinRating,
       removable: true,
+    });
+  }
+
+  if (includeSortChip && (
+    selectedSortKey !== defaultSortKey
+    || selectedSortOrder !== defaultSortOrder
+  )) {
+    const sortLabel = sortLabelMap.get(selectedSortKey) || selectedSortKey;
+    chips.push({
+      key: `sort:${selectedSortKey}:${selectedSortOrder}`,
+      label: `並び替え: ${sortLabel} ${selectedSortOrder === 'asc' ? '昇順' : '降順'}`,
+      kind: 'sort',
+      value: `${selectedSortKey}:${selectedSortOrder}`,
+      removable: false,
     });
   }
 

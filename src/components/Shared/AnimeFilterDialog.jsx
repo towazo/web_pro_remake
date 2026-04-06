@@ -29,15 +29,19 @@ function AnimeFilterDialog({
   appliedSeasons = [],
   appliedMinRating = '',
   appliedMatchMode = 'and',
+  appliedSortKey = 'added',
+  appliedSortOrder = 'desc',
   availableGenres = [],
   availableTags = [],
   availableYears = [],
   availableSeasons = [],
+  sortOptions = [],
   showGenres = true,
   showTags = true,
   showYear = true,
   showSeasons = false,
   showMinRating = false,
+  showSort = false,
   requireYearSelection = false,
   disableYearSelection = false,
   disableSeasonSelection = false,
@@ -55,6 +59,9 @@ function AnimeFilterDialog({
   includeYearChip = true,
   includeSeasonChip = true,
   includeMinRatingChip = true,
+  includeSortChip = false,
+  defaultSortKey = 'added',
+  defaultSortOrder = 'desc',
   triggerDisabled = false,
   triggerTitle = '',
   onApply,
@@ -67,6 +74,10 @@ function AnimeFilterDialog({
   const [draftSeasons, setDraftSeasons] = useState(() => normalizeArray(appliedSeasons));
   const [draftMinRating, setDraftMinRating] = useState(() => normalizeMinRatingFilter(appliedMinRating));
   const [draftMatchMode, setDraftMatchMode] = useState(() => normalizeFilterMatchMode(appliedMatchMode));
+  const [draftSortKey, setDraftSortKey] = useState(() => String(appliedSortKey || defaultSortKey || 'added'));
+  const [draftSortOrder, setDraftSortOrder] = useState(() => (
+    String(appliedSortOrder || defaultSortOrder || 'desc') === 'asc' ? 'asc' : 'desc'
+  ));
   const [draftError, setDraftError] = useState('');
   const tagTranslationVersion = useTagTranslationVersion();
 
@@ -77,11 +88,17 @@ function AnimeFilterDialog({
     selectedSeasons: appliedSeasons,
     minRating: appliedMinRating,
     matchMode: appliedMatchMode,
+    sortKey: appliedSortKey,
+    sortOrder: appliedSortOrder,
   }, {
     availableSeasons,
     includeYearChip,
     includeSeasonChip,
     includeMinRatingChip,
+    includeSortChip,
+    sortOptions,
+    defaultSortKey,
+    defaultSortOrder,
   }), [
     appliedGenres,
     appliedTags,
@@ -89,10 +106,16 @@ function AnimeFilterDialog({
     appliedSeasons,
     appliedMinRating,
     appliedMatchMode,
+    appliedSortKey,
+    appliedSortOrder,
     availableSeasons,
     includeMinRatingChip,
     includeSeasonChip,
+    includeSortChip,
     includeYearChip,
+    sortOptions,
+    defaultSortKey,
+    defaultSortOrder,
     tagTranslationVersion,
   ]);
 
@@ -103,6 +126,8 @@ function AnimeFilterDialog({
     setDraftSeasons(normalizeArray(appliedSeasons));
     setDraftMinRating(normalizeMinRatingFilter(appliedMinRating));
     setDraftMatchMode(normalizeFilterMatchMode(appliedMatchMode));
+    setDraftSortKey(String(appliedSortKey || defaultSortKey || 'added'));
+    setDraftSortOrder(String(appliedSortOrder || defaultSortOrder || 'desc') === 'asc' ? 'asc' : 'desc');
     setDraftError('');
   };
 
@@ -151,6 +176,12 @@ function AnimeFilterDialog({
     toggleDraftValue(setter, value);
   };
 
+  const handleSortOrderPress = (event, nextOrder) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraftSortOrder(nextOrder === 'asc' ? 'asc' : 'desc');
+  };
+
   const handleOpen = () => {
     if (triggerDisabled) return;
     syncDraftFromApplied();
@@ -170,6 +201,8 @@ function AnimeFilterDialog({
       selectedSeasons: draftSeasons,
       minRating: draftMinRating,
       matchMode: draftMatchMode,
+      sortKey: draftSortKey,
+      sortOrder: draftSortOrder,
     });
     if (result === false) return;
     setIsOpen(false);
@@ -191,6 +224,8 @@ function AnimeFilterDialog({
       selectedSeasons: normalizeArray(appliedSeasons),
       minRating: normalizeMinRatingFilter(appliedMinRating),
       matchMode: normalizeFilterMatchMode(appliedMatchMode),
+      sortKey: String(appliedSortKey || defaultSortKey || 'added'),
+      sortOrder: String(appliedSortOrder || defaultSortOrder || 'desc') === 'asc' ? 'asc' : 'desc',
     };
 
     switch (chip.kind) {
@@ -227,6 +262,8 @@ function AnimeFilterDialog({
       selectedSeasons: normalizeArray(appliedSeasons),
       minRating: normalizeMinRatingFilter(appliedMinRating),
       matchMode: normalizeFilterMatchMode(chip.switchValue),
+      sortKey: String(appliedSortKey || defaultSortKey || 'added'),
+      sortOrder: String(appliedSortOrder || defaultSortOrder || 'desc') === 'asc' ? 'asc' : 'desc',
     };
 
     const result = onApply(nextFilters);
@@ -356,6 +393,43 @@ function AnimeFilterDialog({
                         </button>
                       );
                     })}
+                  </div>
+                </section>
+              )}
+
+              {showSort && sortOptions.length > 0 && (
+                <section className="anime-filter-section">
+                  <div className="anime-filter-section-title">並び替え</div>
+                  <div className="anime-filter-sort-row">
+                    <select
+                      className="anime-filter-select anime-filter-sort-select"
+                      value={draftSortKey}
+                      onChange={(event) => setDraftSortKey(event.target.value)}
+                    >
+                      {sortOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="anime-filter-sort-order-toggle" role="group" aria-label="並び順">
+                      <button
+                        type="button"
+                        className={`anime-filter-sort-order-button ${draftSortOrder === 'desc' ? 'active' : ''}`}
+                        onClick={(event) => handleSortOrderPress(event, 'desc')}
+                        aria-pressed={draftSortOrder === 'desc'}
+                      >
+                        降順
+                      </button>
+                      <button
+                        type="button"
+                        className={`anime-filter-sort-order-button ${draftSortOrder === 'asc' ? 'active' : ''}`}
+                        onClick={(event) => handleSortOrderPress(event, 'asc')}
+                        aria-pressed={draftSortOrder === 'asc'}
+                      >
+                        昇順
+                      </button>
+                    </div>
                   </div>
                 </section>
               )}

@@ -1,12 +1,20 @@
 import {
+  ANIME_SORT_OPTIONS,
   MIN_RATING_FILTER_OPTIONS,
   filterAnimeCollection,
   normalizeAnimeRating,
+  normalizeAnimeWatchCount,
   normalizeMinRatingFilter,
   sortAnimeCollection,
 } from './animeFilters';
 
-export { MIN_RATING_FILTER_OPTIONS, normalizeAnimeRating, normalizeMinRatingFilter } from './animeFilters';
+export {
+  ANIME_SORT_OPTIONS,
+  MIN_RATING_FILTER_OPTIONS,
+  normalizeAnimeRating,
+  normalizeAnimeWatchCount,
+  normalizeMinRatingFilter,
+} from './animeFilters';
 
 export const SHARE_IMAGE_SELECTION_LIMIT = 24;
 export const SHARE_IMAGE_PAGE_SIZE = 6;

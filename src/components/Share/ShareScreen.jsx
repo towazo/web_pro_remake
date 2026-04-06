@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AnimeCard from '../Cards/AnimeCard';
-import AnimeFilterPanel from '../Shared/AnimeFilterPanel';
+import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
 import {
+  ANIME_SORT_OPTIONS,
   buildFilteredAnimeList,
   buildShareText,
   normalizeAnimeRating,
-  normalizeMinRatingFilter,
   resolveAnimeTitle,
   SHARE_IMAGE_MAX_PAGES,
   SHARE_IMAGE_PAGE_SIZE,
@@ -13,13 +13,8 @@ import {
 } from '../../utils/animeList';
 import { translateGenre } from '../../constants/animeData';
 import { joinApiPath } from '../../services/apiBase';
-
-const SORT_OPTIONS = [
-  { value: 'added', label: '追加順' },
-  { value: 'title', label: 'タイトル順' },
-  { value: 'year', label: '放送年順' },
-  { value: 'rating', label: '評価順' },
-];
+import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
+import { collectAnimeFilterOptions } from '../../utils/animeFilters';
 
 const SHARE_IMAGE_WIDTH = 1800;
 const SHARE_IMAGE_HEIGHT = 2100;
@@ -752,6 +747,7 @@ function ShareScreen({
   animeList = [],
   initialSelectedAnimeIds = [],
   onUpdateRating,
+  onUpdateWatchCount,
   onBackToMyList,
   onBackToMethod,
   onSelectMode,
@@ -762,7 +758,10 @@ function ShareScreen({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenres, setSelectedGenres] = useState([]);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
   const [minRating, setMinRating] = useState('');
+  const [filterMatchMode, setFilterMatchMode] = useState('and');
   const [sortKey, setSortKey] = useState('added');
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedAnimeIds, setSelectedAnimeIds] = useState(() => (
@@ -785,22 +784,40 @@ function ShareScreen({
   const pendingGalleryScrollRef = useRef(false);
   const galleryScrollTimerRef = useRef(null);
   const listStartRef = useRef(null);
+  const tagTranslationVersion = useTagTranslationVersion();
 
-  const uniqueGenres = useMemo(() => {
-    const genres = new Set();
-    animeList.forEach((anime) => {
-      anime?.genres?.forEach((genre) => genres.add(genre));
-    });
-    return Array.from(genres).sort((left, right) => left.localeCompare(right));
-  }, [animeList]);
+  const shareFilterOptions = useMemo(
+    () => collectAnimeFilterOptions(animeList),
+    [animeList, tagTranslationVersion]
+  );
+  const uniqueGenres = shareFilterOptions.genres;
+  const uniqueTags = shareFilterOptions.tags;
+  const uniqueYears = shareFilterOptions.years;
+  const isShareTagInfoLoading = useMemo(
+    () => animeList.some((anime) => anime?.id && !Array.isArray(anime?.tags)),
+    [animeList]
+  );
 
   const filteredList = useMemo(() => buildFilteredAnimeList(animeList, {
     searchQuery,
     selectedGenres,
+    selectedTags,
+    selectedYear,
     minRating,
+    matchMode: filterMatchMode,
     sortKey,
     sortOrder,
-  }), [animeList, minRating, searchQuery, selectedGenres, sortKey, sortOrder]);
+  }), [
+    animeList,
+    filterMatchMode,
+    minRating,
+    searchQuery,
+    selectedGenres,
+    selectedTags,
+    selectedYear,
+    sortKey,
+    sortOrder,
+  ]);
 
   const selectedAnimes = useMemo(() => {
     const animeById = new Map(animeList.map((anime) => [anime.id, anime]));
@@ -835,7 +852,13 @@ function ShareScreen({
 
   useEffect(() => {
     setSelectedGenres((prev) => prev.filter((genre) => uniqueGenres.includes(genre)));
-  }, [uniqueGenres]);
+    setSelectedTags((prev) => prev.filter((tag) => uniqueTags.includes(tag)));
+    setSelectedYear((prev) => {
+      const year = Number(prev);
+      if (!Number.isFinite(year)) return '';
+      return uniqueYears.includes(year) ? String(year) : '';
+    });
+  }, [uniqueGenres, uniqueTags, uniqueYears]);
 
   useEffect(() => {
     if (!notice.message) return;
@@ -919,12 +942,15 @@ function ShareScreen({
     };
   }, [
     filteredList.length,
+    filterMatchMode,
     generatedImages.length,
     isMethodMode,
     minRating,
     searchQuery,
     selectedAnimeIds.length,
     selectedGenres,
+    selectedTags,
+    selectedYear,
     sortKey,
     sortOrder,
   ]);
@@ -997,15 +1023,24 @@ function ShareScreen({
     return () => cancelAnimationFrame(rafId);
   }, [generatedImages.length]);
 
-  const handleToggleGenre = (genre) => {
-    setSelectedGenres((prev) => (
-      prev.includes(genre) ? prev.filter((item) => item !== genre) : [...prev, genre]
-    ));
+  const handleApplyFilters = (nextFilters) => {
+    setSelectedGenres(Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : []);
+    setSelectedTags(Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : []);
+    setSelectedYear(String(nextFilters?.selectedYear || '').trim());
+    setMinRating(nextFilters?.minRating || '');
+    setFilterMatchMode(nextFilters?.matchMode || 'and');
+    setSortKey(nextFilters?.sortKey || 'added');
+    setSortOrder(nextFilters?.sortOrder === 'asc' ? 'asc' : 'desc');
   };
 
   const handleClearFilters = () => {
     setSelectedGenres([]);
+    setSelectedTags([]);
+    setSelectedYear('');
     setMinRating('');
+    setFilterMatchMode('and');
+    setSortKey('added');
+    setSortOrder('desc');
   };
 
   const handleToggleAnimeSelection = (animeId) => {
@@ -1052,6 +1087,13 @@ function ShareScreen({
     clearGeneratedImages();
     if (typeof onUpdateRating === 'function') {
       onUpdateRating(animeId, rating);
+    }
+  };
+
+  const handleUpdateWatchCountFromShare = (animeId, watchCount) => {
+    clearGeneratedImages();
+    if (typeof onUpdateWatchCount === 'function') {
+      onUpdateWatchCount(animeId, watchCount);
     }
   };
 
@@ -1326,37 +1368,34 @@ function ShareScreen({
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
-
-          <div className="sort-box">
-            <select value={sortKey} onChange={(event) => setSortKey(event.target.value)}>
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="sort-order-button"
-              onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-              title={sortOrder === 'asc' ? '昇順' : '降順'}
-              aria-label={sortOrder === 'asc' ? '昇順で並び替え' : '降順で並び替え'}
-            >
-              {sortOrder === 'asc' ? '↑' : '↓'}
-            </button>
-          </div>
         </div>
 
-        <AnimeFilterPanel
-          uniqueGenres={uniqueGenres}
-          selectedGenres={selectedGenres}
-          minRating={normalizeMinRatingFilter(minRating)}
-          onToggleGenre={handleToggleGenre}
-          onMinRatingChange={setMinRating}
-          onClearFilters={handleClearFilters}
-          sectionClassName="mylist-genre-filter-section share-filter-section"
-          title="共有候補の絞り込み"
+        <AnimeFilterDialog
           contextId={`share-${mode}`}
+          title="共有候補の絞り込み"
+          emptySummaryText="ジャンル・タグ・放送年・評価・並び替えを設定できます。"
+          helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年・評価・並び替えは追加条件として扱います。"
+          appliedGenres={selectedGenres}
+          appliedTags={selectedTags}
+          appliedYear={selectedYear}
+          appliedMinRating={minRating}
+          appliedMatchMode={filterMatchMode}
+          appliedSortKey={sortKey}
+          appliedSortOrder={sortOrder}
+          availableGenres={uniqueGenres}
+          availableTags={uniqueTags}
+          availableYears={uniqueYears}
+          isLoadingTags={isShareTagInfoLoading}
+          loadingTagsText="タグ候補を取得中です…"
+          showSeasons={false}
+          showMinRating
+          showSort
+          sortOptions={ANIME_SORT_OPTIONS}
+          includeSortChip
+          defaultSortKey="added"
+          defaultSortOrder="desc"
+          onApply={handleApplyFilters}
+          onClear={handleClearFilters}
         />
 
         <div className="selection-toolbar" role="region" aria-label="共有候補の選択">
@@ -1441,7 +1480,9 @@ function ShareScreen({
               isSelected={selectedAnimeIds.includes(anime.id)}
               onToggleSelect={handleToggleAnimeSelection}
               onUpdateRating={handleUpdateRatingFromShare}
+              onUpdateWatchCount={handleUpdateWatchCountFromShare}
               allowRatingEditInSelectionMode
+              allowWatchCountEditInSelectionMode
             />
           ))}
         </div>

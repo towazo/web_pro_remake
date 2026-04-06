@@ -445,7 +445,7 @@ body {
 .home-share-shortcut {
     width: 100%;
     min-height: 52px;
-    margin: 0 0 20px;
+    margin: 0 0 56px;
     border: 1px solid #000;
     background: #000;
     color: #fff;
@@ -471,6 +471,142 @@ body {
     opacity: 0.45;
     cursor: default;
     transform: none;
+}
+
+.watch-ranking-section {
+    margin: 0 0 20px;
+    border: 1px solid #e5e5e5;
+    background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+    box-shadow: 0 10px 20px rgba(17, 17, 17, 0.05);
+    overflow: hidden;
+}
+
+.watch-ranking-header {
+    padding: 18px 18px 14px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid #ededed;
+}
+
+.watch-ranking-eyebrow {
+    margin: 0 0 4px;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: #967200;
+    text-transform: uppercase;
+}
+
+.watch-ranking-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 900;
+    color: #111;
+}
+
+.watch-ranking-filter {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 150px;
+}
+
+.watch-ranking-filter-label {
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    color: #6b7280;
+    text-transform: uppercase;
+}
+
+.watch-ranking-filter-select {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #d4d4d4;
+    background: #fff;
+    color: #111;
+    padding: 0 12px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.watch-ranking-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.watch-ranking-item {
+    display: grid;
+    grid-template-columns: 46px 88px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 14px 18px;
+}
+
+.watch-ranking-item + .watch-ranking-item {
+    border-top: 2px solid #e0e0e0;
+}
+
+.watch-ranking-rank {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f3f3f3;
+    color: #111;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.watch-ranking-rank.rank-1 {
+    background: #f7d86c;
+}
+
+.watch-ranking-rank.rank-2 {
+    background: #d8dde3;
+}
+
+.watch-ranking-rank.rank-3 {
+    background: #ecc19a;
+}
+
+.watch-ranking-thumb {
+    width: 88px;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    border: 1px solid #d9d9d9;
+    background: #f4f4f4;
+}
+
+.watch-ranking-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.watch-ranking-item-title {
+    margin: 0;
+    font-size: 0.94rem;
+    font-weight: 800;
+    color: #111;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.watch-ranking-item-meta {
+    margin: 0;
+    color: #666;
 }
 
 .mylist-section-header {
@@ -1032,6 +1168,140 @@ body {
     display: none;
 }
 
+.card-watch-section {
+    margin-top: 10px;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.card-watch-summary {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    color: #666;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    min-width: 52px;
+}
+
+button.card-watch-summary {
+    cursor: pointer;
+}
+
+.card-watch-section.editable button.card-watch-summary:hover,
+.card-watch-section.editable button.card-watch-summary:focus-visible {
+    color: #222;
+}
+
+.watch-count-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+}
+
+.watch-count-icon {
+    width: 16px;
+    height: 16px;
+    color: currentColor;
+    flex: 0 0 auto;
+}
+
+.watch-count-number {
+    font-variant-numeric: tabular-nums;
+}
+
+.card-watch-badge {
+    color: #666;
+}
+
+.card-watch-icon {
+    width: 15px;
+    height: 15px;
+    color: #7a7a7a;
+}
+
+.card-watch-count {
+    color: #5e5e5e;
+    font-size: 0.74rem;
+    font-weight: 800;
+}
+
+.card-watch-underline {
+    display: block;
+    width: 100%;
+    min-width: 42px;
+    height: 2px;
+    background: #d6d6d6;
+    transition: background 0.18s ease, transform 0.18s ease;
+    transform-origin: left center;
+}
+
+.card-watch-section.editable button.card-watch-summary:hover .card-watch-underline,
+.card-watch-section.editable button.card-watch-summary:focus-visible .card-watch-underline,
+.card-watch-section.controls-open .card-watch-underline {
+    background: #8d8d8d;
+    transform: scaleX(1.06);
+}
+
+.card-watch-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(4px);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+}
+
+.card-watch-section.editable:hover .card-watch-controls,
+.card-watch-section.editable:focus-within .card-watch-controls,
+.card-watch-section.controls-open .card-watch-controls {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.card-watch-adjust {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    border: 1px solid #d2d2d2;
+    background: #fff;
+    color: #555;
+    font-size: 0.92rem;
+    font-weight: 800;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+}
+
+.card-watch-adjust:hover:not(:disabled) {
+    border-color: #111;
+    color: #111;
+    background: #f7f7f7;
+}
+
+.card-watch-adjust:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
 .meta-tag {
     font-size: 10px;
     font-weight: 800;
@@ -1085,6 +1355,36 @@ body {
 
     .card-rating-clear-label-compact {
         display: inline;
+    }
+
+    .card-watch-section {
+        gap: 8px;
+    }
+
+    .card-watch-summary {
+        font-size: 0.68rem;
+        gap: 5px;
+        min-width: 46px;
+    }
+
+    .card-watch-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .card-watch-count {
+        font-size: 0.68rem;
+    }
+
+    .card-watch-underline {
+        min-width: 36px;
+    }
+
+    .card-watch-adjust {
+        width: 22px;
+        min-width: 22px;
+        height: 22px;
+        font-size: 0.84rem;
     }
 }
 
@@ -2193,7 +2493,7 @@ body {
 
 .home-stats-customize-launch {
     width: 100%;
-    margin: 12px 0 70px;
+    margin: 28px 0 70px;
 }
 
 .home-stats-customize-launch-button {
@@ -2403,7 +2703,7 @@ body {
 
 @media (max-width: 768px) {
     .home-stats-customize-launch {
-        margin: 10px 0 62px;
+        margin: 22px 0 62px;
     }
 
     .home-stats-customize-launch-button {
@@ -2723,6 +3023,12 @@ body {
     min-width: 72px;
 }
 
+.anime-filter-summary-chip.sort {
+    background: #fff9e8;
+    border-color: #e0cc8f;
+    color: #6c5300;
+}
+
 .anime-filter-summary-chip.meta .anime-filter-summary-chip-label {
     font-size: 0.82rem;
     letter-spacing: 0.04em;
@@ -2943,6 +3249,39 @@ body.filter-modal-open .add-toast {
     font-weight: 700;
 }
 
+.anime-filter-sort-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.anime-filter-sort-order-toggle {
+    display: inline-flex;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+}
+
+.anime-filter-sort-order-button {
+    min-width: 68px;
+    border: none;
+    background: transparent;
+    color: #555;
+    padding: 0 14px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.anime-filter-sort-order-button + .anime-filter-sort-order-button {
+    border-left: 1px solid #d0d0d0;
+}
+
+.anime-filter-sort-order-button.active {
+    background: #111;
+    color: #fff;
+}
+
 .anime-filter-option-list {
     display: flex;
     flex-wrap: wrap;
@@ -3104,6 +3443,19 @@ body.filter-modal-open .add-toast {
 
     .anime-filter-footer-button {
         width: 100%;
+    }
+
+    .anime-filter-sort-row {
+        grid-template-columns: 1fr;
+    }
+
+    .anime-filter-sort-order-toggle {
+        width: 100%;
+    }
+
+    .anime-filter-sort-order-button {
+        flex: 1 1 0;
+        min-height: 40px;
     }
 }
 
@@ -3404,6 +3756,63 @@ body.filter-modal-open .add-toast {
     width: 16px;
     height: 16px;
     margin: 0;
+}
+
+@media (max-width: 640px) {
+    .watch-ranking-header {
+        padding: 16px 14px 12px;
+        flex-direction: column;
+    }
+
+    .watch-ranking-filter {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .watch-ranking-filter-select {
+        width: 100%;
+    }
+
+    .watch-ranking-item {
+        grid-template-columns: 38px 72px minmax(0, 1fr);
+        gap: 10px;
+        padding: 12px 14px;
+    }
+
+    .watch-ranking-rank {
+        width: 34px;
+        height: 34px;
+        font-size: 0.86rem;
+    }
+
+    .watch-ranking-thumb {
+        width: 72px;
+    }
+
+    .watch-ranking-item-title {
+        font-size: 0.86rem;
+    }
+
+    .watch-ranking-item-meta {
+        font-size: 0.74rem;
+    }
+}
+
+.watch-ranking-count-badge {
+    color: #666;
+    gap: 7px;
+}
+
+.watch-ranking-count-icon {
+    width: 17px;
+    height: 17px;
+    color: #707070;
+}
+
+.watch-ranking-count-number {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #666;
 }
 
 .share-inline-action {
@@ -4448,7 +4857,7 @@ body.filter-modal-open .add-toast {
     .home-share-shortcut {
         min-height: 48px;
         font-size: var(--fs-body-md);
-        margin: 0 0 14px;
+        margin: 0 0 42px;
     }
 
     .onboarding-main {

@@ -1,7 +1,8 @@
 export const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
 export const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
 
-const STORAGE_SCHEMA_VERSION = 2;
+const STORAGE_SCHEMA_VERSION = 3;
+const MIN_SUPPORTED_STORAGE_SCHEMA_VERSION = 2;
 const STORAGE_WRITE_VARIANTS = ['full', 'compact', 'minimal'];
 
 const hasLocalStorage = () => (
@@ -96,13 +97,15 @@ const serializeAnimeEntry = (anime, variant = 'full') => {
     isMinimal ? '' : normalizeString(anime.bannerImage),
     isCompact ? '' : normalizeString(anime.description),
     normalizeFiniteNumber(anime.rating),
+    normalizeFiniteNumber(anime.watchCount),
     normalizeFiniteNumber(anime.addedAt),
     normalizeFiniteNumber(anime.bookmarkedAt),
   ];
 };
 
-const deserializeAnimeEntry = (entry) => {
+const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) => {
   if (Array.isArray(entry)) {
+    const isCurrentSchema = Number(schemaVersion) >= STORAGE_SCHEMA_VERSION;
     const [
       id,
       titleNative,
@@ -125,9 +128,14 @@ const deserializeAnimeEntry = (entry) => {
       bannerImage,
       description,
       rating,
-      addedAt,
-      bookmarkedAt,
+      legacyOrWatchCount,
+      legacyAddedAt,
+      legacyBookmarkedAt,
     ] = entry;
+
+    const watchCount = isCurrentSchema ? legacyOrWatchCount : null;
+    const addedAt = isCurrentSchema ? legacyAddedAt : legacyOrWatchCount;
+    const bookmarkedAt = isCurrentSchema ? legacyBookmarkedAt : legacyAddedAt;
 
     const anime = {
       id: normalizeFiniteNumber(id),
@@ -157,6 +165,7 @@ const deserializeAnimeEntry = (entry) => {
       bannerImage: normalizeString(bannerImage),
       description: normalizeString(description),
       rating: normalizeFiniteNumber(rating),
+      watchCount: normalizeFiniteNumber(watchCount),
       addedAt: normalizeFiniteNumber(addedAt),
       bookmarkedAt: normalizeFiniteNumber(bookmarkedAt),
     };
@@ -182,7 +191,8 @@ const serializeListPayload = (list, variant = 'full') => JSON.stringify({
 const shouldUseCompactStoragePayload = (parsed) => (
   parsed
   && typeof parsed === 'object'
-  && Number(parsed.version) === STORAGE_SCHEMA_VERSION
+  && Number(parsed.version) >= MIN_SUPPORTED_STORAGE_SCHEMA_VERSION
+  && Number(parsed.version) <= STORAGE_SCHEMA_VERSION
   && Array.isArray(parsed.items)
 );
 
@@ -196,7 +206,7 @@ export const readListFromStorage = (key) => {
 
     if (shouldUseCompactStoragePayload(parsed)) {
       return parsed.items
-        .map((item) => deserializeAnimeEntry(item))
+        .map((item) => deserializeAnimeEntry(item, parsed.version))
         .filter(Boolean);
     }
 

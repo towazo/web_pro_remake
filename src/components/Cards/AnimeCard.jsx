@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
+import WatchCountBadge from '../Shared/WatchCountBadge';
+import { normalizeAnimeWatchCount } from '../../utils/animeList';
 
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
@@ -19,13 +21,20 @@ function AnimeCard({
   onToggleSelect,
   onLongPress,
   onUpdateRating,
+  onUpdateWatchCount,
   allowRatingEditInSelectionMode = false,
+  allowWatchCountEditInSelectionMode = false,
 }) {
+  const cardRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
+  const [isWatchControlsPinned, setIsWatchControlsPinned] = useState(false);
   const rating = normalizeRating(anime?.rating);
+  const watchCount = normalizeAnimeWatchCount(anime?.watchCount, { minimum: 1, defaultValue: 1 });
   const canEditRating = typeof onUpdateRating === 'function'
     && (!isSelectionMode || allowRatingEditInSelectionMode);
+  const canEditWatchCount = typeof onUpdateWatchCount === 'function'
+    && (!isSelectionMode || allowWatchCountEditInSelectionMode);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -37,6 +46,36 @@ function AnimeCard({
   useEffect(() => {
     return () => clearLongPressTimer();
   }, []);
+
+  useEffect(() => {
+    if (!canEditWatchCount) {
+      setIsWatchControlsPinned(false);
+    }
+  }, [canEditWatchCount]);
+
+  useEffect(() => {
+    if (!isWatchControlsPinned) return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      const currentCard = cardRef.current;
+      if (!currentCard) return;
+      if (currentCard.contains(event.target)) return;
+      setIsWatchControlsPinned(false);
+    };
+
+    const handleDocumentKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsWatchControlsPinned(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown);
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown);
+      document.removeEventListener('keydown', handleDocumentKeyDown);
+    };
+  }, [isWatchControlsPinned]);
 
   const startLongPress = () => {
     clearLongPressTimer();
@@ -91,8 +130,26 @@ function AnimeCard({
     onUpdateRating(anime.id, null);
   };
 
+  const handleWatchPointerDown = (event) => {
+    event.stopPropagation();
+  };
+
+  const handleToggleWatchControls = (event) => {
+    event.stopPropagation();
+    if (!canEditWatchCount) return;
+    setIsWatchControlsPinned((prev) => !prev);
+  };
+
+  const handleWatchCountChange = (event, nextValue) => {
+    event.stopPropagation();
+    if (!canEditWatchCount) return;
+    onUpdateWatchCount(anime.id, nextValue);
+    setIsWatchControlsPinned(false);
+  };
+
   return (
     <div
+      ref={cardRef}
       className={`anime-card${isSelectionMode ? ' selection-mode' : ''}${isSelected ? ' selected' : ''}`}
       onPointerDown={handleCardPointerDown}
       onPointerUp={cancelLongPress}
@@ -174,6 +231,59 @@ function AnimeCard({
               <span className="card-rating-clear-label-compact">✕</span>
             </button>
           </div>
+        </div>
+        <div className={`card-watch-section${canEditWatchCount ? ' editable' : ''}${isWatchControlsPinned ? ' controls-open' : ''}`}>
+          {canEditWatchCount ? (
+            <button
+              type="button"
+              className="card-watch-summary"
+              onPointerDown={handleWatchPointerDown}
+              onClick={handleToggleWatchControls}
+              aria-expanded={isWatchControlsPinned}
+              aria-label={`視聴回数 ${watchCount}回。タップで変更ボタンを表示`}
+            >
+              <WatchCountBadge
+                count={watchCount}
+                className="card-watch-badge"
+                iconClassName="card-watch-icon"
+                countClassName="card-watch-count"
+              />
+              <span className="card-watch-underline" aria-hidden="true" />
+            </button>
+          ) : (
+            <div className="card-watch-summary static" aria-label={`視聴回数 ${watchCount}回`}>
+              <WatchCountBadge
+                count={watchCount}
+                className="card-watch-badge"
+                iconClassName="card-watch-icon"
+                countClassName="card-watch-count"
+              />
+              <span className="card-watch-underline" aria-hidden="true" />
+            </div>
+          )}
+          {canEditWatchCount && (
+            <div className="card-watch-controls">
+              <button
+                type="button"
+                className="card-watch-adjust"
+                onPointerDown={handleWatchPointerDown}
+                onClick={(event) => handleWatchCountChange(event, watchCount - 1)}
+                disabled={watchCount <= 1}
+                aria-label="視聴回数を1減らす"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="card-watch-adjust"
+                onPointerDown={handleWatchPointerDown}
+                onClick={(event) => handleWatchCountChange(event, watchCount + 1)}
+                aria-label="視聴回数を1増やす"
+              >
+                ＋
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
