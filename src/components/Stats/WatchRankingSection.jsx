@@ -58,7 +58,6 @@ function WatchRankingSection({ animeList = [] }) {
 
         const addedAtDiff = (Number(right?.addedAt) || 0) - (Number(left?.addedAt) || 0);
         if (addedAtDiff !== 0) return addedAtDiff;
-
         return resolveAnimeTitle(left).localeCompare(resolveAnimeTitle(right), 'ja');
       })
       .slice(0, MAX_RANKING_ITEMS);
@@ -106,7 +105,7 @@ function WatchRankingSection({ animeList = [] }) {
       </div>
 
       <div className="watch-ranking-list">
-        {rankingItems.map((anime, index) => (
+        {rankingItems.map((anime) => (
           <article key={anime.id} className="watch-ranking-item">
             <div className={`watch-ranking-rank rank-${anime.displayRank}`}>
               {anime.displayRank}

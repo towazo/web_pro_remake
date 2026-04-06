@@ -2897,7 +2897,7 @@ button.card-watch-summary {
 }
 
 .anime-filter-panel {
-    margin: 0 0 16px;
+    margin: 0 0 24px;
 }
 
 .anime-filter-toolbar {
@@ -2905,6 +2905,33 @@ button.card-watch-summary {
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+.anime-filter-toolbar .anime-sort-control {
+    min-width: 0;
+    box-shadow: none;
+    background: #fff;
+}
+
+.anime-filter-toolbar .anime-sort-control select {
+    height: 40px;
+    padding: 0 34px 0 12px;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.anime-filter-toolbar .anime-sort-control .anime-sort-order-button {
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 10px;
+    font-size: 0.92rem;
+    background: #fff;
+}
+
+.anime-filter-toolbar .anime-sort-control .anime-sort-order-button:hover {
+    background: #f2f4f7;
 }
 
 .anime-filter-loading-inline {
@@ -3414,10 +3441,31 @@ body.filter-modal-open .add-toast {
         align-items: flex-start;
     }
 
+    .anime-filter-toolbar.has-toolbar-supplement {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: stretch;
+        column-gap: 8px;
+        row-gap: 8px;
+    }
+
     .anime-filter-open-button,
     .anime-filter-reset-button {
         width: auto;
         justify-content: center;
+    }
+
+    .anime-filter-toolbar.has-toolbar-supplement .anime-sort-control {
+        width: 100%;
+    }
+
+    .anime-filter-toolbar.has-toolbar-supplement .anime-sort-control select {
+        width: 100%;
+    }
+
+    .anime-filter-toolbar.has-toolbar-supplement .anime-filter-reset-button {
+        grid-column: 1 / -1;
+        justify-self: start;
     }
 
     .anime-filter-modal-backdrop {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AnimeCard from '../Cards/AnimeCard';
 import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
+import AnimeSortControl from '../Shared/AnimeSortControl';
 import {
   ANIME_SORT_OPTIONS,
   buildFilteredAnimeList,
@@ -1029,8 +1030,6 @@ function ShareScreen({
     setSelectedYear(String(nextFilters?.selectedYear || '').trim());
     setMinRating(nextFilters?.minRating || '');
     setFilterMatchMode(nextFilters?.matchMode || 'and');
-    setSortKey(nextFilters?.sortKey || 'added');
-    setSortOrder(nextFilters?.sortOrder === 'asc' ? 'asc' : 'desc');
   };
 
   const handleClearFilters = () => {
@@ -1039,8 +1038,6 @@ function ShareScreen({
     setSelectedYear('');
     setMinRating('');
     setFilterMatchMode('and');
-    setSortKey('added');
-    setSortOrder('desc');
   };
 
   const handleToggleAnimeSelection = (animeId) => {
@@ -1373,15 +1370,13 @@ function ShareScreen({
         <AnimeFilterDialog
           contextId={`share-${mode}`}
           title="共有候補の絞り込み"
-          emptySummaryText="ジャンル・タグ・放送年・評価・並び替えを設定できます。"
-          helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年・評価・並び替えは追加条件として扱います。"
+          emptySummaryText="ジャンル・タグ・放送年・評価を設定できます。"
+          helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
           appliedGenres={selectedGenres}
           appliedTags={selectedTags}
           appliedYear={selectedYear}
           appliedMinRating={minRating}
           appliedMatchMode={filterMatchMode}
-          appliedSortKey={sortKey}
-          appliedSortOrder={sortOrder}
           availableGenres={uniqueGenres}
           availableTags={uniqueTags}
           availableYears={uniqueYears}
@@ -1389,11 +1384,16 @@ function ShareScreen({
           loadingTagsText="タグ候補を取得中です…"
           showSeasons={false}
           showMinRating
-          showSort
-          sortOptions={ANIME_SORT_OPTIONS}
-          includeSortChip
-          defaultSortKey="added"
-          defaultSortOrder="desc"
+          toolbarSupplement={(
+            <AnimeSortControl
+              sortKey={sortKey}
+              sortOrder={sortOrder}
+              options={ANIME_SORT_OPTIONS}
+              onSortKeyChange={setSortKey}
+              onSortOrderChange={setSortOrder}
+              selectAriaLabel="共有候補の並び替え"
+            />
+          )}
           onApply={handleApplyFilters}
           onClear={handleClearFilters}
         />

@@ -31,6 +31,7 @@ import AddAnimeScreen from './components/AddAnime/AddAnimeScreen';
 import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
 import ShareScreen from './components/Share/ShareScreen';
 import AnimeFilterDialog from './components/Shared/AnimeFilterDialog';
+import AnimeSortControl from './components/Shared/AnimeSortControl';
 import {
   readHomeStatsCardBackgroundsFromStorage,
   sanitizeHomeStatsCardBackgrounds,
@@ -685,8 +686,6 @@ function App() {
     setSelectedYear(String(nextFilters?.selectedYear || '').trim());
     setMinRating(nextFilters?.minRating || '');
     setFilterMatchMode(nextFilters?.matchMode || 'and');
-    setSortKey(nextFilters?.sortKey || 'added');
-    setSortOrder(nextFilters?.sortOrder === 'asc' ? 'asc' : 'desc');
   };
 
   const handleClearMyListFilters = () => {
@@ -695,8 +694,6 @@ function App() {
     setSelectedYear('');
     setMinRating('');
     setFilterMatchMode('and');
-    setSortKey('added');
-    setSortOrder('desc');
   };
 
   // 5. Data Derived States (Filters/Computed)
@@ -960,15 +957,13 @@ function App() {
             <AnimeFilterDialog
               contextId="mylist"
               title="絞り込み条件"
-              emptySummaryText="ジャンル・タグ・放送年・評価・並び替えを設定できます。"
-              helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年・評価・並び替えは追加条件として扱います。"
+              emptySummaryText="ジャンル・タグ・放送年・評価を設定できます。"
+              helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
               appliedGenres={selectedGenres}
               appliedTags={selectedTags}
               appliedYear={selectedYear}
               appliedMinRating={minRating}
               appliedMatchMode={filterMatchMode}
-              appliedSortKey={sortKey}
-              appliedSortOrder={sortOrder}
               availableGenres={uniqueGenres}
               availableTags={uniqueTags}
               availableYears={uniqueYears}
@@ -976,11 +971,16 @@ function App() {
               loadingTagsText="タグ候補を取得中です…"
               showSeasons={false}
               showMinRating
-              showSort
-              sortOptions={ANIME_SORT_OPTIONS}
-              includeSortChip
-              defaultSortKey="added"
-              defaultSortOrder="desc"
+              toolbarSupplement={(
+                <AnimeSortControl
+                  sortKey={sortKey}
+                  sortOrder={sortOrder}
+                  options={ANIME_SORT_OPTIONS}
+                  onSortKeyChange={setSortKey}
+                  onSortOrderChange={setSortOrder}
+                  selectAriaLabel="マイリストの並び替え"
+                />
+              )}
               onApply={handleApplyMyListFilters}
               onClear={handleClearMyListFilters}
             />

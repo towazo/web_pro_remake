@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
 import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
+import AnimeSortControl from '../Shared/AnimeSortControl';
 import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
+import {
+  ANIME_SORT_OPTIONS,
+} from '../../utils/animeList';
 import {
   collectAnimeFilterOptions,
   filterAnimeCollection,
@@ -366,24 +370,6 @@ function BookmarkScreen({
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
             </div>
-
-            <div className="sort-box">
-              <select value={sortKey} onChange={(event) => setSortKey(event.target.value)}>
-                <option value="added">追加順</option>
-                <option value="title">タイトル順</option>
-                <option value="year">放送年順</option>
-                <option value="rating">評価順</option>
-              </select>
-              <button
-                type="button"
-                className="sort-order-button"
-                onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-                title={sortOrder === 'asc' ? '昇順' : '降順'}
-                aria-label={sortOrder === 'asc' ? '昇順で並び替え' : '降順で並び替え'}
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
           </div>
 
           <AnimeFilterDialog
@@ -402,6 +388,16 @@ function BookmarkScreen({
             loadingTagsText="タグ候補を取得中です…"
             showSeasons={false}
             showMinRating={false}
+            toolbarSupplement={(
+              <AnimeSortControl
+                sortKey={sortKey}
+                sortOrder={sortOrder}
+                options={ANIME_SORT_OPTIONS}
+                onSortKeyChange={setSortKey}
+                onSortOrderChange={setSortOrder}
+                selectAriaLabel="ブックマークの並び替え"
+              />
+            )}
             onApply={handleApplyFilters}
             onClear={handleClearFilters}
           />
