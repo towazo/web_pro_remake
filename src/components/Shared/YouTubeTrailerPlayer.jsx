@@ -75,6 +75,9 @@ function YouTubeTrailerPlayer({
     playbackRetryTimeoutIdsRef.current = [
       window.setTimeout(attemptPlay, 140),
       window.setTimeout(attemptPlay, 420),
+      window.setTimeout(attemptPlay, 900),
+      window.setTimeout(attemptPlay, 1600),
+      window.setTimeout(attemptPlay, 2600),
     ];
   };
 
@@ -141,10 +144,11 @@ function YouTubeTrailerPlayer({
             },
             onStateChange: (event) => {
               playbackStateRef.current = Number(event?.data);
-              if (
-                event?.data === YT.PlayerState.BUFFERING
-                || event?.data === YT.PlayerState.PLAYING
-              ) {
+              if (event?.data === YT.PlayerState.BUFFERING) {
+                setIsPlaybackVisible(true);
+              }
+
+              if (event?.data === YT.PlayerState.PLAYING) {
                 setIsPlaybackVisible(true);
                 syncDesiredMuteState(event.target, { forceUnmute: true });
               }
