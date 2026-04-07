@@ -9,11 +9,6 @@ function TrailerPlayButton({ anime, onPlayTrailer, className = '' }) {
     autoProbe: typeof onPlayTrailer === 'function',
     timeoutMs: 5200,
   });
-
-  if (typeof onPlayTrailer !== 'function' || !canRenderTrailer) {
-    return null;
-  }
-
   const title = resolveAnimeTitle(anime);
 
   useEffect(() => {
@@ -23,6 +18,10 @@ function TrailerPlayButton({ anime, onPlayTrailer, className = '' }) {
   useEffect(() => () => {
     isMountedRef.current = false;
   }, []);
+
+  if (typeof onPlayTrailer !== 'function' || !canRenderTrailer) {
+    return null;
+  }
 
   const handlePointerDown = (event) => {
     event.stopPropagation();
