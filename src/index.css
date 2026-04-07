@@ -528,12 +528,12 @@ body {
 
 .home-quick-add-tile {
     border-color: #96a0ad;
-    background: linear-gradient(180deg, #edf1f5 0%, #dde3ea 100%);
+    background: #ffffff;
     box-shadow: 0 12px 22px rgba(56, 62, 70, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.42);
 }
 
 .home-quick-add-tile:hover {
-    background: linear-gradient(180deg, #f4f6f9 0%, #e4e8ee 100%);
+    background: #fafbfd;
     border-color: #76818e;
     box-shadow: 0 16px 26px rgba(56, 62, 70, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
 }

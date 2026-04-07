@@ -110,6 +110,9 @@ function HomeStatsCustomizeScreen({
   };
 
   const handleClearSingleBackground = (cardKey) => {
+    const confirmed = window.confirm('選択したカードの背景をリセットしますか？');
+    if (!confirmed) return;
+
     setDraftBackgrounds((prev) => ({
       ...prev,
       [cardKey]: {
@@ -151,6 +154,9 @@ function HomeStatsCustomizeScreen({
   };
 
   const handleResetAllBackgrounds = () => {
+    const confirmed = window.confirm('上部バナー背景の設定をすべてリセットしますか？');
+    if (!confirmed) return;
+
     setDraftBackgrounds(createEmptyHomeStatsCardBackgrounds());
     setNotice({ type: 'success', message: 'すべての背景を初期状態に戻しました。' });
   };

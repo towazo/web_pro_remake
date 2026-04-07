@@ -123,6 +123,9 @@ function HomeQuickActionsCustomizeScreen({
   };
 
   const handleClearSingleBackground = (tileKey) => {
+    const confirmed = window.confirm('選択した背景をリセットしますか？');
+    if (!confirmed) return;
+
     setDraftBackgrounds((prev) => ({
       ...prev,
       [tileKey]: {
@@ -190,6 +193,9 @@ function HomeQuickActionsCustomizeScreen({
   };
 
   const handleResetAllBackgrounds = () => {
+    const confirmed = window.confirm('クイック操作の背景設定をすべてリセットしますか？');
+    if (!confirmed) return;
+
     setDraftBackgrounds(createEmptyHomeQuickActionBackgrounds());
     setNotice({ type: 'success', message: 'クイック操作の背景を初期状態に戻しました。' });
   };
