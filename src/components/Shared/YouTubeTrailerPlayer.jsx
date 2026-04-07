@@ -19,15 +19,39 @@ function YouTubeTrailerPlayer({
   const hostRef = useRef(null);
   const playerRef = useRef(null);
   const readyRef = useRef(false);
+  const playbackRetryTimeoutIdsRef = useRef([]);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
   const videoId = normalizedTrailer?.id || '';
+
+  const clearPlaybackRetryTimeouts = () => {
+    playbackRetryTimeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    playbackRetryTimeoutIdsRef.current = [];
+  };
+
+  const requestPlaybackResume = (player) => {
+    if (!autoplay || !player) return;
+
+    const attemptPlay = () => {
+      try {
+        player.playVideo();
+      } catch (_) {
+        // Ignore autoplay failures.
+      }
+    };
+
+    attemptPlay();
+    clearPlaybackRetryTimeouts();
+    playbackRetryTimeoutIdsRef.current = [
+      window.setTimeout(attemptPlay, 140),
+      window.setTimeout(attemptPlay, 420),
+    ];
+  };
 
   useEffect(() => {
     if (!videoId || !hostRef.current) return undefined;
 
     let cancelled = false;
     let localPlayer = null;
-    const autoplayRetryTimeoutIds = [];
 
     const createPlayer = async () => {
       try {
@@ -45,6 +69,7 @@ function YouTubeTrailerPlayer({
             iv_load_policy: 3,
             loop: loop ? 1 : 0,
             modestbranding: 1,
+            mute: muted ? 1 : 0,
             playsinline: 1,
             playlist: loop ? videoId : undefined,
             rel: 0,
@@ -66,26 +91,20 @@ function YouTubeTrailerPlayer({
                 // Ignore mute sync failures.
               }
 
-              if (autoplay) {
-                const attemptAutoplay = () => {
-                  try {
-                    event.target.playVideo();
-                  } catch (_) {
-                    // Ignore autoplay failures.
-                  }
-                };
-
-                try {
-                  attemptAutoplay();
-                } catch (_) {
-                  // Ignore autoplay failures.
-                }
-
-                autoplayRetryTimeoutIds.push(window.setTimeout(attemptAutoplay, 140));
-                autoplayRetryTimeoutIds.push(window.setTimeout(attemptAutoplay, 420));
-              }
+              requestPlaybackResume(event.target);
 
               markAnimeTrailerPlayable(normalizedTrailer);
+            },
+            onStateChange: (event) => {
+              if (!loop) return;
+              if (event?.data !== YT.PlayerState.ENDED) return;
+
+              try {
+                event.target.seekTo(0, true);
+              } catch (_) {
+                // Ignore seek failures.
+              }
+              requestPlaybackResume(event.target);
             },
             onError: (event) => {
               if (cancelled) return;
@@ -110,7 +129,7 @@ function YouTubeTrailerPlayer({
     return () => {
       cancelled = true;
       readyRef.current = false;
-      autoplayRetryTimeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      clearPlaybackRetryTimeouts();
       if (localPlayer) {
         try {
           localPlayer.destroy();
@@ -138,7 +157,8 @@ function YouTubeTrailerPlayer({
     } catch (_) {
       // Ignore mute sync failures.
     }
-  }, [muted, videoId]);
+    requestPlaybackResume(player);
+  }, [autoplay, muted, videoId]);
 
   return (
     <div className={`youtube-trailer-player${className ? ` ${className}` : ''}`.trim()}>

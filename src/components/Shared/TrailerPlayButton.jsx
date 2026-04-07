@@ -2,12 +2,12 @@ import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 import { resolveAnimeTitle } from '../../utils/animeList';
 
 function TrailerPlayButton({ anime, onPlayTrailer, className = '' }) {
-  const { isTrailerPlayable } = useTrailerPlaybackStatus(anime, {
+  const { canRenderTrailer } = useTrailerPlaybackStatus(anime, {
     autoProbe: typeof onPlayTrailer === 'function',
     timeoutMs: 5200,
   });
 
-  if (typeof onPlayTrailer !== 'function' || !isTrailerPlayable) {
+  if (typeof onPlayTrailer !== 'function' || !canRenderTrailer) {
     return null;
   }
 

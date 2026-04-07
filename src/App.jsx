@@ -192,6 +192,10 @@ function App() {
   const detailEnrichmentAttemptedIdsRef = useRef(new Set());
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
+  const featuredSliderAnimeKey = useMemo(
+    () => animeList.map((anime) => String(anime?.id ?? '')).join('|'),
+    [animeList]
+  );
 
   const navigateTo = (nextView, options = {}) => {
     if (!APP_VIEW_SET.has(nextView)) return;
@@ -257,6 +261,7 @@ function App() {
         const hasLocalData = animeList.length > 0 || bookmarkList.length > 0;
 
         if (hasRemoteData) {
+          detailEnrichmentAttemptedIdsRef.current.clear();
           setAnimeList(remoteAnimeList);
           setBookmarkList(remoteBookmarkList);
         } else if (hasLocalData) {
@@ -331,7 +336,7 @@ function App() {
     }
     setIsRefreshingFeatured(false);
     setFeaturedSliderState(buildFeaturedSliderState(animeList));
-  }, [animeList]);
+  }, [featuredSliderAnimeKey]);
 
   useEffect(() => () => {
     if (featuredRefreshTimerRef.current) {
