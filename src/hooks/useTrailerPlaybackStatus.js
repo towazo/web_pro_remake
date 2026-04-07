@@ -11,6 +11,7 @@ import {
 const pendingProbeMap = new Map();
 const probeTaskQueue = [];
 const MAX_CONCURRENT_PROBES = 2;
+const MIN_YOUTUBE_PLAYER_VIEWPORT_PX = 200;
 let activeProbeCount = 0;
 
 const runQueuedProbes = () => {
@@ -37,12 +38,13 @@ const createProbeContainer = () => {
   const node = document.createElement('div');
   node.setAttribute('aria-hidden', 'true');
   node.style.position = 'fixed';
-  node.style.width = '1px';
-  node.style.height = '1px';
+  node.style.width = `${MIN_YOUTUBE_PLAYER_VIEWPORT_PX}px`;
+  node.style.height = `${MIN_YOUTUBE_PLAYER_VIEWPORT_PX}px`;
   node.style.opacity = '0';
   node.style.pointerEvents = 'none';
   node.style.left = '-9999px';
   node.style.top = '0';
+  node.style.overflow = 'hidden';
   document.body.appendChild(node);
   return node;
 };

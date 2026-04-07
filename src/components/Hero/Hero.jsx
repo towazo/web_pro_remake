@@ -180,6 +180,11 @@ function Hero({
             .filter(Boolean)
             .join(', ')
         : '';
+    const mediaImageSizes = shouldRenderTrailerPreview
+        ? "(max-width: 480px) calc(100vw - 28px), (max-width: 768px) calc(100vw - 36px), (min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
+        : hasBannerImage
+            ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
+            : "(max-width: 768px) 42vw, 220px";
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive && canInlinePreview === true && !isAutoplayBlocked;
     const shouldShowTrailerFallback = shouldRenderTrailerPreview && isActive && (canInlinePreview === false || isAutoplayBlocked);
     const trailerFallbackNote = canInlinePreview === false
@@ -250,9 +255,7 @@ function Hero({
                     <img
                         src={mediaImageSrc}
                         srcSet={hasBannerImage ? undefined : (heroImageSrcSet || undefined)}
-                        sizes={hasBannerImage
-                            ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
-                            : "(max-width: 768px) 42vw, 220px"}
+                        sizes={mediaImageSizes}
                         alt=""
                         className={`hero-media-image ${hasBannerImage ? 'banner-media-image' : 'poster-media-image'}`}
                         decoding="async"

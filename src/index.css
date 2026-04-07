@@ -1962,6 +1962,7 @@ button.card-watch-summary {
 
 .hero-media-panel.has-trailer-preview {
     min-height: 200px;
+    overflow: hidden;
 }
 
 .hero-slider-container .hero.poster-only-slide .hero-content,
@@ -2149,6 +2150,17 @@ button.card-watch-summary {
         margin: 0;
     }
 
+    .hero-media-panel.has-trailer-preview {
+        --hero-trailer-mobile-height: clamp(200px, 56vw, 248px);
+        min-height: var(--hero-trailer-mobile-height);
+    }
+
+    .hero-media-panel.has-trailer-preview .hero-media-image {
+        height: var(--hero-trailer-mobile-height);
+        min-height: var(--hero-trailer-mobile-height);
+        aspect-ratio: auto;
+    }
+
     .hero-media-panel.banner-media {
         max-width: min(520px, 100%);
     }
@@ -2185,6 +2197,10 @@ button.card-watch-summary {
         margin: 0;
     }
 
+    .hero-media-panel.has-trailer-preview {
+        --hero-trailer-mobile-height: clamp(200px, 62vw, 228px);
+    }
+
     .hero-media-panel.banner-media {
         max-width: 100%;
     }
@@ -2197,14 +2213,14 @@ button.card-watch-summary {
 
 @media (max-width: 768px) {
     .hero-slider-container .hero {
-        padding: 60px 30px;
+        padding: 56px 18px 36px;
         min-height: 400px;
     }
 }
 
 @media (max-width: 480px) {
     .hero-slider-container .hero {
-        padding: 60px 20px 40px;
+        padding: 52px 14px 32px;
         min-height: 320px;
     }
 }
