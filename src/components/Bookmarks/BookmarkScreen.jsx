@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
 import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
 import AnimeSortControl from '../Shared/AnimeSortControl';
+import TrailerPlayButton from '../Shared/TrailerPlayButton';
 import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
 import {
   ANIME_SORT_OPTIONS,
@@ -34,6 +35,7 @@ function BookmarkScreen({
   onToggleBookmark,
   onMarkWatched,
   onBulkRemoveBookmarks,
+  onPlayTrailer,
 }) {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedBookmarkIds, setSelectedBookmarkIds] = useState([]);
@@ -467,9 +469,18 @@ function BookmarkScreen({
                 )}
                 <div className="bookmark-item-content">
                   <h3 className="bookmark-item-title">{title}</h3>
-                  <div className="bookmark-item-meta">
-                    <span>{anime?.seasonYear || '-'}</span>
-                    {anime?.format && <span>{anime.format}</span>}
+                  <div className="bookmark-item-meta-row">
+                    <div className="bookmark-item-meta">
+                      <span>{anime?.seasonYear || '-'}</span>
+                      {anime?.format && <span>{anime.format}</span>}
+                    </div>
+                    {!isSelectionMode && (
+                      <TrailerPlayButton
+                        anime={anime}
+                        onPlayTrailer={onPlayTrailer}
+                        className="bookmark-trailer-button"
+                      />
+                    )}
                   </div>
                   <div className="bookmark-item-genres">
                     {(anime?.genres || []).slice(0, 3).map((g) => translateGenre(g)).join(' / ')}

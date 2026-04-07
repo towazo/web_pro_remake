@@ -9,6 +9,7 @@ import {
 } from '../../services/animeService';
 import { translateGenre } from '../../constants/animeData';
 import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
+import TrailerPlayButton from '../Shared/TrailerPlayButton';
 import {
     collectAnimeFilterOptions,
     filterAnimeCollection,
@@ -416,6 +417,7 @@ function AddAnimeScreen({
     onBack,
     animeList = [],
     bookmarkList = [],
+    onPlayTrailer,
     screenTitle = '作品の追加',
     screenSubtitle = 'マイリストやブックマークに追加する作品を探せます。',
     backButtonLabel = '← ホームへ戻る',
@@ -4258,9 +4260,16 @@ function AddAnimeScreen({
                                                         <img src={anime.coverImage?.large} alt="" className="browse-card-thumb" />
                                                         <div className="browse-card-content">
                                                             <h4 className="browse-card-title">{displayTitle}</h4>
-                                                            <div className="browse-card-meta">
-                                                                <span>{anime.seasonYear || selectedBrowseYear}年</span>
-                                                                {anime.format && <span>{anime.format}</span>}
+                                                            <div className="browse-card-meta-row">
+                                                                <div className="browse-card-meta">
+                                                                    <span>{anime.seasonYear || selectedBrowseYear}年</span>
+                                                                    {anime.format && <span>{anime.format}</span>}
+                                                                </div>
+                                                                <TrailerPlayButton
+                                                                    anime={anime}
+                                                                    onPlayTrailer={onPlayTrailer}
+                                                                    className="browse-trailer-button"
+                                                                />
                                                             </div>
                                                             <div className="browse-card-genres">
                                                                 {(anime.genres || []).slice(0, 3).map((g) => translateGenre(g)).join(' / ')}

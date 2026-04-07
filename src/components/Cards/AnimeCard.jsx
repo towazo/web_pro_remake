@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
 import WatchCountBadge from '../Shared/WatchCountBadge';
 import { normalizeAnimeWatchCount } from '../../utils/animeList';
+import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
@@ -24,6 +25,7 @@ function AnimeCard({
   onUpdateWatchCount,
   allowRatingEditInSelectionMode = false,
   allowWatchCountEditInSelectionMode = false,
+  onPlayTrailer,
 }) {
   const cardRef = useRef(null);
   const longPressTimerRef = useRef(null);
@@ -35,6 +37,11 @@ function AnimeCard({
     && (!isSelectionMode || allowRatingEditInSelectionMode);
   const canEditWatchCount = typeof onUpdateWatchCount === 'function'
     && (!isSelectionMode || allowWatchCountEditInSelectionMode);
+  const { hasTrailer, isTrailerInvalid } = useTrailerPlaybackStatus(anime);
+  const canPlayTrailer = !isSelectionMode
+    && typeof onPlayTrailer === 'function'
+    && hasTrailer
+    && !isTrailerInvalid;
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -147,6 +154,16 @@ function AnimeCard({
     setIsWatchControlsPinned(false);
   };
 
+  const handleTrailerPointerDown = (event) => {
+    event.stopPropagation();
+  };
+
+  const handlePlayTrailer = (event) => {
+    event.stopPropagation();
+    if (!canPlayTrailer) return;
+    onPlayTrailer(anime);
+  };
+
   return (
     <div
       ref={cardRef}
@@ -233,34 +250,48 @@ function AnimeCard({
           </div>
         </div>
         <div className={`card-watch-section${canEditWatchCount ? ' editable' : ''}${isWatchControlsPinned ? ' controls-open' : ''}`}>
-          {canEditWatchCount ? (
-            <button
-              type="button"
-              className="card-watch-summary"
-              onPointerDown={handleWatchPointerDown}
-              onClick={handleToggleWatchControls}
-              aria-expanded={isWatchControlsPinned}
-              aria-label={`視聴回数 ${watchCount}回。タップで変更ボタンを${isWatchControlsPinned ? '閉じる' : '表示'}`}
-            >
-              <WatchCountBadge
-                count={watchCount}
-                className="card-watch-badge"
-                iconClassName="card-watch-icon"
-                countClassName="card-watch-count"
-              />
-              <span className="card-watch-underline" aria-hidden="true" />
-            </button>
-          ) : (
-            <div className="card-watch-summary static" aria-label={`視聴回数 ${watchCount}回`}>
-              <WatchCountBadge
-                count={watchCount}
-                className="card-watch-badge"
-                iconClassName="card-watch-icon"
-                countClassName="card-watch-count"
-              />
-              <span className="card-watch-underline" aria-hidden="true" />
-            </div>
-          )}
+          <div className="card-watch-primary">
+            {canPlayTrailer && (
+              <button
+                type="button"
+                className="card-trailer-button"
+                onPointerDown={handleTrailerPointerDown}
+                onClick={handlePlayTrailer}
+                aria-label={`${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを再生`}
+                title="公式トレーラーを再生"
+              >
+                <span className="card-trailer-icon" aria-hidden="true">▶</span>
+              </button>
+            )}
+            {canEditWatchCount ? (
+              <button
+                type="button"
+                className="card-watch-summary"
+                onPointerDown={handleWatchPointerDown}
+                onClick={handleToggleWatchControls}
+                aria-expanded={isWatchControlsPinned}
+                aria-label={`視聴回数 ${watchCount}回。タップで変更ボタンを${isWatchControlsPinned ? '閉じる' : '表示'}`}
+              >
+                <WatchCountBadge
+                  count={watchCount}
+                  className="card-watch-badge"
+                  iconClassName="card-watch-icon"
+                  countClassName="card-watch-count"
+                />
+                <span className="card-watch-underline" aria-hidden="true" />
+              </button>
+            ) : (
+              <div className="card-watch-summary static" aria-label={`視聴回数 ${watchCount}回`}>
+                <WatchCountBadge
+                  count={watchCount}
+                  className="card-watch-badge"
+                  iconClassName="card-watch-icon"
+                  countClassName="card-watch-count"
+                />
+                <span className="card-watch-underline" aria-hidden="true" />
+              </div>
+            )}
+          </div>
           {canEditWatchCount && (
             <div className="card-watch-controls">
               <button

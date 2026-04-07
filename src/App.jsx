@@ -32,6 +32,7 @@ import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
 import ShareScreen from './components/Share/ShareScreen';
 import AnimeFilterDialog from './components/Shared/AnimeFilterDialog';
 import AnimeSortControl from './components/Shared/AnimeSortControl';
+import TrailerModal from './components/Shared/TrailerModal';
 import {
   readHomeStatsCardBackgroundsFromStorage,
   sanitizeHomeStatsCardBackgrounds,
@@ -50,6 +51,12 @@ import {
   hasAnimeTagMetadata,
   normalizeAnimeTags,
 } from './utils/animeFilters';
+import {
+  canAttemptTrailerPlayback,
+  isSameAnimeTrailer,
+  normalizeAnimeTrailer,
+} from './utils/trailer';
+import { probeAnimeTrailerPlayback } from './hooks/useTrailerPlaybackStatus';
 
 const ONBOARDING_STEPS = [
   {
@@ -96,18 +103,25 @@ function App() {
   }).map((anime) => {
     const normalizedRating = normalizeAnimeRating(anime?.rating);
     const hasTagList = Array.isArray(anime?.tags);
+    const hasTrailerField = Object.prototype.hasOwnProperty.call(anime || {}, 'trailer');
     const hasDefaultWatchCount = Object.prototype.hasOwnProperty.call(options, 'defaultWatchCount');
     const normalizedWatchCount = normalizeAnimeWatchCount(anime?.watchCount, {
       minimum: options.minimumWatchCount ?? 0,
       ...(hasDefaultWatchCount ? { defaultValue: options.defaultWatchCount } : {}),
     });
+    const normalizedTrailer = normalizeAnimeTrailer(anime?.trailer);
     const currentWatchCount = Object.prototype.hasOwnProperty.call(anime || {}, 'watchCount')
       ? anime.watchCount
       : hasDefaultWatchCount
         ? undefined
         : null;
 
-    if ((anime?.rating ?? null) === normalizedRating && !hasTagList && currentWatchCount === normalizedWatchCount) {
+    if (
+      (anime?.rating ?? null) === normalizedRating
+      && !hasTagList
+      && currentWatchCount === normalizedWatchCount
+      && (!hasTrailerField || isSameAnimeTrailer(anime?.trailer, normalizedTrailer))
+    ) {
       return anime;
     }
 
@@ -119,6 +133,9 @@ function App() {
       delete nextAnime.watchCount;
     } else {
       nextAnime.watchCount = normalizedWatchCount;
+    }
+    if (hasTrailerField) {
+      nextAnime.trailer = normalizedTrailer;
     }
     return nextAnime;
   });
@@ -161,11 +178,12 @@ function App() {
   const [isOnboardingCurrentSeasonFlow, setIsOnboardingCurrentSeasonFlow] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [isRefreshingFeatured, setIsRefreshingFeatured] = useState(false);
+  const [activeTrailerAnime, setActiveTrailerAnime] = useState(null);
   const [isServerLibraryReady, setIsServerLibraryReady] = useState(false);
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
-  const tagEnrichmentAttemptedIdsRef = useRef(new Set());
+  const detailEnrichmentAttemptedIdsRef = useRef(new Set());
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
 
@@ -420,26 +438,51 @@ function App() {
   }, [animeList.length]);
 
   useEffect(() => {
+    setActiveTrailerAnime(null);
+  }, [view, isSelectionMode]);
+
+  useEffect(() => {
     const pendingIds = Array.from(new Set(
       [...animeList, ...bookmarkList]
-        .filter((anime) => anime?.id && !hasAnimeTagMetadata(anime))
+        .filter((anime) => (
+          anime?.id
+          && (
+            !hasAnimeTagMetadata(anime)
+            || !Object.prototype.hasOwnProperty.call(anime || {}, 'trailer')
+          )
+        ))
         .map((anime) => anime.id)
-    )).filter((id) => !tagEnrichmentAttemptedIdsRef.current.has(id));
+    )).filter((id) => !detailEnrichmentAttemptedIdsRef.current.has(id));
 
     if (pendingIds.length === 0) return undefined;
 
     const batchIds = pendingIds.slice(0, 12);
-    batchIds.forEach((id) => tagEnrichmentAttemptedIdsRef.current.add(id));
+    batchIds.forEach((id) => detailEnrichmentAttemptedIdsRef.current.add(id));
 
     let cancelled = false;
-    const applyEnrichedTags = (list, enrichedMap) => {
+    const applyEnrichedDetails = (list, enrichedMap) => {
       let changed = false;
       const nextList = list.map((anime) => {
-        if (hasAnimeTagMetadata(anime)) return anime;
         const enriched = enrichedMap.get(anime.id);
-        if (!enriched || !Array.isArray(enriched.tags)) return anime;
+        if (!enriched) return anime;
+
+        const nextAnime = { ...anime };
+        let hasChanges = false;
+
+        if (!hasAnimeTagMetadata(anime) && Array.isArray(enriched.tags)) {
+          nextAnime.tags = normalizeAnimeTags(enriched.tags);
+          hasChanges = true;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(anime || {}, 'trailer')
+          && Object.prototype.hasOwnProperty.call(enriched, 'trailer')) {
+          nextAnime.trailer = normalizeAnimeTrailer(enriched.trailer);
+          hasChanges = true;
+        }
+
+        if (!hasChanges) return anime;
         changed = true;
-        return { ...anime, tags: normalizeAnimeTags(enriched.tags) };
+        return nextAnime;
       });
       return changed ? nextList : list;
     };
@@ -455,13 +498,13 @@ function App() {
 
       const enrichedMap = new Map(
         results
-          .filter((anime) => anime && Array.isArray(anime.tags))
+          .filter((anime) => anime && (Array.isArray(anime.tags) || Object.prototype.hasOwnProperty.call(anime, 'trailer')))
           .map((anime) => [anime.id, anime])
       );
       if (enrichedMap.size === 0) return;
 
-      setAnimeList((prev) => applyEnrichedTags(prev, enrichedMap));
-      setBookmarkList((prev) => applyEnrichedTags(prev, enrichedMap));
+      setAnimeList((prev) => applyEnrichedDetails(prev, enrichedMap));
+      setBookmarkList((prev) => applyEnrichedDetails(prev, enrichedMap));
     };
 
     run();
@@ -510,6 +553,18 @@ function App() {
       setIsRefreshingFeatured(false);
       featuredRefreshTimerRef.current = null;
     }, 360);
+  };
+
+  const handleOpenTrailer = async (anime) => {
+    const trailer = normalizeAnimeTrailer(anime?.trailer);
+    if (!anime || !trailer || !canAttemptTrailerPlayback(trailer)) return;
+    const playable = await probeAnimeTrailerPlayback(trailer, { timeoutMs: 5600 });
+    if (!playable) return;
+    setActiveTrailerAnime({ ...anime, trailer });
+  };
+
+  const handleCloseTrailer = () => {
+    setActiveTrailerAnime(null);
   };
 
   const handleAddAnime = (data, options = {}) => {
@@ -874,6 +929,7 @@ function App() {
             onRemove={handleRemoveAnime}
             onToggleBookmark={handleToggleBookmark}
             bookmarkList={bookmarkList}
+            onPlayTrailer={handleOpenTrailer}
             onBack={() => navigateTo(addViewBackTarget)}
             animeList={animeList}
             screenTitle={addViewTitle}
@@ -895,6 +951,7 @@ function App() {
             onToggleBookmark={handleToggleBookmark}
             onMarkWatched={handleMarkBookmarkAsWatched}
             onBulkRemoveBookmarks={handleBulkRemoveBookmarks}
+            onPlayTrailer={handleOpenTrailer}
           />
         </main>
       ) : view === 'homeCustomize' ? (
@@ -1011,6 +1068,7 @@ function App() {
                   onLongPress={handleLongPressAnime}
                   onUpdateRating={handleUpdateAnimeRating}
                   onUpdateWatchCount={handleUpdateAnimeWatchCount}
+                  onPlayTrailer={handleOpenTrailer}
                 />
               ))}
             </div>
@@ -1149,6 +1207,8 @@ function App() {
       <footer className="app-footer">
         <p>AniTrigger &copy; 2025 - Data provided by AniList API</p>
       </footer>
+
+      <TrailerModal anime={activeTrailerAnime} onClose={handleCloseTrailer} />
 
       {view === 'mylist' && isSelectionMode && (
         <div className="selection-action-dock" role="region" aria-label="選択モード操作">

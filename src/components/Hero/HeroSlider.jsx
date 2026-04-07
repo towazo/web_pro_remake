@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Hero from './Hero';
 
-function HeroSlider({ slides, onRefresh, showRefreshButton = false, isRefreshing = false }) {
+function HeroSlider({
+    slides,
+    onRefresh,
+    showRefreshButton = false,
+    isRefreshing = false,
+}) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);

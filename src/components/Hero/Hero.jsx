@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
+import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
+import AudioToggleButton from '../Shared/AudioToggleButton';
+import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 
 const normalizeAnimeRating = (value) => {
     const parsed = Number(value);
@@ -25,42 +28,20 @@ const splitTutorialDescriptionLines = (value) => {
 function Hero({ anime, isActive }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
-
-    if (!anime) return null;
-
-    // Use a different structure if it's a tutorial slide
-    if (anime.isTutorial) {
-        const tutorialLines = splitTutorialDescriptionLines(anime.description);
-        return (
-            <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero`}>
-                <div className="hero-content tutorial-content">
-                    <span className="badge tutorial-badge">{anime.badge}</span>
-                    <h1 className="tutorial-title">{anime.title}</h1>
-                    <div className="hero-desc tutorial-desc">
-                        {tutorialLines.length > 0 ? (
-                            tutorialLines.map((line, index) => (
-                                <span key={`${anime.uniqueId || anime.id || 'tutorial'}-line-${index}`}>
-                                    {line}
-                                    {index < tutorialLines.length - 1 && <br />}
-                                </span>
-                            ))
-                        ) : (
-                            anime.description
-                        )}
-                    </div>
-                    {anime.image && (
-                        <div className="tutorial-image-wrapper">
-                            <img src={anime.image} alt="Tutorial" className="tutorial-image" />
-                        </div>
-                    )}
-                </div>
-            </section>
-        );
-    }
+    const [isPreviewMuted, setIsPreviewMuted] = useState(true);
+    const isTutorial = Boolean(anime?.isTutorial);
+    const {
+        trailer,
+        hasTrailer,
+        isTrailerPlayable,
+    } = useTrailerPlaybackStatus(anime, {
+        autoProbe: isActive && !isTutorial,
+        timeoutMs: 5200,
+    });
 
     // Effect to handle translation
     useEffect(() => {
-        if (!anime || anime.isTutorial) return;
+        if (!anime || isTutorial) return;
 
         async function loadDescription() {
             // Step 1: Check ANIME_DESCRIPTIONS dictionary
@@ -107,7 +88,39 @@ function Hero({ anime, isActive }) {
         }
 
         loadDescription();
-    }, [anime]);
+    }, [anime, isTutorial]);
+
+    if (!anime) return null;
+
+    // Use a different structure if it's a tutorial slide
+    if (isTutorial) {
+        const tutorialLines = splitTutorialDescriptionLines(anime.description);
+        return (
+            <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero`}>
+                <div className="hero-content tutorial-content">
+                    <span className="badge tutorial-badge">{anime.badge}</span>
+                    <h1 className="tutorial-title">{anime.title}</h1>
+                    <div className="hero-desc tutorial-desc">
+                        {tutorialLines.length > 0 ? (
+                            tutorialLines.map((line, index) => (
+                                <span key={`${anime.uniqueId || anime.id || 'tutorial'}-line-${index}`}>
+                                    {line}
+                                    {index < tutorialLines.length - 1 && <br />}
+                                </span>
+                            ))
+                        ) : (
+                            anime.description
+                        )}
+                    </div>
+                    {anime.image && (
+                        <div className="tutorial-image-wrapper">
+                            <img src={anime.image} alt="Tutorial" className="tutorial-image" />
+                        </div>
+                    )}
+                </div>
+            </section>
+        );
+    }
 
     // Determine final description to display
     const description = translatedDesc || anime.description || '詳細情報がありません。';
@@ -126,6 +139,11 @@ function Hero({ anime, isActive }) {
             .filter(Boolean)
             .join(', ')
         : '';
+    const shouldRenderTrailerPreview = isActive && hasTrailer && isTrailerPlayable;
+
+    useEffect(() => {
+        setIsPreviewMuted(true);
+    }, [isActive, anime?.id]);
 
     return (
         <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}`}>
@@ -185,7 +203,7 @@ function Hero({ anime, isActive }) {
             </div>
 
             {mediaImageSrc && (
-                <div className={`hero-media-panel ${hasBannerImage ? 'banner-media' : 'poster-media'}`}>
+                <div className={`hero-media-panel ${hasBannerImage ? 'banner-media' : 'poster-media'}${shouldRenderTrailerPreview ? ' has-trailer-preview' : ''}`}>
                     <img
                         src={mediaImageSrc}
                         srcSet={hasBannerImage ? undefined : (heroImageSrcSet || undefined)}
@@ -197,6 +215,26 @@ function Hero({ anime, isActive }) {
                         decoding="async"
                         loading={isActive ? 'eager' : 'lazy'}
                     />
+                    {shouldRenderTrailerPreview && trailer && (
+                        <div className="hero-media-preview ready">
+                            <YouTubeTrailerPlayer
+                                trailer={trailer}
+                                title={`${anime.title?.native || anime.title?.romaji || anime.title?.english || '作品'} のトレーラープレビュー`}
+                                className={`hero-media-preview-frame ${hasBannerImage ? 'banner-media-image' : 'poster-media-image'}`}
+                                autoplay
+                                loop
+                                controls={false}
+                                muted={isPreviewMuted}
+                            />
+                            <AudioToggleButton
+                                muted={isPreviewMuted}
+                                className="hero-media-audio-toggle"
+                                onClick={() => setIsPreviewMuted((prev) => !prev)}
+                                labelOn="トレーラーの音声をオンにする"
+                                labelOff="トレーラーの音声をオフにする"
+                            />
+                        </div>
+                    )}
                 </div>
             )}
         </section>

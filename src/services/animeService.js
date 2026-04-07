@@ -50,6 +50,11 @@ const ANIME_QUERY = `
       countryOfOrigin
       bannerImage
       description
+      trailer {
+        id
+        site
+        thumbnail
+      }
     }
   }
 `;
@@ -96,6 +101,11 @@ const ANIME_LIST_QUERY = `
         format
         countryOfOrigin
         description
+        trailer {
+          id
+          site
+          thumbnail
+        }
       }
     }
   }
@@ -134,6 +144,11 @@ const ANIME_BY_ID_QUERY = `
       countryOfOrigin
       bannerImage
       description
+      trailer {
+        id
+        site
+        thumbnail
+      }
     }
   }
 `;
@@ -199,6 +214,11 @@ const ANIME_BY_YEAR_QUERY = `
         format
         countryOfOrigin
         description
+        trailer {
+          id
+          site
+          thumbnail
+        }
       }
     }
   }
@@ -261,6 +281,11 @@ const ANIME_BY_START_DATE_QUERY = `
         format
         countryOfOrigin
         description
+        trailer {
+          id
+          site
+          thumbnail
+        }
       }
     }
   }
@@ -1044,6 +1069,7 @@ export const fetchAnimeDetailsByIds = async (ids, options = {}) => {
     'countryOfOrigin',
     'bannerImage',
     'description',
+    'trailer { id site thumbnail }',
   ].join('\n');
   const variables = {};
   const queryParts = safeIds.map((id, index) => {
@@ -1626,6 +1652,7 @@ export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
     'countryOfOrigin',
     'bannerImage',
     'description',
+    'trailer { id site thumbnail }',
   ].join('\n');
 
   const parts = safeTitles.map((_, idx) => {
