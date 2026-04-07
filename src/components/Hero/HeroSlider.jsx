@@ -24,10 +24,12 @@ function HeroSlider({
     if (!slides || slides.length === 0) return null;
 
     const nextSlide = () => {
+        setIsPreviewMuted(true);
         setCurrentIndex((prev) => (prev + 1) % slides.length);
     };
 
     const prevSlide = () => {
+        setIsPreviewMuted(true);
         setCurrentIndex((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
     };
 
@@ -113,7 +115,10 @@ function HeroSlider({
                                 key={index}
                                 type="button"
                                 className={`slider-dot ${index === currentIndex ? 'active' : ''}`}
-                                onClick={() => setCurrentIndex(index)}
+                                onClick={() => {
+                                    setIsPreviewMuted(true);
+                                    setCurrentIndex(index);
+                                }}
                                 aria-label={`${index + 1}枚目を表示`}
                             />
                         ))}

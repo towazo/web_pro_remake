@@ -38,6 +38,17 @@ function YouTubeTrailerPlayer({
     playbackRetryTimeoutIdsRef.current = [];
   };
 
+  const syncIframeAttributes = (player) => {
+    const iframe = player?.getIframe?.();
+    if (!iframe) return;
+
+    iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen');
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.setAttribute('playsinline', '1');
+    iframe.setAttribute('webkit-playsinline', '1');
+    iframe.setAttribute('title', title);
+  };
+
   const requestPlaybackResume = (player) => {
     if (!autoplayRef.current || !player) return;
 
@@ -90,6 +101,7 @@ function YouTubeTrailerPlayer({
               if (cancelled) return;
               playerRef.current = event.target;
               readyRef.current = true;
+              syncIframeAttributes(event.target);
 
               try {
                 if (mutedRef.current) {

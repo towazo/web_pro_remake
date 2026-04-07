@@ -144,6 +144,7 @@ function Hero({
             .join(', ')
         : '';
     const shouldRenderTrailerPreview = hasTrailer && isTrailerPlayable;
+    const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive;
 
     return (
         <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
@@ -217,22 +218,26 @@ function Hero({
                     />
                     {shouldRenderTrailerPreview && trailer && (
                         <div className="hero-media-preview ready">
-                            <YouTubeTrailerPlayer
-                                trailer={trailer}
-                                title={`${anime.title?.native || anime.title?.romaji || anime.title?.english || '作品'} のトレーラープレビュー`}
-                                className="hero-media-preview-frame"
-                                autoplay={isActive}
-                                loop
-                                controls={false}
-                                muted={previewMuted}
-                            />
-                            <AudioToggleButton
-                                muted={previewMuted}
-                                className="hero-media-audio-toggle"
-                                onClick={onTogglePreviewMute}
-                                labelOn="トレーラーの音声をオンにする"
-                                labelOff="トレーラーの音声をオフにする"
-                            />
+                            {shouldMountTrailerPlayer && (
+                                <>
+                                    <YouTubeTrailerPlayer
+                                        trailer={trailer}
+                                        title={`${anime.title?.native || anime.title?.romaji || anime.title?.english || '作品'} のトレーラープレビュー`}
+                                        className="hero-media-preview-frame"
+                                        autoplay
+                                        loop
+                                        controls={false}
+                                        muted={previewMuted}
+                                    />
+                                    <AudioToggleButton
+                                        muted={previewMuted}
+                                        className="hero-media-audio-toggle"
+                                        onClick={onTogglePreviewMute}
+                                        labelOn="トレーラーの音声をオンにする"
+                                        labelOff="トレーラーの音声をオフにする"
+                                    />
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
