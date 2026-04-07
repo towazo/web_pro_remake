@@ -10,10 +10,12 @@ function HeroSlider({
     const [currentIndex, setCurrentIndex] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
+    const [isPreviewMuted, setIsPreviewMuted] = useState(true);
 
     // Reset index when slides change
     useEffect(() => {
         setCurrentIndex(0);
+        setIsPreviewMuted(true);
     }, [slides]);
 
     if (!slides || slides.length === 0) return null;
@@ -89,6 +91,8 @@ function HeroSlider({
                     key={anime.uniqueId || anime.id || index}
                     anime={anime}
                     isActive={index === currentIndex}
+                    previewMuted={isPreviewMuted}
+                    onTogglePreviewMute={() => setIsPreviewMuted((prev) => !prev)}
                 />
             ))}
 

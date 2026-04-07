@@ -104,12 +104,14 @@ function App() {
     const normalizedRating = normalizeAnimeRating(anime?.rating);
     const hasTagList = Array.isArray(anime?.tags);
     const hasTrailerField = Object.prototype.hasOwnProperty.call(anime || {}, 'trailer');
+    const hasTrailerCheckedField = Object.prototype.hasOwnProperty.call(anime || {}, 'trailerChecked');
     const hasDefaultWatchCount = Object.prototype.hasOwnProperty.call(options, 'defaultWatchCount');
     const normalizedWatchCount = normalizeAnimeWatchCount(anime?.watchCount, {
       minimum: options.minimumWatchCount ?? 0,
       ...(hasDefaultWatchCount ? { defaultValue: options.defaultWatchCount } : {}),
     });
     const normalizedTrailer = normalizeAnimeTrailer(anime?.trailer);
+    const normalizedTrailerChecked = anime?.trailerChecked === true;
     const currentWatchCount = Object.prototype.hasOwnProperty.call(anime || {}, 'watchCount')
       ? anime.watchCount
       : hasDefaultWatchCount
@@ -121,6 +123,7 @@ function App() {
       && !hasTagList
       && currentWatchCount === normalizedWatchCount
       && (!hasTrailerField || isSameAnimeTrailer(anime?.trailer, normalizedTrailer))
+      && (!hasTrailerCheckedField || anime?.trailerChecked === normalizedTrailerChecked)
     ) {
       return anime;
     }
@@ -136,6 +139,9 @@ function App() {
     }
     if (hasTrailerField) {
       nextAnime.trailer = normalizedTrailer;
+    }
+    if (hasTrailerCheckedField) {
+      nextAnime.trailerChecked = normalizedTrailerChecked;
     }
     return nextAnime;
   });
@@ -448,7 +454,7 @@ function App() {
           anime?.id
           && (
             !hasAnimeTagMetadata(anime)
-            || !Object.prototype.hasOwnProperty.call(anime || {}, 'trailer')
+            || anime?.trailerChecked !== true
           )
         ))
         .map((anime) => anime.id)
@@ -474,9 +480,10 @@ function App() {
           hasChanges = true;
         }
 
-        if (!Object.prototype.hasOwnProperty.call(anime || {}, 'trailer')
+        if (anime?.trailerChecked !== true
           && Object.prototype.hasOwnProperty.call(enriched, 'trailer')) {
           nextAnime.trailer = normalizeAnimeTrailer(enriched.trailer);
+          nextAnime.trailerChecked = true;
           hasChanges = true;
         }
 
@@ -583,7 +590,13 @@ function App() {
       defaultValue: 1,
     });
     // Add timestamp for "added" sort
-    const animeWithDate = { ...data, rating, watchCount, addedAt: Date.now() };
+    const animeWithDate = {
+      ...data,
+      rating,
+      watchCount,
+      addedAt: Date.now(),
+      trailerChecked: data?.trailerChecked === true || Object.prototype.hasOwnProperty.call(data || {}, 'trailer'),
+    };
     setAnimeList(prev => sanitizeWatchedAnimeList([animeWithDate, ...prev]));
     setBookmarkList(prev => sanitizeBookmarkAnimeList(prev.filter((anime) => anime.id !== data.id)));
     return { success: true };
@@ -649,7 +662,11 @@ function App() {
       return { success: true, action: 'removed' };
     }
 
-    const bookmarkItem = { ...data, bookmarkedAt: Date.now() };
+    const bookmarkItem = {
+      ...data,
+      bookmarkedAt: Date.now(),
+      trailerChecked: data?.trailerChecked === true || Object.prototype.hasOwnProperty.call(data || {}, 'trailer'),
+    };
     setBookmarkList((prev) => sanitizeBookmarkAnimeList([bookmarkItem, ...prev.filter((anime) => anime.id !== data.id)]));
     return { success: true, action: 'added' };
   };

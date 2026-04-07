@@ -9,6 +9,29 @@ import {
 } from '../utils/trailer';
 
 const pendingProbeMap = new Map();
+const probeTaskQueue = [];
+const MAX_CONCURRENT_PROBES = 2;
+let activeProbeCount = 0;
+
+const runQueuedProbes = () => {
+  while (activeProbeCount < MAX_CONCURRENT_PROBES && probeTaskQueue.length > 0) {
+    const nextTask = probeTaskQueue.shift();
+    if (!nextTask) return;
+    activeProbeCount += 1;
+    nextTask.run()
+      .then(nextTask.resolve)
+      .catch(nextTask.reject)
+      .finally(() => {
+        activeProbeCount = Math.max(0, activeProbeCount - 1);
+        runQueuedProbes();
+      });
+  }
+};
+
+const enqueueProbeTask = (run) => new Promise((resolve, reject) => {
+  probeTaskQueue.push({ run, resolve, reject });
+  runQueuedProbes();
+});
 
 const createProbeContainer = () => {
   const node = document.createElement('div');
@@ -36,7 +59,7 @@ export const probeAnimeTrailerPlayback = async (animeOrTrailer, options = {}) =>
     return pendingProbeMap.get(trailer.id);
   }
 
-  const probePromise = loadYouTubeIframeApi()
+  const probePromise = enqueueProbeTask(() => loadYouTubeIframeApi()
     .then((YT) => new Promise((resolve) => {
       const container = createProbeContainer();
       const timeoutMs = Math.max(2500, Number(options.timeoutMs) || 5000);
@@ -115,7 +138,7 @@ export const probeAnimeTrailerPlayback = async (animeOrTrailer, options = {}) =>
     .catch(() => {
       markAnimeTrailerUnplayable(trailer, { errorCode: 0 });
       return false;
-    })
+    }))
     .finally(() => {
       pendingProbeMap.delete(trailer.id);
     });

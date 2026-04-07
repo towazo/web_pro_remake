@@ -25,10 +25,14 @@ const splitTutorialDescriptionLines = (value) => {
         .filter(Boolean);
 };
 
-function Hero({ anime, isActive }) {
+function Hero({
+    anime,
+    isActive,
+    previewMuted = true,
+    onTogglePreviewMute,
+}) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
-    const [isPreviewMuted, setIsPreviewMuted] = useState(true);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -141,12 +145,8 @@ function Hero({ anime, isActive }) {
         : '';
     const shouldRenderTrailerPreview = isActive && hasTrailer && isTrailerPlayable;
 
-    useEffect(() => {
-        setIsPreviewMuted(true);
-    }, [isActive, anime?.id]);
-
     return (
-        <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}`}>
+        <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
             {heroImageSrc && (
                 <img
                     className={`hero-bg-image ${hasBannerImage ? 'banner' : 'cover-fallback'}`}
@@ -220,16 +220,16 @@ function Hero({ anime, isActive }) {
                             <YouTubeTrailerPlayer
                                 trailer={trailer}
                                 title={`${anime.title?.native || anime.title?.romaji || anime.title?.english || '作品'} のトレーラープレビュー`}
-                                className={`hero-media-preview-frame ${hasBannerImage ? 'banner-media-image' : 'poster-media-image'}`}
+                                className="hero-media-preview-frame"
                                 autoplay
                                 loop
                                 controls={false}
-                                muted={isPreviewMuted}
+                                muted={previewMuted}
                             />
                             <AudioToggleButton
-                                muted={isPreviewMuted}
+                                muted={previewMuted}
                                 className="hero-media-audio-toggle"
-                                onClick={() => setIsPreviewMuted((prev) => !prev)}
+                                onClick={onTogglePreviewMute}
                                 labelOn="トレーラーの音声をオンにする"
                                 labelOff="トレーラーの音声をオフにする"
                             />

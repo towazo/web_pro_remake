@@ -1892,6 +1892,11 @@ button.card-watch-summary {
     align-items: center;
 }
 
+.hero-slider-container .hero.poster-only-slide.trailer-preview-slide {
+    grid-template-columns: minmax(0, 1fr) clamp(250px, 32vw, 430px);
+    align-items: end;
+}
+
 .hero-slider-container .hero.poster-only-slide .hero-overlay,
 .hero-slider-container .hero.has-banner-image .hero-overlay {
     background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.48) 48%, rgba(0, 0, 0, 0.28) 100%);
@@ -1928,9 +1933,18 @@ button.card-watch-summary {
     margin-right: 0;
 }
 
+.hero-media-panel.poster-media.has-trailer-preview {
+    max-width: clamp(250px, 32vw, 430px);
+}
+
 .hero-slider-container .hero.poster-only-slide .hero-content,
 .hero-slider-container .hero.poster-only-slide .hero-media-panel {
     align-self: center;
+}
+
+.hero-slider-container .hero.poster-only-slide.trailer-preview-slide .hero-content,
+.hero-slider-container .hero.poster-only-slide.trailer-preview-slide .hero-media-panel {
+    align-self: end;
 }
 
 .hero-slider-container .hero.poster-only-slide .hero-content {
@@ -1952,6 +1966,11 @@ button.card-watch-summary {
 
 .hero-media-image.poster-media-image {
     aspect-ratio: 2 / 3;
+}
+
+.hero-media-panel.has-trailer-preview .hero-media-image.poster-media-image {
+    aspect-ratio: 16 / 9;
+    object-position: center;
 }
 
 .hero-media-preview {
@@ -2039,6 +2058,13 @@ button.card-watch-summary {
         gap: 12px;
     }
 
+    .hero-slider-container .hero.poster-only-slide.trailer-preview-slide {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "media"
+            "content";
+    }
+
     .hero-media-panel {
         width: 100%;
         justify-self: center;
@@ -2049,14 +2075,27 @@ button.card-watch-summary {
         margin: 0 auto;
     }
 
+    .hero-media-panel.poster-media.has-trailer-preview {
+        max-width: min(520px, 100%);
+        justify-self: stretch;
+        margin: 0;
+    }
+
     .hero-media-panel.banner-media {
         max-width: min(520px, 100%);
     }
 
     .hero-slider-container .hero:not(.tutorial-hero) .hero-content {
         max-width: none;
+        width: 100%;
         padding: 0;
         margin-left: 0;
+        justify-self: stretch;
+    }
+
+    .hero-slider-container .hero.poster-only-slide.trailer-preview-slide .hero-content,
+    .hero-slider-container .hero.poster-only-slide.trailer-preview-slide .hero-media-panel {
+        align-self: start;
     }
 
     .hero-media-audio-toggle {
@@ -2071,6 +2110,11 @@ button.card-watch-summary {
 @media (max-width: 480px) {
     .hero-media-panel.poster-media {
         max-width: 128px;
+    }
+
+    .hero-media-panel.poster-media.has-trailer-preview {
+        max-width: 100%;
+        margin: 0;
     }
 
     .hero-media-panel.banner-media {

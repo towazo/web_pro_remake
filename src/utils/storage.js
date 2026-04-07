@@ -3,7 +3,7 @@ import { normalizeAnimeTrailer } from './trailer';
 export const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
 export const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
 
-const STORAGE_SCHEMA_VERSION = 4;
+const STORAGE_SCHEMA_VERSION = 5;
 const MIN_SUPPORTED_STORAGE_SCHEMA_VERSION = 2;
 const STORAGE_WRITE_VARIANTS = ['full', 'compact', 'minimal'];
 
@@ -77,6 +77,7 @@ const serializeAnimeEntry = (anime, variant = 'full') => {
     ? anime.tags.map(serializeTag).filter(Boolean)
     : [];
   const trailer = normalizeAnimeTrailer(anime.trailer);
+  const trailerChecked = anime?.trailerChecked === true ? 1 : 0;
 
   return [
     id,
@@ -101,6 +102,7 @@ const serializeAnimeEntry = (anime, variant = 'full') => {
     isCompact ? '' : normalizeString(anime.description),
     normalizeString(trailer?.id),
     normalizeString(trailer?.site),
+    trailerChecked,
     normalizeFiniteNumber(anime.rating),
     normalizeFiniteNumber(anime.watchCount),
     normalizeFiniteNumber(anime.addedAt),
@@ -112,9 +114,11 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
   if (Array.isArray(entry)) {
     const numericSchemaVersion = Number(schemaVersion) || 0;
     const supportsTrailer = numericSchemaVersion >= 4;
+    const supportsTrailerChecked = numericSchemaVersion >= 5;
     const supportsWatchCount = numericSchemaVersion >= 3;
     let trailerId = '';
     let trailerSite = '';
+    let trailerChecked = false;
     let rating = null;
     let watchCount = null;
     let addedAt = null;
@@ -147,11 +151,21 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
       extra3,
       extra4,
       extra5,
+      extra6,
     ] = entry;
 
-    if (supportsTrailer) {
+    if (supportsTrailerChecked) {
       trailerId = extra0;
       trailerSite = extra1;
+      trailerChecked = Boolean(extra2);
+      rating = extra3;
+      watchCount = extra4;
+      addedAt = extra5;
+      bookmarkedAt = extra6;
+    } else if (supportsTrailer) {
+      trailerId = extra0;
+      trailerSite = extra1;
+      trailerChecked = false;
       rating = extra2;
       watchCount = extra3;
       addedAt = extra4;
@@ -201,6 +215,7 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
         id: trailerId,
         site: trailerSite,
       });
+      anime.trailerChecked = trailerChecked;
     }
 
     if (!Number.isFinite(anime.id)) return null;
@@ -210,10 +225,16 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
   if (!entry || typeof entry !== 'object') return null;
   const id = normalizeFiniteNumber(entry.id);
   if (!Number.isFinite(id)) return null;
-  if (!Object.prototype.hasOwnProperty.call(entry, 'trailer')) {
+  const hasTrailerField = Object.prototype.hasOwnProperty.call(entry, 'trailer');
+  const hasTrailerCheckedField = Object.prototype.hasOwnProperty.call(entry, 'trailerChecked');
+  if (!hasTrailerField && !hasTrailerCheckedField) {
     return entry;
   }
-  return { ...entry, trailer: normalizeAnimeTrailer(entry.trailer) };
+  return {
+    ...entry,
+    ...(hasTrailerField ? { trailer: normalizeAnimeTrailer(entry.trailer) } : {}),
+    trailerChecked: hasTrailerCheckedField ? entry.trailerChecked === true : false,
+  };
 };
 
 const serializeListPayload = (list, variant = 'full') => JSON.stringify({

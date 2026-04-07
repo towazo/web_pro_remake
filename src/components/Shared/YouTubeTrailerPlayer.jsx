@@ -27,6 +27,7 @@ function YouTubeTrailerPlayer({
 
     let cancelled = false;
     let localPlayer = null;
+    const autoplayRetryTimeoutIds = [];
 
     const createPlayer = async () => {
       try {
@@ -66,11 +67,22 @@ function YouTubeTrailerPlayer({
               }
 
               if (autoplay) {
+                const attemptAutoplay = () => {
+                  try {
+                    event.target.playVideo();
+                  } catch (_) {
+                    // Ignore autoplay failures.
+                  }
+                };
+
                 try {
-                  event.target.playVideo();
+                  attemptAutoplay();
                 } catch (_) {
                   // Ignore autoplay failures.
                 }
+
+                autoplayRetryTimeoutIds.push(window.setTimeout(attemptAutoplay, 140));
+                autoplayRetryTimeoutIds.push(window.setTimeout(attemptAutoplay, 420));
               }
 
               markAnimeTrailerPlayable(normalizedTrailer);
@@ -98,6 +110,7 @@ function YouTubeTrailerPlayer({
     return () => {
       cancelled = true;
       readyRef.current = false;
+      autoplayRetryTimeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
       if (localPlayer) {
         try {
           localPlayer.destroy();

@@ -7,7 +7,7 @@ import YouTubeTrailerPlayer from './YouTubeTrailerPlayer';
 
 function TrailerModal({ anime, onClose }) {
   const closeButtonRef = useRef(null);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const { trailer, isTrailerInvalid } = useTrailerPlaybackStatus(anime);
   const animeId = anime?.id || 'current';
   const trailerId = trailer?.id || '';
@@ -38,7 +38,7 @@ function TrailerModal({ anime, onClose }) {
   }, [animeId, isTrailerInvalid]);
 
   useEffect(() => {
-    setIsMuted(false);
+    setIsMuted(true);
   }, [animeId]);
 
   if (!anime || !trailer) return null;

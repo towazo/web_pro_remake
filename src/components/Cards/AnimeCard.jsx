@@ -37,11 +37,13 @@ function AnimeCard({
     && (!isSelectionMode || allowRatingEditInSelectionMode);
   const canEditWatchCount = typeof onUpdateWatchCount === 'function'
     && (!isSelectionMode || allowWatchCountEditInSelectionMode);
-  const { hasTrailer, isTrailerInvalid } = useTrailerPlaybackStatus(anime);
+  const { isTrailerPlayable } = useTrailerPlaybackStatus(anime, {
+    autoProbe: !isSelectionMode && typeof onPlayTrailer === 'function',
+    timeoutMs: 5200,
+  });
   const canPlayTrailer = !isSelectionMode
     && typeof onPlayTrailer === 'function'
-    && hasTrailer
-    && !isTrailerInvalid;
+    && isTrailerPlayable;
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
