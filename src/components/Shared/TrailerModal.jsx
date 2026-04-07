@@ -11,6 +11,7 @@ function TrailerModal({ anime, onClose }) {
   const { trailer, isTrailerInvalid } = useTrailerPlaybackStatus(anime);
   const animeId = anime?.id || 'current';
   const trailerId = trailer?.id || '';
+  const isLoading = anime?.trailerLoading === true;
 
   useEffect(() => {
     if (!anime || !trailer) return undefined;
@@ -73,24 +74,33 @@ function TrailerModal({ anime, onClose }) {
         </header>
 
         <div className="trailer-modal-player">
-          <YouTubeTrailerPlayer
-            trailer={trailer}
-            title={`${title} の公式トレーラー`}
-            className="trailer-modal-frame"
-            autoplay
-            controls
-            muted={isMuted}
-          />
+          {isLoading ? (
+            <div className="trailer-modal-loading" role="status" aria-live="polite">
+              <span className="trailer-modal-loading-spinner" aria-hidden="true" />
+              <span className="trailer-modal-loading-text">トレーラーを読み込み中…</span>
+            </div>
+          ) : (
+            <YouTubeTrailerPlayer
+              trailer={trailer}
+              title={`${title} の公式トレーラー`}
+              className="trailer-modal-frame"
+              autoplay
+              controls
+              muted={isMuted}
+            />
+          )}
         </div>
 
         <div className="trailer-modal-footer">
-          <AudioToggleButton
-            muted={isMuted}
-            className="trailer-audio-toggle"
-            onClick={() => setIsMuted((prev) => !prev)}
-            labelOn="トレーラーの音声をオンにする"
-            labelOff="トレーラーの音声をオフにする"
-          />
+          {!isLoading && (
+            <AudioToggleButton
+              muted={isMuted}
+              className="trailer-audio-toggle"
+              onClick={() => setIsMuted((prev) => !prev)}
+              labelOn="トレーラーの音声をオンにする"
+              labelOff="トレーラーの音声をオフにする"
+            />
+          )}
           {watchUrl && (
             <a
               className="trailer-modal-external"

@@ -3,6 +3,7 @@
 // Services
 import { buildFeaturedSliderState, fetchAnimeDetailsByIds } from './services/animeService';
 import { fetchLibrarySnapshot, saveLibrarySnapshot } from './services/libraryService';
+import { loadYouTubeIframeApi } from './services/youtubePlayerService';
 import { APP_VIEW_HASHES, APP_VIEW_SET, getViewFromLocation } from './utils/appView';
 import {
   getCurrentSeasonInfo,
@@ -190,6 +191,7 @@ function App() {
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
   const detailEnrichmentAttemptedIdsRef = useRef(new Set());
+  const trailerOpenRequestIdRef = useRef(0);
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
   const featuredSliderAnimeKey = useMemo(
@@ -290,6 +292,24 @@ function App() {
     warmAniListTagTranslations().catch((error) => {
       console.error('Failed to warm AniList tag translations:', error);
     });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const warmYouTubeApi = () => {
+      loadYouTubeIframeApi().catch(() => {
+        // Ignore prewarm failures and retry on demand.
+      });
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(warmYouTubeApi, { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timeoutId = window.setTimeout(warmYouTubeApi, 900);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   // 1. Storage Persistence
@@ -449,6 +469,7 @@ function App() {
   }, [animeList.length]);
 
   useEffect(() => {
+    trailerOpenRequestIdRef.current += 1;
     setActiveTrailerAnime(null);
   }, [view, isSelectionMode]);
 
@@ -570,13 +591,26 @@ function App() {
   const handleOpenTrailer = async (anime) => {
     const trailer = normalizeAnimeTrailer(anime?.trailer);
     if (!anime || !trailer || !canAttemptTrailerPlayback(trailer)) return false;
+    loadYouTubeIframeApi().catch(() => {
+      // Ignore warmup failures and fall back to player-side loading.
+    });
+    const requestId = trailerOpenRequestIdRef.current + 1;
+    trailerOpenRequestIdRef.current = requestId;
+    setActiveTrailerAnime({ ...anime, trailer, trailerLoading: true });
+
     const playable = await probeAnimeTrailerPlayback(trailer, { timeoutMs: 5600 });
-    if (!playable) return false;
-    setActiveTrailerAnime({ ...anime, trailer });
+    if (trailerOpenRequestIdRef.current !== requestId) return false;
+    if (!playable) {
+      setActiveTrailerAnime(null);
+      return false;
+    }
+
+    setActiveTrailerAnime({ ...anime, trailer, trailerLoading: false });
     return true;
   };
 
   const handleCloseTrailer = () => {
+    trailerOpenRequestIdRef.current += 1;
     setActiveTrailerAnime(null);
   };
 

@@ -221,7 +221,7 @@ function Hero({
                                 trailer={trailer}
                                 title={`${anime.title?.native || anime.title?.romaji || anime.title?.english || '作品'} のトレーラープレビュー`}
                                 className="hero-media-preview-frame"
-                                autoplay
+                                autoplay={isActive}
                                 loop
                                 controls={false}
                                 muted={previewMuted}

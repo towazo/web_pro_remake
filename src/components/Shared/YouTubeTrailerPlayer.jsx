@@ -20,8 +20,18 @@ function YouTubeTrailerPlayer({
   const playerRef = useRef(null);
   const readyRef = useRef(false);
   const playbackRetryTimeoutIdsRef = useRef([]);
+  const autoplayRef = useRef(autoplay);
+  const mutedRef = useRef(muted);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
   const videoId = normalizedTrailer?.id || '';
+
+  useEffect(() => {
+    autoplayRef.current = autoplay;
+  }, [autoplay]);
+
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   const clearPlaybackRetryTimeouts = () => {
     playbackRetryTimeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -29,7 +39,7 @@ function YouTubeTrailerPlayer({
   };
 
   const requestPlaybackResume = (player) => {
-    if (!autoplay || !player) return;
+    if (!autoplayRef.current || !player) return;
 
     const attemptPlay = () => {
       try {
@@ -82,7 +92,7 @@ function YouTubeTrailerPlayer({
               readyRef.current = true;
 
               try {
-                if (muted) {
+                if (mutedRef.current) {
                   event.target.mute();
                 } else {
                   event.target.unMute();
@@ -149,6 +159,11 @@ function YouTubeTrailerPlayer({
     if (!player || !readyRef.current) return;
 
     if (autoplay) {
+      try {
+        player.seekTo(0, true);
+      } catch (_) {
+        // Ignore seek failures.
+      }
       requestPlaybackResume(player);
       return;
     }
@@ -158,6 +173,11 @@ function YouTubeTrailerPlayer({
       player.pauseVideo();
     } catch (_) {
       // Ignore pause failures.
+    }
+    try {
+      player.seekTo(0, true);
+    } catch (_) {
+      // Ignore seek failures.
     }
   }, [autoplay, videoId]);
 
