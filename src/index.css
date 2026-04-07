@@ -506,6 +506,15 @@ body {
     color: #111;
 }
 
+.watch-ranking-subtitle {
+    margin: 6px 0 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.5;
+    color: #7a5200;
+    text-shadow: 0 1px 0 rgba(255, 248, 220, 0.55);
+}
+
 .watch-ranking-filter {
     display: inline-flex;
     flex-direction: column;

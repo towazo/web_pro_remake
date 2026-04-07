@@ -84,6 +84,7 @@ function WatchRankingSection({ animeList = [] }) {
       <div className="watch-ranking-header">
         <div>
           <h3 id="watch-ranking-title" className="watch-ranking-title">視聴回数ランキング</h3>
+          <p className="watch-ranking-subtitle">あなたが最も見たアニメは・・・？</p>
         </div>
         {genreOptions.length > 0 && (
           <label className="watch-ranking-filter">
