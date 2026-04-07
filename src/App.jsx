@@ -25,6 +25,9 @@ import {
 // Components
 import HeroSlider from './components/Hero/HeroSlider';
 import AnimeCard from './components/Cards/AnimeCard';
+import HomeCustomizeHubScreen from './components/Home/HomeCustomizeHubScreen';
+import HomeQuickActionsCustomizeScreen from './components/Home/HomeQuickActionsCustomizeScreen';
+import HomeQuickActionsSection from './components/Home/HomeQuickActionsSection';
 import StatsSection from './components/Stats/StatsSection';
 import WatchRankingSection from './components/Stats/WatchRankingSection';
 import HomeStatsCustomizeScreen from './components/Stats/HomeStatsCustomizeScreen';
@@ -39,6 +42,11 @@ import {
   sanitizeHomeStatsCardBackgrounds,
   writeHomeStatsCardBackgroundsToStorage,
 } from './utils/homeStatsBackgrounds';
+import {
+  readHomeQuickActionBackgroundsFromStorage,
+  sanitizeHomeQuickActionBackgrounds,
+  writeHomeQuickActionBackgroundsToStorage,
+} from './utils/homeQuickActionBackgrounds';
 import {
   ANIME_SORT_OPTIONS,
   buildFilteredAnimeList,
@@ -174,6 +182,9 @@ function App() {
   const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
   const [homeStatsCardBackgrounds, setHomeStatsCardBackgrounds] = useState(() =>
     readHomeStatsCardBackgroundsFromStorage()
+  );
+  const [homeQuickActionBackgrounds, setHomeQuickActionBackgrounds] = useState(() =>
+    readHomeQuickActionBackgroundsFromStorage()
   );
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
@@ -328,6 +339,10 @@ function App() {
   useEffect(() => {
     writeHomeStatsCardBackgroundsToStorage(homeStatsCardBackgrounds);
   }, [homeStatsCardBackgrounds]);
+
+  useEffect(() => {
+    writeHomeQuickActionBackgroundsToStorage(homeQuickActionBackgrounds);
+  }, [homeQuickActionBackgrounds]);
 
   useEffect(() => {
     if (!isServerLibraryReady) return;
@@ -918,7 +933,10 @@ function App() {
   }), [nextSeasonInfo, nextSeasonLabel]);
 
   const isAddView = view === 'add' || view === 'addCurrent' || view === 'addNext';
-  const isHomeView = view === 'home' || view === 'homeCustomize';
+  const isHomeView = view === 'home'
+    || view === 'homeCustomize'
+    || view === 'homeCustomizeStats'
+    || view === 'homeCustomizeQuick';
   const isShareView = view === 'shareMethod' || view === 'shareImage' || view === 'shareText';
   const isMyListSectionView = view === 'mylist' || isShareView;
   const shouldShowHomeOnboarding = view === 'home' && isOnboardingActive;
@@ -954,6 +972,10 @@ function App() {
 
   const handleSaveHomeStatsCardBackgrounds = (nextBackgrounds) => {
     setHomeStatsCardBackgrounds(sanitizeHomeStatsCardBackgrounds(nextBackgrounds));
+  };
+
+  const handleSaveHomeQuickActionBackgrounds = (nextBackgrounds) => {
+    setHomeQuickActionBackgrounds(sanitizeHomeQuickActionBackgrounds(nextBackgrounds));
   };
 
   useEffect(() => {
@@ -1046,11 +1068,27 @@ function App() {
           />
         </main>
       ) : view === 'homeCustomize' ? (
+        <HomeCustomizeHubScreen
+          onOpenStatsCustomize={() => navigateTo('homeCustomizeStats')}
+          onOpenQuickActionsCustomize={() => navigateTo('homeCustomizeQuick')}
+          onBackHome={() => navigateTo('home')}
+        />
+      ) : view === 'homeCustomizeStats' ? (
         <HomeStatsCustomizeScreen
           animeList={animeList}
           savedBackgrounds={homeStatsCardBackgrounds}
           onSave={handleSaveHomeStatsCardBackgrounds}
-          onBackHome={() => navigateTo('home')}
+          onBackHome={() => navigateTo('homeCustomize')}
+          backButtonLabel="設定に戻る"
+        />
+      ) : view === 'homeCustomizeQuick' ? (
+        <HomeQuickActionsCustomizeScreen
+          animeCount={animeList.length}
+          bookmarkCount={bookmarkList.length}
+          savedBackgrounds={homeQuickActionBackgrounds}
+          onSave={handleSaveHomeQuickActionBackgrounds}
+          onBackHome={() => navigateTo('homeCustomize')}
+          backButtonLabel="設定に戻る"
         />
       ) : isShareView ? (
         <ShareScreen
@@ -1228,64 +1266,17 @@ function App() {
           <main className="main-content">
             <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
 
-            <section className="home-quick-actions" aria-label="ホームのショートカット">
-              <div className="home-quick-actions-header">
-                <h2 className="home-quick-actions-title">クイック操作</h2>
-              </div>
-
-              <div className="home-quick-grid" role="group" aria-label="ホームの主要ショートカット">
-                <button
-                  type="button"
-                  className="home-quick-tile home-quick-library-tile"
-                  onClick={() => navigateTo('mylist')}
-                  aria-label={`マイリストを開く (${animeList.length}件)`}
-                >
-                  <span className="home-quick-tile-label">マイリスト</span>
-                  <span className="home-quick-tile-count">{animeList.length}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="home-quick-tile home-quick-library-tile"
-                  onClick={() => navigateTo('bookmarks')}
-                  aria-label={`ブックマークを開く (${bookmarkList.length}件)`}
-                >
-                  <span className="home-quick-tile-label">ブックマーク</span>
-                  <span className="home-quick-tile-count">{bookmarkList.length}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="home-quick-tile home-quick-add-tile"
-                  onClick={() => navigateTo('addCurrent')}
-                  aria-label="今季作品追加画面へ"
-                  title="今季作品を追加"
-                >
-                  <span className="home-quick-tile-label">今季作品を追加</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="home-quick-tile home-quick-add-tile"
-                  onClick={() => navigateTo('addNext')}
-                  aria-label="来季作品追加画面へ"
-                  title="来季作品を追加"
-                >
-                  <span className="home-quick-tile-label">来季作品を追加</span>
-                </button>
-              </div>
-
-              <div className="home-quick-share-row">
-                <button
-                  type="button"
-                  className="home-share-shortcut page-action-button"
-                  onClick={() => handleOpenShareMethod()}
-                  disabled={animeList.length === 0}
-                >
-                  作品を共有
-                </button>
-              </div>
-            </section>
+            <HomeQuickActionsSection
+              animeCount={animeList.length}
+              bookmarkCount={bookmarkList.length}
+              backgrounds={homeQuickActionBackgrounds}
+              onOpenMyList={() => navigateTo('mylist')}
+              onOpenBookmarks={() => navigateTo('bookmarks')}
+              onOpenCurrentSeason={() => navigateTo('addCurrent')}
+              onOpenNextSeason={() => navigateTo('addNext')}
+              onOpenShare={() => handleOpenShareMethod()}
+              shareDisabled={animeList.length === 0}
+            />
 
             <WatchRankingSection animeList={animeList} />
 

@@ -39,7 +39,7 @@ const buildCardBackgroundStyle = (backgroundUrl, positionX = 50, positionY = 50)
     };
 };
 
-function StatsSection({ animeList, cardBackgrounds = null }) {
+function StatsSection({ animeList, cardBackgrounds = null, visibleCardKeys = null }) {
     const totalAnime = animeList.length;
     const totalEpisodes = animeList.reduce((sum, anime) => sum + (anime.episodes || 0), 0);
 
@@ -81,10 +81,16 @@ function StatsSection({ animeList, cardBackgrounds = null }) {
             label: '最も見たジャンル',
         },
     ];
+    const visibleKeySet = Array.isArray(visibleCardKeys) && visibleCardKeys.length > 0
+        ? new Set(visibleCardKeys)
+        : null;
+    const visibleCards = visibleKeySet
+        ? cards.filter((card) => visibleKeySet.has(card.key))
+        : cards;
 
     return (
         <div className="stats-container">
-            {cards.map((card) => {
+            {visibleCards.map((card) => {
                 const backgroundEntry = normalizedBackgrounds[card.key];
                 const backgroundUrl = backgroundEntry?.image || '';
                 const hasBackground = typeof backgroundUrl === 'string' && backgroundUrl.trim().length > 0;

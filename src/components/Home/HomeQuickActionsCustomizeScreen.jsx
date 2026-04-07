@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import StatsSection from './StatsSection';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import HomeQuickActionsSection from './HomeQuickActionsSection';
 import {
-  HOME_STATS_CARD_KEYS,
-  createEmptyHomeStatsCardBackgrounds,
-  sanitizeHomeStatsCardBackgrounds,
-} from '../../utils/homeStatsBackgrounds';
+  HOME_QUICK_ACTION_KEYS,
+  createEmptyHomeQuickActionBackgrounds,
+  sanitizeHomeQuickActionBackgrounds,
+} from '../../utils/homeQuickActionBackgrounds';
 import {
   IMAGE_FILE_ACCEPT,
   MAX_INPUT_FILE_BYTES,
@@ -12,45 +12,54 @@ import {
   convertImageFileToDataUrl,
 } from '../../utils/backgroundImageTools';
 
-const CARD_IMAGE_CONTROLS = [
+const TILE_IMAGE_CONTROLS = [
   {
-    key: HOME_STATS_CARD_KEYS.totalAnime,
-    label: '登録作品数の背景画像を選択',
+    key: HOME_QUICK_ACTION_KEYS.myList,
+    label: 'マイリストの背景画像',
+    note: '画像を設定しても黒いオーバーレイがかかった状態で表示されます。',
   },
   {
-    key: HOME_STATS_CARD_KEYS.totalEpisodes,
-    label: '総エピソード数の背景画像を選択',
+    key: HOME_QUICK_ACTION_KEYS.bookmarks,
+    label: 'ブックマークの背景画像',
+    note: '画像を設定しても黒いオーバーレイがかかった状態で表示されます。',
   },
   {
-    key: HOME_STATS_CARD_KEYS.topGenre,
-    label: '最も見たジャンルの背景画像を選択',
+    key: HOME_QUICK_ACTION_KEYS.currentSeason,
+    label: '今季作品の背景画像',
+    note: '画像の上に白い靄をかけた状態で表示されます。',
+  },
+  {
+    key: HOME_QUICK_ACTION_KEYS.nextSeason,
+    label: '来季作品の背景画像',
+    note: '画像の上に白い靄をかけた状態で表示されます。',
   },
 ];
 
 const areSameBackgrounds = (a, b) => {
-  const left = sanitizeHomeStatsCardBackgrounds(a);
-  const right = sanitizeHomeStatsCardBackgrounds(b);
-  return CARD_IMAGE_CONTROLS.every(({ key }) => (
+  const left = sanitizeHomeQuickActionBackgrounds(a);
+  const right = sanitizeHomeQuickActionBackgrounds(b);
+  return TILE_IMAGE_CONTROLS.every(({ key }) => (
     left[key].image === right[key].image
     && left[key].positionX === right[key].positionX
     && left[key].positionY === right[key].positionY
   ));
 };
 
-function HomeStatsCustomizeScreen({
-  animeList = [],
+function HomeQuickActionsCustomizeScreen({
+  animeCount = 0,
+  bookmarkCount = 0,
   savedBackgrounds = null,
   onSave,
   onBackHome,
-  backButtonLabel = 'ホームに戻る',
+  backButtonLabel = '設定に戻る',
 }) {
-  const [draftBackgrounds, setDraftBackgrounds] = useState(() => sanitizeHomeStatsCardBackgrounds(savedBackgrounds));
+  const [draftBackgrounds, setDraftBackgrounds] = useState(() => sanitizeHomeQuickActionBackgrounds(savedBackgrounds));
   const [notice, setNotice] = useState({ type: '', message: '' });
-  const [processingCardKey, setProcessingCardKey] = useState('');
+  const [processingTileKey, setProcessingTileKey] = useState('');
   const fileInputRefs = useRef({});
 
   useEffect(() => {
-    setDraftBackgrounds(sanitizeHomeStatsCardBackgrounds(savedBackgrounds));
+    setDraftBackgrounds(sanitizeHomeQuickActionBackgrounds(savedBackgrounds));
   }, [savedBackgrounds]);
 
   useEffect(() => {
@@ -66,13 +75,13 @@ function HomeStatsCustomizeScreen({
     [draftBackgrounds, savedBackgrounds]
   );
 
-  const openImagePicker = (cardKey) => {
-    const inputElement = fileInputRefs.current[cardKey];
+  const openImagePicker = (tileKey) => {
+    const inputElement = fileInputRefs.current[tileKey];
     if (!inputElement) return;
     inputElement.click();
   };
 
-  const handlePickImage = async (cardKey, event) => {
+  const handlePickImage = async (tileKey, event) => {
     const selectedFile = event.target.files?.[0];
     event.target.value = '';
     if (!selectedFile) return;
@@ -87,14 +96,14 @@ function HomeStatsCustomizeScreen({
       return;
     }
 
-    setProcessingCardKey(cardKey);
+    setProcessingTileKey(tileKey);
     try {
       const dataUrl = await convertImageFileToDataUrl(selectedFile);
       setDraftBackgrounds((prev) => {
-        const current = prev[cardKey] || {};
+        const current = prev[tileKey] || {};
         return {
           ...prev,
-          [cardKey]: {
+          [tileKey]: {
             image: dataUrl,
             positionX: clampBackgroundPosition(current.positionX),
             positionY: clampBackgroundPosition(current.positionY),
@@ -105,29 +114,29 @@ function HomeStatsCustomizeScreen({
     } catch (error) {
       setNotice({ type: 'error', message: error?.message || '画像の読み込みに失敗しました。' });
     } finally {
-      setProcessingCardKey('');
+      setProcessingTileKey('');
     }
   };
 
-  const handleClearSingleBackground = (cardKey) => {
+  const handleClearSingleBackground = (tileKey) => {
     setDraftBackgrounds((prev) => ({
       ...prev,
-      [cardKey]: {
+      [tileKey]: {
         image: '',
         positionX: 50,
         positionY: 50,
       },
     }));
-    setNotice({ type: 'success', message: '選択したカードの背景をリセットしました。' });
+    setNotice({ type: 'success', message: '選択した背景をリセットしました。' });
   };
 
-  const handleChangeCardPosition = (cardKey, axis, value) => {
+  const handleChangeTilePosition = (tileKey, axis, value) => {
     const normalizedValue = clampBackgroundPosition(value);
     setDraftBackgrounds((prev) => {
-      const current = prev[cardKey] || {};
+      const current = prev[tileKey] || {};
       return {
         ...prev,
-        [cardKey]: {
+        [tileKey]: {
           image: typeof current.image === 'string' ? current.image : '',
           positionX: axis === 'positionX' ? normalizedValue : clampBackgroundPosition(current.positionX),
           positionY: axis === 'positionY' ? normalizedValue : clampBackgroundPosition(current.positionY),
@@ -136,12 +145,12 @@ function HomeStatsCustomizeScreen({
     });
   };
 
-  const handleResetCardPosition = (cardKey) => {
+  const handleResetTilePosition = (tileKey) => {
     setDraftBackgrounds((prev) => {
-      const current = prev[cardKey] || {};
+      const current = prev[tileKey] || {};
       return {
         ...prev,
-        [cardKey]: {
+        [tileKey]: {
           image: typeof current.image === 'string' ? current.image : '',
           positionX: 50,
           positionY: 50,
@@ -151,20 +160,20 @@ function HomeStatsCustomizeScreen({
   };
 
   const handleResetAllBackgrounds = () => {
-    setDraftBackgrounds(createEmptyHomeStatsCardBackgrounds());
-    setNotice({ type: 'success', message: 'すべての背景を初期状態に戻しました。' });
+    setDraftBackgrounds(createEmptyHomeQuickActionBackgrounds());
+    setNotice({ type: 'success', message: 'クイック操作の背景を初期状態に戻しました。' });
   };
 
   const handleSave = () => {
     if (typeof onSave === 'function') {
       onSave(draftBackgrounds);
     }
-    setNotice({ type: 'success', message: '背景設定を保存しました。' });
+    setNotice({ type: 'success', message: 'クイック操作の背景設定を保存しました。' });
   };
 
   const handleBackHome = () => {
     if (isDirty) {
-      const confirmed = window.confirm('未保存の変更があります。保存せずに前の画面へ戻りますか？');
+      const confirmed = window.confirm('未保存の変更があります。保存せずに設定一覧へ戻りますか？');
       if (!confirmed) return;
     }
     onBackHome?.();
@@ -173,36 +182,51 @@ function HomeStatsCustomizeScreen({
   return (
     <main className="home-stats-customize-page page-shell">
       <header className="home-stats-customize-header">
-        <h2 className="page-main-title">上部バナー背景カスタマイズ</h2>
+        <h2 className="page-main-title">クイック操作背景カスタマイズ</h2>
         <p className="home-stats-customize-subtitle">
-          登録作品数・総エピソード数・最も見たジャンルの背景画像を設定できます。プレビューはその場で更新されます。
+          4つのショートカットごとに背景画像を設定できます。プレビューはその場で更新されます。
         </p>
       </header>
 
-      <section className="home-stats-customize-preview home-stats-customize-preview-summary" aria-label="ホーム統計カードのプレビュー">
+      <section className="home-stats-customize-preview home-stats-customize-preview-summary" aria-label="クイック操作のプレビュー">
         <h3 className="home-stats-customize-section-title">プレビュー</h3>
-        <p className="home-stats-customize-section-note">ホーム画面の表示イメージに近い状態で確認できます。</p>
-        <div className="home-stats-customize-preview-frame">
-          <StatsSection animeList={animeList} cardBackgrounds={draftBackgrounds} />
+        <p className="home-stats-customize-section-note">
+          マイリスト・ブックマークは黒く、今季・来季作品は白い靄を重ねた状態で表示されます。
+        </p>
+        <div className="home-stats-customize-preview-frame home-quick-actions-customize-preview-frame">
+          <HomeQuickActionsSection
+            animeCount={animeCount}
+            bookmarkCount={bookmarkCount}
+            backgrounds={draftBackgrounds}
+            title="クイック操作プレビュー"
+            isPreview
+          />
         </div>
       </section>
 
       <div className="home-stats-customize-editor">
-        <section className="home-stats-customize-controls" aria-label="背景画像の選択">
+        <section className="home-stats-customize-controls" aria-label="クイック操作背景の選択">
           <h3 className="home-stats-customize-section-title">背景画像を選択</h3>
           <div className="home-stats-customize-control-list">
-            {CARD_IMAGE_CONTROLS.map(({ key, label }) => {
-              const cardBackground = draftBackgrounds[key] || { image: '', positionX: 50, positionY: 50 };
-              const hasBackground = Boolean(cardBackground.image);
-              const isProcessing = processingCardKey === key;
+            {TILE_IMAGE_CONTROLS.map(({ key, label, note }) => {
+              const tileBackground = draftBackgrounds[key] || { image: '', positionX: 50, positionY: 50 };
+              const hasBackground = Boolean(tileBackground.image);
+              const isProcessing = processingTileKey === key;
               return (
                 <div key={key} className="home-stats-customize-control-item">
-                  <p className="home-stats-customize-control-label">{label}</p>
+                  <div className="home-stats-customize-control-copy">
+                    <p className="home-stats-customize-control-label">{label}</p>
+                    <p className="home-stats-customize-control-note">{note}</p>
+                  </div>
                   <div className="home-stats-customize-inline-preview" aria-hidden="true">
-                    <StatsSection
-                      animeList={animeList}
-                      cardBackgrounds={draftBackgrounds}
-                      visibleCardKeys={[key]}
+                    <HomeQuickActionsSection
+                      animeCount={animeCount}
+                      bookmarkCount={bookmarkCount}
+                      backgrounds={draftBackgrounds}
+                      visibleTileKeys={[key]}
+                      showHeader={false}
+                      showShareShortcut={false}
+                      isPreview
                     />
                   </div>
                   <div className="home-stats-customize-control-buttons">
@@ -220,44 +244,44 @@ function HomeStatsCustomizeScreen({
                       onClick={() => handleClearSingleBackground(key)}
                       disabled={!hasBackground || isProcessing}
                     >
-                      このカードをリセット
+                      この背景をリセット
                     </button>
                   </div>
                   <div className="home-stats-customize-position-controls">
-                    <label className="home-stats-customize-position-label" htmlFor={`card-position-x-${key}`}>
-                      表示位置（横）: {cardBackground.positionX}%
+                    <label className="home-stats-customize-position-label" htmlFor={`quick-tile-position-x-${key}`}>
+                      表示位置（横）: {tileBackground.positionX}%
                     </label>
                     <input
-                      id={`card-position-x-${key}`}
+                      id={`quick-tile-position-x-${key}`}
                       type="range"
                       min="0"
                       max="100"
                       step="1"
                       className="home-stats-customize-position-slider"
-                      value={cardBackground.positionX}
-                      onInput={(event) => handleChangeCardPosition(key, 'positionX', event.currentTarget.value)}
-                      onChange={(event) => handleChangeCardPosition(key, 'positionX', event.target.value)}
+                      value={tileBackground.positionX}
+                      onInput={(event) => handleChangeTilePosition(key, 'positionX', event.currentTarget.value)}
+                      onChange={(event) => handleChangeTilePosition(key, 'positionX', event.target.value)}
                       disabled={!hasBackground || isProcessing}
                     />
-                    <label className="home-stats-customize-position-label" htmlFor={`card-position-y-${key}`}>
-                      表示位置（縦）: {cardBackground.positionY}%
+                    <label className="home-stats-customize-position-label" htmlFor={`quick-tile-position-y-${key}`}>
+                      表示位置（縦）: {tileBackground.positionY}%
                     </label>
                     <input
-                      id={`card-position-y-${key}`}
+                      id={`quick-tile-position-y-${key}`}
                       type="range"
                       min="0"
                       max="100"
                       step="1"
                       className="home-stats-customize-position-slider"
-                      value={cardBackground.positionY}
-                      onInput={(event) => handleChangeCardPosition(key, 'positionY', event.currentTarget.value)}
-                      onChange={(event) => handleChangeCardPosition(key, 'positionY', event.target.value)}
+                      value={tileBackground.positionY}
+                      onInput={(event) => handleChangeTilePosition(key, 'positionY', event.currentTarget.value)}
+                      onChange={(event) => handleChangeTilePosition(key, 'positionY', event.target.value)}
                       disabled={!hasBackground || isProcessing}
                     />
                     <button
                       type="button"
                       className="home-stats-customize-position-reset-button"
-                      onClick={() => handleResetCardPosition(key)}
+                      onClick={() => handleResetTilePosition(key)}
                       disabled={!hasBackground || isProcessing}
                     >
                       表示位置を中央に戻す
@@ -305,4 +329,4 @@ function HomeStatsCustomizeScreen({
   );
 }
 
-export default HomeStatsCustomizeScreen;
+export default HomeQuickActionsCustomizeScreen;

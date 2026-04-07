@@ -1,6 +1,8 @@
 export const APP_VIEW_HASHES = {
   home: '#/',
   homeCustomize: '#/home/customize',
+  homeCustomizeStats: '#/home/customize/stats',
+  homeCustomizeQuick: '#/home/customize/quick-actions',
   mylist: '#/mylist',
   shareMethod: '#/mylist/share',
   shareImage: '#/mylist/share/image',
@@ -15,6 +17,8 @@ export const APP_VIEW_SET = new Set(Object.keys(APP_VIEW_HASHES));
 
 export const getViewFromLocation = (hash = '', pathname = '') => {
   const route = (hash || '').replace(/^#/, '');
+  if (route.startsWith('/home/customize/quick-actions')) return 'homeCustomizeQuick';
+  if (route.startsWith('/home/customize/stats')) return 'homeCustomizeStats';
   if (route.startsWith('/home/customize')) return 'homeCustomize';
   if (route.startsWith('/add/current-season')) return 'addCurrent';
   if (route.startsWith('/add/next-season')) return 'addNext';
@@ -26,6 +30,8 @@ export const getViewFromLocation = (hash = '', pathname = '') => {
   if (route.startsWith('/bookmarks') || route.startsWith('/bookmark')) return 'bookmarks';
   if (route.startsWith('/add')) return 'add';
 
+  if (pathname.startsWith('/home/customize/quick-actions')) return 'homeCustomizeQuick';
+  if (pathname.startsWith('/home/customize/stats')) return 'homeCustomizeStats';
   if (pathname.startsWith('/home/customize')) return 'homeCustomize';
   if (pathname.startsWith('/add/current-season')) return 'addCurrent';
   if (pathname.startsWith('/add/next-season')) return 'addNext';
