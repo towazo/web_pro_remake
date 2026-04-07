@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 import AudioToggleButton from '../Shared/AudioToggleButton';
-import TrailerPlayButton from '../Shared/TrailerPlayButton';
 import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 
 const normalizeAnimeRating = (value) => {
@@ -35,8 +34,6 @@ function Hero({
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
-    const [canInlinePreview, setCanInlinePreview] = useState(null);
-    const previewFrameRef = useRef(null);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -100,32 +97,6 @@ function Hero({
 
     const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
 
-    useEffect(() => {
-        if (!shouldRenderTrailerPreview || !previewFrameRef.current || typeof window === 'undefined') {
-            setCanInlinePreview(null);
-            return undefined;
-        }
-
-        const node = previewFrameRef.current;
-        const updatePreviewCapability = () => {
-            const rect = node.getBoundingClientRect();
-            setCanInlinePreview(rect.width >= 200 && rect.height >= 200);
-        };
-
-        updatePreviewCapability();
-
-        if (typeof window.ResizeObserver === 'function') {
-            const observer = new window.ResizeObserver(() => {
-                updatePreviewCapability();
-            });
-            observer.observe(node);
-            return () => observer.disconnect();
-        }
-
-        window.addEventListener('resize', updatePreviewCapability);
-        return () => window.removeEventListener('resize', updatePreviewCapability);
-    }, [anime?.id, shouldRenderTrailerPreview, isActive]);
-
     if (!anime) return null;
 
     // Use a different structure if it's a tutorial slide
@@ -180,11 +151,7 @@ function Hero({
         : hasBannerImage
             ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
             : "(max-width: 768px) 42vw, 220px";
-    const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive && canInlinePreview === true;
-    const shouldShowTrailerFallback = shouldRenderTrailerPreview && isActive && canInlinePreview === false;
-    const trailerFallbackNote = canInlinePreview === false
-        ? '端末サイズの都合でタップ再生に切り替えています'
-        : '';
+    const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive;
 
     return (
         <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
@@ -255,10 +222,7 @@ function Hero({
                         loading={isActive ? 'eager' : 'lazy'}
                     />
                     {shouldRenderTrailerPreview && trailer && (
-                        <div
-                            ref={previewFrameRef}
-                            className={`hero-media-preview ready${shouldShowTrailerFallback ? ' fallback' : ''}`}
-                        >
+                        <div className="hero-media-preview ready">
                             {shouldMountTrailerPlayer && (
                                 <>
                                     <YouTubeTrailerPlayer
@@ -279,20 +243,6 @@ function Hero({
                                         labelOff="トレーラーの音声をオフにする"
                                     />
                                 </>
-                            )}
-                            {shouldShowTrailerFallback && (
-                                <div className="hero-media-trailer-fallback">
-                                    <TrailerPlayButton
-                                        anime={anime}
-                                        onPlayTrailer={onPlayTrailer}
-                                        className="hero-media-trailer-fallback-button"
-                                    />
-                                    {trailerFallbackNote && (
-                                        <p className="hero-media-trailer-fallback-note">
-                                            {trailerFallbackNote}
-                                        </p>
-                                    )}
-                                </div>
                             )}
                         </div>
                     )}
