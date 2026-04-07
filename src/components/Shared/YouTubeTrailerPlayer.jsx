@@ -1,10 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadYouTubeIframeApi } from '../../services/youtubePlayerService';
 import {
   markAnimeTrailerPlayable,
   markAnimeTrailerUnplayable,
   normalizeAnimeTrailer,
 } from '../../utils/trailer';
+
+const YT_PLAYER_STATE_PLAYING = 1;
+const YT_PLAYER_STATE_BUFFERING = 3;
 
 function YouTubeTrailerPlayer({
   trailer,
@@ -13,6 +16,7 @@ function YouTubeTrailerPlayer({
   controls = true,
   loop = false,
   muted = true,
+  deferVisibilityUntilPlaying = false,
   className = '',
   onError,
 }) {
@@ -22,6 +26,8 @@ function YouTubeTrailerPlayer({
   const playbackRetryTimeoutIdsRef = useRef([]);
   const autoplayRef = useRef(autoplay);
   const mutedRef = useRef(muted);
+  const playbackStateRef = useRef(null);
+  const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
   const videoId = normalizedTrailer?.id || '';
 
@@ -32,6 +38,10 @@ function YouTubeTrailerPlayer({
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  useEffect(() => {
+    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
+  }, [autoplay, deferVisibilityUntilPlaying, videoId]);
 
   const clearPlaybackRetryTimeouts = () => {
     playbackRetryTimeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -68,6 +78,26 @@ function YouTubeTrailerPlayer({
     ];
   };
 
+  const syncDesiredMuteState = (player, options = {}) => {
+    if (!player) return;
+
+    const isPlaybackActive = (
+      playbackStateRef.current === YT_PLAYER_STATE_PLAYING
+      || playbackStateRef.current === YT_PLAYER_STATE_BUFFERING
+    );
+    const shouldKeepMutedForAutoplay = autoplayRef.current && !mutedRef.current && !isPlaybackActive && !options.forceUnmute;
+
+    try {
+      if (mutedRef.current || shouldKeepMutedForAutoplay) {
+        player.mute();
+      } else {
+        player.unMute();
+      }
+    } catch (_) {
+      // Ignore mute sync failures.
+    }
+  };
+
   useEffect(() => {
     if (!videoId || !hostRef.current) return undefined;
 
@@ -101,23 +131,24 @@ function YouTubeTrailerPlayer({
               if (cancelled) return;
               playerRef.current = event.target;
               readyRef.current = true;
+              playbackStateRef.current = null;
               syncIframeAttributes(event.target);
-
-              try {
-                if (mutedRef.current) {
-                  event.target.mute();
-                } else {
-                  event.target.unMute();
-                }
-              } catch (_) {
-                // Ignore mute sync failures.
-              }
+              syncDesiredMuteState(event.target);
 
               requestPlaybackResume(event.target);
 
               markAnimeTrailerPlayable(normalizedTrailer);
             },
             onStateChange: (event) => {
+              playbackStateRef.current = Number(event?.data);
+              if (
+                event?.data === YT.PlayerState.BUFFERING
+                || event?.data === YT.PlayerState.PLAYING
+              ) {
+                setIsPlaybackVisible(true);
+                syncDesiredMuteState(event.target, { forceUnmute: true });
+              }
+
               if (!loop) return;
               if (event?.data !== YT.PlayerState.ENDED) return;
 
@@ -151,6 +182,7 @@ function YouTubeTrailerPlayer({
     return () => {
       cancelled = true;
       readyRef.current = false;
+      playbackStateRef.current = null;
       clearPlaybackRetryTimeouts();
       if (localPlayer) {
         try {
@@ -171,6 +203,8 @@ function YouTubeTrailerPlayer({
     if (!player || !readyRef.current) return;
 
     if (autoplay) {
+      playbackStateRef.current = null;
+      syncDesiredMuteState(player);
       try {
         player.seekTo(0, true);
       } catch (_) {
@@ -197,22 +231,16 @@ function YouTubeTrailerPlayer({
     const player = playerRef.current;
     if (!player || !readyRef.current) return;
 
-    try {
-      if (muted) {
-        player.mute();
-      } else {
-        player.unMute();
-      }
-    } catch (_) {
-      // Ignore mute sync failures.
-    }
+    syncDesiredMuteState(player);
     if (autoplay) {
       requestPlaybackResume(player);
     }
   }, [autoplay, muted, videoId]);
 
   return (
-    <div className={`youtube-trailer-player${className ? ` ${className}` : ''}`.trim()}>
+    <div
+      className={`youtube-trailer-player${deferVisibilityUntilPlaying ? ' defer-visibility' : ''}${isPlaybackVisible ? ' is-playback-visible' : ''}${className ? ` ${className}` : ''}`.trim()}
+    >
       <div
         ref={hostRef}
         className="youtube-trailer-player-slot"

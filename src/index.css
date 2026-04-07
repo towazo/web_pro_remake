@@ -2109,6 +2109,15 @@ button.card-watch-summary {
     height: 100%;
 }
 
+.youtube-trailer-player.defer-visibility .youtube-trailer-player-slot {
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.youtube-trailer-player.defer-visibility.is-playback-visible .youtube-trailer-player-slot {
+    opacity: 1;
+}
+
 .youtube-trailer-player-slot iframe {
     width: 100%;
     height: 100%;

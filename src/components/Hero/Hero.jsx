@@ -269,6 +269,7 @@ function Hero({
                                         loop
                                         controls={false}
                                         muted={previewMuted}
+                                        deferVisibilityUntilPlaying
                                     />
                                     <AudioToggleButton
                                         muted={previewMuted}
