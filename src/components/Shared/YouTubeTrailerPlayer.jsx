@@ -123,7 +123,8 @@ function YouTubeTrailerPlayer({
             iv_load_policy: 3,
             loop: loop ? 1 : 0,
             modestbranding: 1,
-            mute: muted ? 1 : 0,
+            // Mobile autoplay is much more reliable if the player starts muted.
+            mute: autoplay ? 1 : (muted ? 1 : 0),
             playsinline: 1,
             playlist: loop ? videoId : undefined,
             rel: 0,
