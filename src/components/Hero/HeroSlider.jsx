@@ -11,10 +11,6 @@ function HeroSlider({
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
     const [isPreviewMuted, setIsPreviewMuted] = useState(true);
-    const [isMobileViewport, setIsMobileViewport] = useState(() => {
-        if (typeof window === 'undefined') return false;
-        return window.matchMedia('(max-width: 768px)').matches;
-    });
     const slideIdentityKey = Array.isArray(slides)
         ? slides.map((anime, index) => String(anime?.uniqueId || anime?.id || index)).join('|')
         : '';
@@ -24,27 +20,6 @@ function HeroSlider({
         setCurrentIndex(0);
         setIsPreviewMuted(true);
     }, [slideIdentityKey]);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return undefined;
-
-        const mediaQuery = window.matchMedia('(max-width: 768px)');
-        const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
-        syncViewport();
-
-        if (typeof mediaQuery.addEventListener === 'function') {
-            mediaQuery.addEventListener('change', syncViewport);
-            return () => mediaQuery.removeEventListener('change', syncViewport);
-        }
-
-        mediaQuery.addListener(syncViewport);
-        return () => mediaQuery.removeListener(syncViewport);
-    }, []);
-
-    useEffect(() => {
-        if (!isMobileViewport) return;
-        setIsPreviewMuted(true);
-    }, [currentIndex, isMobileViewport]);
 
     if (!slides || slides.length === 0) return null;
 
