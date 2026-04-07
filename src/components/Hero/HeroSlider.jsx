@@ -4,6 +4,7 @@ import Hero from './Hero';
 function HeroSlider({
     slides,
     onRefresh,
+    onPlayTrailer,
     showRefreshButton = false,
     isRefreshing = false,
 }) {
@@ -98,6 +99,7 @@ function HeroSlider({
                     isActive={index === currentIndex}
                     previewMuted={isPreviewMuted}
                     onTogglePreviewMute={() => setIsPreviewMuted((prev) => !prev)}
+                    onPlayTrailer={onPlayTrailer}
                 />
             ))}
 

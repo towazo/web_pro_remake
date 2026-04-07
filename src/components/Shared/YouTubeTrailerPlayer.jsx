@@ -15,6 +15,7 @@ function YouTubeTrailerPlayer({
   muted = true,
   className = '',
   onError,
+  onAutoplayBlocked,
 }) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
@@ -134,6 +135,12 @@ function YouTubeTrailerPlayer({
               markAnimeTrailerUnplayable(normalizedTrailer, { errorCode });
               if (typeof onError === 'function') {
                 onError(errorCode);
+              }
+            },
+            onAutoplayBlocked: () => {
+              if (cancelled) return;
+              if (typeof onAutoplayBlocked === 'function') {
+                onAutoplayBlocked();
               }
             },
           },

@@ -1186,6 +1186,7 @@ function App() {
           <HeroSlider
             slides={featuredSliderState.slides}
             onRefresh={handleRefreshFeaturedSlides}
+            onPlayTrailer={handleOpenTrailer}
             showRefreshButton={featuredSliderState.showRefreshButton}
             isRefreshing={isRefreshingFeatured}
           />

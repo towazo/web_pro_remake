@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 import AudioToggleButton from '../Shared/AudioToggleButton';
+import TrailerPlayButton from '../Shared/TrailerPlayButton';
 import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 
 const normalizeAnimeRating = (value) => {
@@ -30,9 +31,13 @@ function Hero({
     isActive,
     previewMuted = true,
     onTogglePreviewMute,
+    onPlayTrailer,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
+    const [canInlinePreview, setCanInlinePreview] = useState(null);
+    const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
+    const previewFrameRef = useRef(null);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -94,6 +99,36 @@ function Hero({
         loadDescription();
     }, [anime, isTutorial]);
 
+    useEffect(() => {
+        if (!hasTrailer || !previewFrameRef.current || typeof window === 'undefined') {
+            setCanInlinePreview(null);
+            return undefined;
+        }
+
+        const node = previewFrameRef.current;
+        const updatePreviewCapability = () => {
+            const rect = node.getBoundingClientRect();
+            setCanInlinePreview(rect.width >= 200 && rect.height >= 200);
+        };
+
+        updatePreviewCapability();
+
+        if (typeof window.ResizeObserver === 'function') {
+            const observer = new window.ResizeObserver(() => {
+                updatePreviewCapability();
+            });
+            observer.observe(node);
+            return () => observer.disconnect();
+        }
+
+        window.addEventListener('resize', updatePreviewCapability);
+        return () => window.removeEventListener('resize', updatePreviewCapability);
+    }, [anime?.id, hasTrailer]);
+
+    useEffect(() => {
+        setIsAutoplayBlocked(false);
+    }, [anime?.id, isActive]);
+
     if (!anime) return null;
 
     // Use a different structure if it's a tutorial slide
@@ -144,7 +179,13 @@ function Hero({
             .join(', ')
         : '';
     const shouldRenderTrailerPreview = hasTrailer && isTrailerPlayable;
-    const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive;
+    const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive && canInlinePreview === true && !isAutoplayBlocked;
+    const shouldShowTrailerFallback = shouldRenderTrailerPreview && isActive && (canInlinePreview === false || isAutoplayBlocked);
+    const trailerFallbackNote = canInlinePreview === false
+        ? '端末サイズの都合でタップ再生に切り替えています'
+        : isAutoplayBlocked
+            ? 'この端末では自動再生が制限されるためタップ再生に切り替えています'
+            : '';
 
     return (
         <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
@@ -217,7 +258,10 @@ function Hero({
                         loading={isActive ? 'eager' : 'lazy'}
                     />
                     {shouldRenderTrailerPreview && trailer && (
-                        <div className="hero-media-preview ready">
+                        <div
+                            ref={previewFrameRef}
+                            className={`hero-media-preview ready${shouldShowTrailerFallback ? ' fallback' : ''}`}
+                        >
                             {shouldMountTrailerPlayer && (
                                 <>
                                     <YouTubeTrailerPlayer
@@ -228,6 +272,7 @@ function Hero({
                                         loop
                                         controls={false}
                                         muted={previewMuted}
+                                        onAutoplayBlocked={() => setIsAutoplayBlocked(true)}
                                     />
                                     <AudioToggleButton
                                         muted={previewMuted}
@@ -237,6 +282,20 @@ function Hero({
                                         labelOff="トレーラーの音声をオフにする"
                                     />
                                 </>
+                            )}
+                            {shouldShowTrailerFallback && (
+                                <div className="hero-media-trailer-fallback">
+                                    <TrailerPlayButton
+                                        anime={anime}
+                                        onPlayTrailer={onPlayTrailer}
+                                        className="hero-media-trailer-fallback-button"
+                                    />
+                                    {trailerFallbackNote && (
+                                        <p className="hero-media-trailer-fallback-note">
+                                            {trailerFallbackNote}
+                                        </p>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}
