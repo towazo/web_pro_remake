@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { loadYouTubeIframeApi } from '../../services/youtubePlayerService';
 import {
   markAnimeTrailerPlayable,
@@ -39,7 +39,7 @@ function YouTubeTrailerPlayer({
     mutedRef.current = muted;
   }, [muted]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
   }, [autoplay, deferVisibilityUntilPlaying, videoId]);
 
@@ -145,10 +145,6 @@ function YouTubeTrailerPlayer({
             },
             onStateChange: (event) => {
               playbackStateRef.current = Number(event?.data);
-              if (event?.data === YT.PlayerState.BUFFERING) {
-                setIsPlaybackVisible(true);
-              }
-
               if (event?.data === YT.PlayerState.PLAYING) {
                 setIsPlaybackVisible(true);
                 syncDesiredMuteState(event.target, { forceUnmute: true });
