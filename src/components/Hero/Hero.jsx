@@ -99,8 +99,10 @@ function Hero({
         loadDescription();
     }, [anime, isTutorial]);
 
+    const shouldRenderTrailerPreview = hasTrailer && isTrailerPlayable;
+
     useEffect(() => {
-        if (!hasTrailer || !previewFrameRef.current || typeof window === 'undefined') {
+        if (!shouldRenderTrailerPreview || !previewFrameRef.current || typeof window === 'undefined') {
             setCanInlinePreview(null);
             return undefined;
         }
@@ -123,7 +125,7 @@ function Hero({
 
         window.addEventListener('resize', updatePreviewCapability);
         return () => window.removeEventListener('resize', updatePreviewCapability);
-    }, [anime?.id, hasTrailer]);
+    }, [anime?.id, shouldRenderTrailerPreview, isActive]);
 
     useEffect(() => {
         setIsAutoplayBlocked(false);
@@ -178,7 +180,6 @@ function Hero({
             .filter(Boolean)
             .join(', ')
         : '';
-    const shouldRenderTrailerPreview = hasTrailer && isTrailerPlayable;
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive && canInlinePreview === true && !isAutoplayBlocked;
     const shouldShowTrailerFallback = shouldRenderTrailerPreview && isActive && (canInlinePreview === false || isAutoplayBlocked);
     const trailerFallbackNote = canInlinePreview === false
