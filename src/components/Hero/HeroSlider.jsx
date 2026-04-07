@@ -15,6 +15,9 @@ function HeroSlider({
     const slideIdentityKey = Array.isArray(slides)
         ? slides.map((anime, index) => String(anime?.uniqueId || anime?.id || index)).join('|')
         : '';
+    const handlePreviewMuteChange = (nextMuted) => {
+        setIsPreviewMuted((prev) => (prev === nextMuted ? prev : nextMuted));
+    };
 
     // Reset index when slides change
     useEffect(() => {
@@ -96,7 +99,8 @@ function HeroSlider({
                     anime={anime}
                     isActive={index === currentIndex}
                     previewMuted={isPreviewMuted}
-                    onTogglePreviewMute={() => setIsPreviewMuted((prev) => !prev)}
+                    onTogglePreviewMute={() => handlePreviewMuteChange(!isPreviewMuted)}
+                    onSetPreviewMuted={handlePreviewMuteChange}
                     onPlayTrailer={onPlayTrailer}
                 />
             ))}

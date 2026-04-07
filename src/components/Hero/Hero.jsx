@@ -31,6 +31,7 @@ function Hero({
     isActive,
     previewMuted = true,
     onTogglePreviewMute,
+    onSetPreviewMuted,
     onPlayTrailer,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
@@ -276,7 +277,14 @@ function Hero({
                                         loop
                                         controls={false}
                                         muted={previewMuted}
-                                        onAutoplayBlocked={() => setIsAutoplayBlocked(true)}
+                                        onPlaybackStart={() => setIsAutoplayBlocked(false)}
+                                        onAutoplayBlocked={() => {
+                                            if (!previewMuted) {
+                                                onSetPreviewMuted?.(true);
+                                                return;
+                                            }
+                                            setIsAutoplayBlocked(true);
+                                        }}
                                     />
                                     <AudioToggleButton
                                         muted={previewMuted}
