@@ -478,81 +478,6 @@ function App() {
   }, [view, isSelectionMode]);
 
   useEffect(() => {
-    const animeById = new Map();
-    [...animeList, ...bookmarkList].forEach((anime) => {
-      const animeId = Number(anime?.id);
-      if (!Number.isFinite(animeId) || animeById.has(animeId)) return;
-      animeById.set(animeId, anime);
-    });
-
-    const pendingIds = prioritizedDetailAnimeIds.filter((id) => {
-      if (detailEnrichmentAttemptedIdsRef.current.has(id)) return false;
-      const anime = animeById.get(id);
-      if (!anime) return false;
-      return !hasAnimeTagMetadata(anime) || anime?.trailerChecked !== true;
-    });
-
-    if (pendingIds.length === 0) return undefined;
-
-    const batchIds = pendingIds.slice(0, 12);
-    batchIds.forEach((id) => detailEnrichmentAttemptedIdsRef.current.add(id));
-
-    let cancelled = false;
-    const applyEnrichedDetails = (list, enrichedMap) => {
-      let changed = false;
-      const nextList = list.map((anime) => {
-        const enriched = enrichedMap.get(anime.id);
-        if (!enriched) return anime;
-
-        const nextAnime = { ...anime };
-        let hasChanges = false;
-
-        if (!hasAnimeTagMetadata(anime) && Array.isArray(enriched.tags)) {
-          nextAnime.tags = normalizeAnimeTags(enriched.tags);
-          hasChanges = true;
-        }
-
-        if (anime?.trailerChecked !== true
-          && Object.prototype.hasOwnProperty.call(enriched, 'trailer')) {
-          nextAnime.trailer = normalizeAnimeTrailer(enriched.trailer);
-          nextAnime.trailerChecked = true;
-          hasChanges = true;
-        }
-
-        if (!hasChanges) return anime;
-        changed = true;
-        return nextAnime;
-      });
-      return changed ? nextList : list;
-    };
-
-    const run = async () => {
-      const results = await fetchAnimeDetailsByIds(batchIds, {
-        timeoutMs: 12000,
-        maxAttempts: 3,
-        baseDelayMs: 400,
-        maxRetryDelayMs: 1200,
-      });
-      if (cancelled) return;
-
-      const enrichedMap = new Map(
-        results
-          .filter((anime) => anime && (Array.isArray(anime.tags) || Object.prototype.hasOwnProperty.call(anime, 'trailer')))
-          .map((anime) => [anime.id, anime])
-      );
-      if (enrichedMap.size === 0) return;
-
-      setAnimeList((prev) => applyEnrichedDetails(prev, enrichedMap));
-      setBookmarkList((prev) => applyEnrichedDetails(prev, enrichedMap));
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [animeList, bookmarkList, prioritizedDetailAnimeIds]);
-
-  useEffect(() => {
     if (!isOnboardingActive || view === 'home' || typeof window === 'undefined') return;
     const forcedHome = 'home';
     const state = { ...(window.history.state || {}), appView: forcedHome };
@@ -877,6 +802,82 @@ function App() {
     pushIds(bookmarkList.map((anime) => anime?.id));
     return orderedIds;
   }, [view, visibleAnimeIds, bookmarkVisibleAnimeIds, animeList, bookmarkList]);
+
+  useEffect(() => {
+    const animeById = new Map();
+    [...animeList, ...bookmarkList].forEach((anime) => {
+      const animeId = Number(anime?.id);
+      if (!Number.isFinite(animeId) || animeById.has(animeId)) return;
+      animeById.set(animeId, anime);
+    });
+
+    const pendingIds = prioritizedDetailAnimeIds.filter((id) => {
+      if (detailEnrichmentAttemptedIdsRef.current.has(id)) return false;
+      const anime = animeById.get(id);
+      if (!anime) return false;
+      return !hasAnimeTagMetadata(anime) || anime?.trailerChecked !== true;
+    });
+
+    if (pendingIds.length === 0) return undefined;
+
+    const batchIds = pendingIds.slice(0, 12);
+    batchIds.forEach((id) => detailEnrichmentAttemptedIdsRef.current.add(id));
+
+    let cancelled = false;
+    const applyEnrichedDetails = (list, enrichedMap) => {
+      let changed = false;
+      const nextList = list.map((anime) => {
+        const enriched = enrichedMap.get(anime.id);
+        if (!enriched) return anime;
+
+        const nextAnime = { ...anime };
+        let hasChanges = false;
+
+        if (!hasAnimeTagMetadata(anime) && Array.isArray(enriched.tags)) {
+          nextAnime.tags = normalizeAnimeTags(enriched.tags);
+          hasChanges = true;
+        }
+
+        if (anime?.trailerChecked !== true
+          && Object.prototype.hasOwnProperty.call(enriched, 'trailer')) {
+          nextAnime.trailer = normalizeAnimeTrailer(enriched.trailer);
+          nextAnime.trailerChecked = true;
+          hasChanges = true;
+        }
+
+        if (!hasChanges) return anime;
+        changed = true;
+        return nextAnime;
+      });
+      return changed ? nextList : list;
+    };
+
+    const run = async () => {
+      const results = await fetchAnimeDetailsByIds(batchIds, {
+        timeoutMs: 12000,
+        maxAttempts: 3,
+        baseDelayMs: 400,
+        maxRetryDelayMs: 1200,
+      });
+      if (cancelled) return;
+
+      const enrichedMap = new Map(
+        results
+          .filter((anime) => anime && (Array.isArray(anime.tags) || Object.prototype.hasOwnProperty.call(anime, 'trailer')))
+          .map((anime) => [anime.id, anime])
+      );
+      if (enrichedMap.size === 0) return;
+
+      setAnimeList((prev) => applyEnrichedDetails(prev, enrichedMap));
+      setBookmarkList((prev) => applyEnrichedDetails(prev, enrichedMap));
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [animeList, bookmarkList, prioritizedDetailAnimeIds]);
+
   const isAllVisibleSelected = visibleAnimeIds.length > 0
     && visibleAnimeIds.every((id) => selectedAnimeIdSet.has(id));
 
