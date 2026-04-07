@@ -42,6 +42,11 @@ function HeroSlider({
         ? slides.map((anime, index) => String(anime?.uniqueId || anime?.id || index)).join('|')
         : '';
     const getSlideKey = (anime, index) => String(anime?.uniqueId || anime?.id || index);
+    const getWrappedDistance = (fromIndex, toIndex) => {
+        if (!Array.isArray(slides) || slides.length <= 1) return 0;
+        const rawDistance = Math.abs(fromIndex - toIndex);
+        return Math.min(rawDistance, slides.length - rawDistance);
+    };
 
     // Reset index when slides change
     useEffect(() => {
@@ -117,6 +122,7 @@ function HeroSlider({
                     key={getSlideKey(anime, index)}
                     anime={anime}
                     isActive={index === currentIndex}
+                    shouldPreloadTrailer={getWrappedDistance(index, currentIndex) === 1}
                 />
             ))}
 

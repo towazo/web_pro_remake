@@ -2129,11 +2129,22 @@ button.card-watch-summary {
     display: none !important;
 }
 
+.hero-slider-container .hero-slide.is-preloading {
+    display: grid !important;
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    animation: none;
+}
+
 .hero-slider-container .hero-slide.active {
     display: grid !important;
     animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.hero-slider-container .hero-slide.is-preloading.tutorial-hero,
 .hero-slider-container .hero-slide.active.tutorial-hero {
     display: flex !important;
 }
