@@ -94,7 +94,6 @@ function HeroSlider({
                     key={getSlideKey(anime, index)}
                     anime={anime}
                     isActive={index === currentIndex}
-                    onPlayTrailer={onPlayTrailer}
                 />
             ))}
 

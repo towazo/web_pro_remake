@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
+import AudioToggleButton from '../Shared/AudioToggleButton';
 import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 
 const normalizeAnimeRating = (value) => {
@@ -27,10 +28,10 @@ const splitTutorialDescriptionLines = (value) => {
 function Hero({
     anime,
     isActive,
-    onPlayTrailer,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
+    const [isPreviewMuted, setIsPreviewMuted] = useState(true);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -91,6 +92,12 @@ function Hero({
 
         loadDescription();
     }, [anime, isTutorial]);
+
+    useEffect(() => {
+        if (!isActive) {
+            setIsPreviewMuted(true);
+        }
+    }, [isActive]);
 
     const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
 
@@ -229,8 +236,15 @@ function Hero({
                                         autoplay
                                         loop
                                         controls={false}
-                                        muted
+                                        muted={isPreviewMuted}
                                         deferVisibilityUntilPlaying
+                                    />
+                                    <AudioToggleButton
+                                        muted={isPreviewMuted}
+                                        className="hero-media-audio-toggle"
+                                        onClick={() => setIsPreviewMuted((prev) => !prev)}
+                                        labelOn="トレーラーの音声をオンにする"
+                                        labelOff="トレーラーの音声をオフにする"
                                     />
                                 </>
                             )}
