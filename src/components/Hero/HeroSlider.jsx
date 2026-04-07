@@ -100,7 +100,6 @@ function HeroSlider({
                     isActive={index === currentIndex}
                     previewMuted={isPreviewMuted}
                     onTogglePreviewMute={() => handlePreviewMuteChange(!isPreviewMuted)}
-                    onSetPreviewMuted={handlePreviewMuteChange}
                     onPlayTrailer={onPlayTrailer}
                 />
             ))}

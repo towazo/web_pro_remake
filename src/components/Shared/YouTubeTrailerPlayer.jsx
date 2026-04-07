@@ -15,15 +15,11 @@ function YouTubeTrailerPlayer({
   muted = true,
   className = '',
   onError,
-  onAutoplayBlocked,
-  onPlaybackStart,
 }) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
   const readyRef = useRef(false);
   const playbackRetryTimeoutIdsRef = useRef([]);
-  const autoplayBlockedTimeoutIdRef = useRef(null);
-  const playbackStartedRef = useRef(false);
   const autoplayRef = useRef(autoplay);
   const mutedRef = useRef(muted);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
@@ -40,13 +36,6 @@ function YouTubeTrailerPlayer({
   const clearPlaybackRetryTimeouts = () => {
     playbackRetryTimeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     playbackRetryTimeoutIdsRef.current = [];
-  };
-
-  const clearAutoplayBlockedTimeout = () => {
-    if (autoplayBlockedTimeoutIdRef.current !== null) {
-      window.clearTimeout(autoplayBlockedTimeoutIdRef.current);
-      autoplayBlockedTimeoutIdRef.current = null;
-    }
   };
 
   const syncIframeAttributes = (player) => {
@@ -112,7 +101,6 @@ function YouTubeTrailerPlayer({
               if (cancelled) return;
               playerRef.current = event.target;
               readyRef.current = true;
-              playbackStartedRef.current = false;
               syncIframeAttributes(event.target);
 
               try {
@@ -130,17 +118,6 @@ function YouTubeTrailerPlayer({
               markAnimeTrailerPlayable(normalizedTrailer);
             },
             onStateChange: (event) => {
-              if (
-                event?.data === YT.PlayerState.BUFFERING
-                || event?.data === YT.PlayerState.PLAYING
-              ) {
-                playbackStartedRef.current = true;
-                clearAutoplayBlockedTimeout();
-                if (typeof onPlaybackStart === 'function') {
-                  onPlaybackStart(event.data);
-                }
-              }
-
               if (!loop) return;
               if (event?.data !== YT.PlayerState.ENDED) return;
 
@@ -159,17 +136,6 @@ function YouTubeTrailerPlayer({
                 onError(errorCode);
               }
             },
-            onAutoplayBlocked: () => {
-              if (cancelled) return;
-              clearAutoplayBlockedTimeout();
-              autoplayBlockedTimeoutIdRef.current = window.setTimeout(() => {
-                autoplayBlockedTimeoutIdRef.current = null;
-                if (cancelled || playbackStartedRef.current) return;
-                if (typeof onAutoplayBlocked === 'function') {
-                  onAutoplayBlocked();
-                }
-              }, 900);
-            },
           },
         });
       } catch (_) {
@@ -186,8 +152,6 @@ function YouTubeTrailerPlayer({
       cancelled = true;
       readyRef.current = false;
       clearPlaybackRetryTimeouts();
-      clearAutoplayBlockedTimeout();
-      playbackStartedRef.current = false;
       if (localPlayer) {
         try {
           localPlayer.destroy();
@@ -207,7 +171,6 @@ function YouTubeTrailerPlayer({
     if (!player || !readyRef.current) return;
 
     if (autoplay) {
-      playbackStartedRef.current = false;
       try {
         player.seekTo(0, true);
       } catch (_) {
@@ -244,7 +207,6 @@ function YouTubeTrailerPlayer({
       // Ignore mute sync failures.
     }
     if (autoplay) {
-      playbackStartedRef.current = false;
       requestPlaybackResume(player);
     }
   }, [autoplay, muted, videoId]);

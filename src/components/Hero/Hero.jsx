@@ -31,13 +31,11 @@ function Hero({
     isActive,
     previewMuted = true,
     onTogglePreviewMute,
-    onSetPreviewMuted,
     onPlayTrailer,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
     const [canInlinePreview, setCanInlinePreview] = useState(null);
-    const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
     const previewFrameRef = useRef(null);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
@@ -128,10 +126,6 @@ function Hero({
         return () => window.removeEventListener('resize', updatePreviewCapability);
     }, [anime?.id, shouldRenderTrailerPreview, isActive]);
 
-    useEffect(() => {
-        setIsAutoplayBlocked(false);
-    }, [anime?.id, isActive]);
-
     if (!anime) return null;
 
     // Use a different structure if it's a tutorial slide
@@ -186,13 +180,11 @@ function Hero({
         : hasBannerImage
             ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
             : "(max-width: 768px) 42vw, 220px";
-    const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive && canInlinePreview === true && !isAutoplayBlocked;
-    const shouldShowTrailerFallback = shouldRenderTrailerPreview && isActive && (canInlinePreview === false || isAutoplayBlocked);
+    const shouldMountTrailerPlayer = shouldRenderTrailerPreview && isActive && canInlinePreview === true;
+    const shouldShowTrailerFallback = shouldRenderTrailerPreview && isActive && canInlinePreview === false;
     const trailerFallbackNote = canInlinePreview === false
         ? '端末サイズの都合でタップ再生に切り替えています'
-        : isAutoplayBlocked
-            ? 'この端末では自動再生が制限されるためタップ再生に切り替えています'
-            : '';
+        : '';
 
     return (
         <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
@@ -277,14 +269,6 @@ function Hero({
                                         loop
                                         controls={false}
                                         muted={previewMuted}
-                                        onPlaybackStart={() => setIsAutoplayBlocked(false)}
-                                        onAutoplayBlocked={() => {
-                                            if (!previewMuted) {
-                                                onSetPreviewMuted?.(true);
-                                                return;
-                                            }
-                                            setIsAutoplayBlocked(true);
-                                        }}
                                     />
                                     <AudioToggleButton
                                         muted={previewMuted}
