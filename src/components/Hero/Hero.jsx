@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
-import AudioToggleButton from '../Shared/AudioToggleButton';
 import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 
 const normalizeAnimeRating = (value) => {
@@ -28,8 +27,6 @@ const splitTutorialDescriptionLines = (value) => {
 function Hero({
     anime,
     isActive,
-    previewMuted = true,
-    onTogglePreviewMute,
     onPlayTrailer,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
@@ -232,15 +229,8 @@ function Hero({
                                         autoplay
                                         loop
                                         controls={false}
-                                        muted={previewMuted}
+                                        muted
                                         deferVisibilityUntilPlaying
-                                    />
-                                    <AudioToggleButton
-                                        muted={previewMuted}
-                                        className="hero-media-audio-toggle"
-                                        onClick={onTogglePreviewMute}
-                                        labelOn="トレーラーの音声をオンにする"
-                                        labelOff="トレーラーの音声をオフにする"
                                     />
                                 </>
                             )}

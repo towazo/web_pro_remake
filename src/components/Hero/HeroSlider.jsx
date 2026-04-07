@@ -11,39 +11,14 @@ function HeroSlider({
     const [currentIndex, setCurrentIndex] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
-    const [previewMutedBySlide, setPreviewMutedBySlide] = useState({});
     const slideIdentityKey = Array.isArray(slides)
         ? slides.map((anime, index) => String(anime?.uniqueId || anime?.id || index)).join('|')
         : '';
     const getSlideKey = (anime, index) => String(anime?.uniqueId || anime?.id || index);
-    const getPreviewMuted = (anime, index) => {
-        const key = getSlideKey(anime, index);
-        return Object.prototype.hasOwnProperty.call(previewMutedBySlide, key)
-            ? previewMutedBySlide[key]
-            : true;
-    };
-    const handlePreviewMuteChange = (anime, index, nextMuted) => {
-        const key = getSlideKey(anime, index);
-        setPreviewMutedBySlide((prev) => {
-            if (prev[key] === nextMuted) return prev;
-            return {
-                ...prev,
-                [key]: nextMuted,
-            };
-        });
-    };
 
     // Reset index when slides change
     useEffect(() => {
         setCurrentIndex(0);
-        setPreviewMutedBySlide((prev) => {
-            const next = {};
-            slides.forEach((anime, index) => {
-                const key = getSlideKey(anime, index);
-                next[key] = Object.prototype.hasOwnProperty.call(prev, key) ? prev[key] : true;
-            });
-            return next;
-        });
     }, [slideIdentityKey]);
 
     if (!slides || slides.length === 0) return null;
@@ -119,8 +94,6 @@ function HeroSlider({
                     key={getSlideKey(anime, index)}
                     anime={anime}
                     isActive={index === currentIndex}
-                    previewMuted={getPreviewMuted(anime, index)}
-                    onTogglePreviewMute={() => handlePreviewMuteChange(anime, index, !getPreviewMuted(anime, index))}
                     onPlayTrailer={onPlayTrailer}
                 />
             ))}
