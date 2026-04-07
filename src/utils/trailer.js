@@ -66,6 +66,15 @@ export const isSameAnimeTrailer = (left, right) => {
 
 export const hasPlayableTrailer = (animeOrTrailer) => Boolean(normalizeAnimeTrailer(animeOrTrailer));
 
+export const hasAnimeTrailerMetadata = (anime) => (
+  Boolean(anime)
+  && typeof anime === 'object'
+  && (
+    anime.trailerChecked === true
+    || Object.prototype.hasOwnProperty.call(anime, 'trailer')
+  )
+);
+
 const emitPlaybackStatus = (videoId) => {
   const status = playableTrailerIds.has(videoId)
     ? 'playable'

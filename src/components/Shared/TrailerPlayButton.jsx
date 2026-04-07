@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 import useViewportTrailerPriority from '../../hooks/useViewportTrailerPriority';
 import { resolveAnimeTitle } from '../../utils/animeList';
+import { hasAnimeTrailerMetadata } from '../../utils/trailer';
 
 function TrailerPlayButton({ anime, onPlayTrailer, className = '' }) {
   const isMountedRef = useRef(true);
@@ -17,9 +18,10 @@ function TrailerPlayButton({ anime, onPlayTrailer, className = '' }) {
     probePriority,
   });
   const title = resolveAnimeTitle(anime);
+  const hasTrailerMetadata = hasAnimeTrailerMetadata(anime);
   const isTrailerPending = supportsTrailerControl
     && (
-      anime?.trailerChecked !== true
+      !hasTrailerMetadata
       || (hasTrailer && status === 'unknown')
     );
   const canPlayTrailer = supportsTrailerControl && isTrailerPlayable;

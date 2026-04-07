@@ -4,6 +4,7 @@ import WatchCountBadge from '../Shared/WatchCountBadge';
 import { normalizeAnimeWatchCount } from '../../utils/animeList';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 import useViewportTrailerPriority from '../../hooks/useViewportTrailerPriority';
+import { hasAnimeTrailerMetadata } from '../../utils/trailer';
 
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
@@ -49,9 +50,10 @@ function AnimeCard({
     timeoutMs: 5200,
     probePriority,
   });
+  const hasTrailerMetadata = hasAnimeTrailerMetadata(anime);
   const isTrailerPending = supportsTrailerControl
     && (
-      anime?.trailerChecked !== true
+      !hasTrailerMetadata
       || (hasTrailer && status === 'unknown')
     );
   const canPlayTrailer = supportsTrailerControl && isTrailerPlayable;
