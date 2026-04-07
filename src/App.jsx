@@ -1228,58 +1228,64 @@ function App() {
           <main className="main-content">
             <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
 
-            <p className="page-guide-text">
-              目的に合わせて移動できます。視聴済みは「マイリスト」、あとで見たい作品は「ブックマーク」で管理してください。
-            </p>
+            <section className="home-quick-actions" aria-label="ホームのショートカット">
+              <div className="home-quick-actions-header">
+                <h2 className="home-quick-actions-title">クイック操作</h2>
+              </div>
 
-            <div className="bookmark-entry-bar">
-              <button
-                type="button"
-                className="bookmark-entry-main"
-                onClick={() => navigateTo('mylist')}
-              >
-                マイリスト
-                <span className="bookmark-entry-count">{animeList.length}</span>
-              </button>
-              <button
-                type="button"
-                className="bookmark-entry-add"
-                onClick={() => navigateTo('add')}
-                aria-label="マイリスト追加画面へ"
-                title="マイリストに作品を追加"
-              >
-                ＋
-              </button>
-            </div>
+              <div className="home-quick-grid" role="group" aria-label="ホームの主要ショートカット">
+                <button
+                  type="button"
+                  className="home-quick-tile home-quick-library-tile"
+                  onClick={() => navigateTo('mylist')}
+                  aria-label={`マイリストを開く (${animeList.length}件)`}
+                >
+                  <span className="home-quick-tile-label">マイリスト</span>
+                  <span className="home-quick-tile-count">{animeList.length}</span>
+                </button>
 
-            <div className="bookmark-entry-bar">
-              <button
-                type="button"
-                className="bookmark-entry-main"
-                onClick={() => navigateTo('bookmarks')}
-              >
-                ブックマーク
-                <span className="bookmark-entry-count">{bookmarkList.length}</span>
-              </button>
-              <button
-                type="button"
-                className="bookmark-entry-add"
-                onClick={() => navigateTo('add')}
-                aria-label="作品追加画面へ"
-                title="作品を追加"
-              >
-                ＋
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className="home-quick-tile home-quick-library-tile"
+                  onClick={() => navigateTo('bookmarks')}
+                  aria-label={`ブックマークを開く (${bookmarkList.length}件)`}
+                >
+                  <span className="home-quick-tile-label">ブックマーク</span>
+                  <span className="home-quick-tile-count">{bookmarkList.length}</span>
+                </button>
 
-            <button
-              type="button"
-              className="home-share-shortcut"
-              onClick={() => handleOpenShareMethod()}
-              disabled={animeList.length === 0}
-            >
-              作品を共有
-            </button>
+                <button
+                  type="button"
+                  className="home-quick-tile home-quick-add-tile"
+                  onClick={() => navigateTo('addCurrent')}
+                  aria-label="今季作品追加画面へ"
+                  title="今季作品を追加"
+                >
+                  <span className="home-quick-tile-label">今季作品を追加</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="home-quick-tile home-quick-add-tile"
+                  onClick={() => navigateTo('addNext')}
+                  aria-label="来季作品追加画面へ"
+                  title="来季作品を追加"
+                >
+                  <span className="home-quick-tile-label">来季作品を追加</span>
+                </button>
+              </div>
+
+              <div className="home-quick-share-row">
+                <button
+                  type="button"
+                  className="home-share-shortcut page-action-button"
+                  onClick={() => handleOpenShareMethod()}
+                  disabled={animeList.length === 0}
+                >
+                  作品を共有
+                </button>
+              </div>
+            </section>
 
             <WatchRankingSection animeList={animeList} />
 
