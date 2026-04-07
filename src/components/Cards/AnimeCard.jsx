@@ -240,7 +240,7 @@ function AnimeCard({
               onPointerDown={handleWatchPointerDown}
               onClick={handleToggleWatchControls}
               aria-expanded={isWatchControlsPinned}
-              aria-label={`視聴回数 ${watchCount}回。タップで変更ボタンを表示`}
+              aria-label={`視聴回数 ${watchCount}回。タップで変更ボタンを${isWatchControlsPinned ? '閉じる' : '表示'}`}
             >
               <WatchCountBadge
                 count={watchCount}

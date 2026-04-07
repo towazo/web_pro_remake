@@ -1265,8 +1265,6 @@ button.card-watch-summary {
     transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
 }
 
-.card-watch-section.editable:hover .card-watch-controls,
-.card-watch-section.editable:focus-within .card-watch-controls,
 .card-watch-section.controls-open .card-watch-controls {
     opacity: 1;
     visibility: visible;
