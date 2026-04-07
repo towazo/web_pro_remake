@@ -226,113 +226,117 @@ function HomeStatsCustomizeScreen({
       <section className="home-stats-customize-preview" aria-label="ホーム統計カードのプレビュー">
         <h3 className="home-stats-customize-section-title">プレビュー</h3>
         <p className="home-stats-customize-section-note">ホーム画面の表示イメージに近い状態で確認できます。</p>
-        <StatsSection animeList={animeList} cardBackgrounds={draftBackgrounds} />
-      </section>
-
-      <section className="home-stats-customize-controls" aria-label="背景画像の選択">
-        <h3 className="home-stats-customize-section-title">背景画像を選択</h3>
-        <div className="home-stats-customize-control-list">
-          {CARD_IMAGE_CONTROLS.map(({ key, label }) => {
-            const cardBackground = draftBackgrounds[key] || { image: '', positionX: 50, positionY: 50 };
-            const hasBackground = Boolean(cardBackground.image);
-            const isProcessing = processingCardKey === key;
-            return (
-              <div key={key} className="home-stats-customize-control-item">
-                <p className="home-stats-customize-control-label">{label}</p>
-                <div className="home-stats-customize-control-buttons">
-                  <button
-                    type="button"
-                    className="home-stats-customize-pick-button"
-                    onClick={() => openImagePicker(key)}
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? '処理中...' : '画像を選択'}
-                  </button>
-                  <button
-                    type="button"
-                    className="home-stats-customize-clear-button"
-                    onClick={() => handleClearSingleBackground(key)}
-                    disabled={!hasBackground || isProcessing}
-                  >
-                    このカードをリセット
-                  </button>
-                </div>
-                <div className="home-stats-customize-position-controls">
-                  <label className="home-stats-customize-position-label" htmlFor={`card-position-x-${key}`}>
-                    表示位置（横）: {cardBackground.positionX}%
-                  </label>
-                  <input
-                    id={`card-position-x-${key}`}
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    className="home-stats-customize-position-slider"
-                    value={cardBackground.positionX}
-                    onInput={(event) => handleChangeCardPosition(key, 'positionX', event.currentTarget.value)}
-                    onChange={(event) => handleChangeCardPosition(key, 'positionX', event.target.value)}
-                    disabled={!hasBackground || isProcessing}
-                  />
-                  <label className="home-stats-customize-position-label" htmlFor={`card-position-y-${key}`}>
-                    表示位置（縦）: {cardBackground.positionY}%
-                  </label>
-                  <input
-                    id={`card-position-y-${key}`}
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    className="home-stats-customize-position-slider"
-                    value={cardBackground.positionY}
-                    onInput={(event) => handleChangeCardPosition(key, 'positionY', event.currentTarget.value)}
-                    onChange={(event) => handleChangeCardPosition(key, 'positionY', event.target.value)}
-                    disabled={!hasBackground || isProcessing}
-                  />
-                  <button
-                    type="button"
-                    className="home-stats-customize-position-reset-button"
-                    onClick={() => handleResetCardPosition(key)}
-                    disabled={!hasBackground || isProcessing}
-                  >
-                    表示位置を中央に戻す
-                  </button>
-                </div>
-                <input
-                  ref={(element) => {
-                    fileInputRefs.current[key] = element;
-                  }}
-                  type="file"
-                  accept={IMAGE_FILE_ACCEPT}
-                  className="home-stats-customize-file-input"
-                  onChange={(event) => handlePickImage(key, event)}
-                />
-              </div>
-            );
-          })}
+        <div className="home-stats-customize-preview-frame">
+          <StatsSection animeList={animeList} cardBackgrounds={draftBackgrounds} />
         </div>
       </section>
 
-      {notice.message && (
-        <div className={`home-stats-customize-notice ${notice.type}`}>
-          {notice.message}
-        </div>
-      )}
+      <div className="home-stats-customize-editor">
+        <section className="home-stats-customize-controls" aria-label="背景画像の選択">
+          <h3 className="home-stats-customize-section-title">背景画像を選択</h3>
+          <div className="home-stats-customize-control-list">
+            {CARD_IMAGE_CONTROLS.map(({ key, label }) => {
+              const cardBackground = draftBackgrounds[key] || { image: '', positionX: 50, positionY: 50 };
+              const hasBackground = Boolean(cardBackground.image);
+              const isProcessing = processingCardKey === key;
+              return (
+                <div key={key} className="home-stats-customize-control-item">
+                  <p className="home-stats-customize-control-label">{label}</p>
+                  <div className="home-stats-customize-control-buttons">
+                    <button
+                      type="button"
+                      className="home-stats-customize-pick-button"
+                      onClick={() => openImagePicker(key)}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? '処理中...' : '画像を選択'}
+                    </button>
+                    <button
+                      type="button"
+                      className="home-stats-customize-clear-button"
+                      onClick={() => handleClearSingleBackground(key)}
+                      disabled={!hasBackground || isProcessing}
+                    >
+                      このカードをリセット
+                    </button>
+                  </div>
+                  <div className="home-stats-customize-position-controls">
+                    <label className="home-stats-customize-position-label" htmlFor={`card-position-x-${key}`}>
+                      表示位置（横）: {cardBackground.positionX}%
+                    </label>
+                    <input
+                      id={`card-position-x-${key}`}
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      className="home-stats-customize-position-slider"
+                      value={cardBackground.positionX}
+                      onInput={(event) => handleChangeCardPosition(key, 'positionX', event.currentTarget.value)}
+                      onChange={(event) => handleChangeCardPosition(key, 'positionX', event.target.value)}
+                      disabled={!hasBackground || isProcessing}
+                    />
+                    <label className="home-stats-customize-position-label" htmlFor={`card-position-y-${key}`}>
+                      表示位置（縦）: {cardBackground.positionY}%
+                    </label>
+                    <input
+                      id={`card-position-y-${key}`}
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      className="home-stats-customize-position-slider"
+                      value={cardBackground.positionY}
+                      onInput={(event) => handleChangeCardPosition(key, 'positionY', event.currentTarget.value)}
+                      onChange={(event) => handleChangeCardPosition(key, 'positionY', event.target.value)}
+                      disabled={!hasBackground || isProcessing}
+                    />
+                    <button
+                      type="button"
+                      className="home-stats-customize-position-reset-button"
+                      onClick={() => handleResetCardPosition(key)}
+                      disabled={!hasBackground || isProcessing}
+                    >
+                      表示位置を中央に戻す
+                    </button>
+                  </div>
+                  <input
+                    ref={(element) => {
+                      fileInputRefs.current[key] = element;
+                    }}
+                    type="file"
+                    accept={IMAGE_FILE_ACCEPT}
+                    className="home-stats-customize-file-input"
+                    onChange={(event) => handlePickImage(key, event)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
-      <div className="home-stats-customize-actions">
-        <button
-          type="button"
-          className="home-stats-customize-save-button"
-          onClick={handleSave}
-          disabled={!isDirty}
-        >
-          保存
-        </button>
-        <button type="button" className="home-stats-customize-back-button" onClick={handleBackHome}>
-          ホームに戻る
-        </button>
-        <button type="button" className="home-stats-customize-reset-button" onClick={handleResetAllBackgrounds}>
-          背景をリセット
-        </button>
+        {notice.message && (
+          <div className={`home-stats-customize-notice ${notice.type}`}>
+            {notice.message}
+          </div>
+        )}
+
+        <div className="home-stats-customize-actions">
+          <button
+            type="button"
+            className="home-stats-customize-save-button"
+            onClick={handleSave}
+            disabled={!isDirty}
+          >
+            保存
+          </button>
+          <button type="button" className="home-stats-customize-back-button" onClick={handleBackHome}>
+            ホームに戻る
+          </button>
+          <button type="button" className="home-stats-customize-reset-button" onClick={handleResetAllBackgrounds}>
+            背景をリセット
+          </button>
+        </div>
       </div>
     </main>
   );

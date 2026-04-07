@@ -1961,7 +1961,6 @@ button.card-watch-summary {
 }
 
 .hero-media-panel.has-trailer-preview {
-    min-height: 200px;
     overflow: hidden;
 }
 
@@ -2069,16 +2068,13 @@ button.card-watch-summary {
 }
 
 .youtube-trailer-player {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: block;
     overflow: hidden;
+    background: #000;
 }
 
 .youtube-trailer-player-slot {
-    min-width: 200px;
-    min-height: 200px;
-    flex: 0 0 auto;
+    display: block;
 }
 
 .youtube-trailer-player.defer-visibility .youtube-trailer-player-slot {
@@ -2132,14 +2128,13 @@ button.card-watch-summary {
     }
 
     .hero-media-panel.has-trailer-preview {
-        --hero-trailer-mobile-height: clamp(200px, 56vw, 248px);
-        min-height: var(--hero-trailer-mobile-height);
+        min-height: 0;
     }
 
     .hero-media-panel.has-trailer-preview .hero-media-image {
-        height: var(--hero-trailer-mobile-height);
-        min-height: var(--hero-trailer-mobile-height);
-        aspect-ratio: auto;
+        height: auto;
+        min-height: 0;
+        aspect-ratio: 16 / 9;
     }
 
     .hero-media-panel.banner-media {
@@ -2179,7 +2174,7 @@ button.card-watch-summary {
     }
 
     .hero-media-panel.has-trailer-preview {
-        --hero-trailer-mobile-height: clamp(200px, 62vw, 228px);
+        min-height: 0;
     }
 
     .hero-media-panel.banner-media {
@@ -2762,6 +2757,10 @@ button.card-watch-summary {
     margin-bottom: 18px;
 }
 
+.home-stats-customize-editor {
+    width: 100%;
+}
+
 .home-stats-customize-subtitle {
     color: #666;
     font-size: var(--fs-body-sm);
@@ -2780,11 +2779,36 @@ button.card-watch-summary {
     margin-bottom: 14px;
 }
 
+.home-stats-customize-preview-frame {
+    width: 100%;
+    margin: 0 auto;
+}
+
 @media (min-width: 901px) {
+    .home-stats-customize-page.page-shell {
+        max-width: none;
+        margin: 36px 0 120px;
+        padding: 0;
+        border: none;
+        background: transparent;
+    }
+
+    .home-stats-customize-header,
+    .home-stats-customize-editor {
+        width: min(100%, 900px);
+        margin-left: auto;
+        margin-right: auto;
+    }
+
     .home-stats-customize-preview {
         position: sticky;
         top: 12px;
         z-index: 5;
+        margin-bottom: 20px;
+    }
+
+    .home-stats-customize-preview-frame {
+        max-width: 1120px;
     }
 }
 
@@ -2952,6 +2976,10 @@ button.card-watch-summary {
     .home-stats-customize-preview,
     .home-stats-customize-controls {
         padding: 12px;
+    }
+
+    .home-stats-customize-editor {
+        margin-top: 0;
     }
 
     .home-stats-customize-actions {
