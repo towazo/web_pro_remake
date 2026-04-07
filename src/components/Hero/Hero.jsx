@@ -41,9 +41,9 @@ function Hero({
     const {
         trailer,
         hasTrailer,
-        isTrailerPlayable,
+        canRenderTrailer,
     } = useTrailerPlaybackStatus(anime, {
-        autoProbe: !isTutorial,
+        autoProbe: !isTutorial && isActive,
         timeoutMs: 5200,
     });
 
@@ -98,7 +98,7 @@ function Hero({
         loadDescription();
     }, [anime, isTutorial]);
 
-    const shouldRenderTrailerPreview = hasTrailer && isTrailerPlayable;
+    const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
 
     useEffect(() => {
         if (!shouldRenderTrailerPreview || !previewFrameRef.current || typeof window === 'undefined') {
