@@ -186,6 +186,7 @@ function App() {
   const [homeQuickActionBackgrounds, setHomeQuickActionBackgrounds] = useState(() =>
     readHomeQuickActionBackgroundsFromStorage()
   );
+  const [seasonalAddSource, setSeasonalAddSource] = useState('home');
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
     mobile: false,
@@ -699,6 +700,11 @@ function App() {
     navigateTo('shareMethod');
   };
 
+  const openSeasonalAddView = (targetView, source = 'home', options = {}) => {
+    setSeasonalAddSource(source);
+    navigateTo(targetView, options);
+  };
+
   const handleOnboardingPrev = () => {
     setOnboardingStep((prev) => Math.max(0, prev - 1));
   };
@@ -710,7 +716,7 @@ function App() {
   const handleOnboardingAddCurrent = () => {
     setIsOnboardingDismissed(true);
     setIsOnboardingCurrentSeasonFlow(true);
-    navigateTo('addCurrent', { force: true });
+    openSeasonalAddView('addCurrent', 'home', { force: true });
   };
 
   const handleOnboardingSearchAdd = () => {
@@ -951,12 +957,12 @@ function App() {
   const isOnboardingCurrentAddBackToHome = view === 'addCurrent' && isOnboardingCurrentSeasonFlow;
   const addViewBackTarget = isOnboardingCurrentAddBackToHome
     ? 'home'
-    : activeBrowsePreset
+    : activeBrowsePreset && seasonalAddSource === 'bookmarks'
       ? 'bookmarks'
       : 'home';
   const addViewBackLabel = isOnboardingCurrentAddBackToHome
     ? '← ホームに戻る'
-    : activeBrowsePreset
+    : activeBrowsePreset && seasonalAddSource === 'bookmarks'
       ? '← ブックマークへ戻る'
       : '← ホームへ戻る';
   const addViewTitle = view === 'addCurrent'
@@ -1057,8 +1063,8 @@ function App() {
             bookmarkList={bookmarkList}
             watchedAnimeList={animeList}
             onOpenBookmarkAdd={() => navigateTo('add')}
-            onOpenCurrentSeasonAdd={() => navigateTo('addCurrent')}
-            onOpenNextSeasonAdd={() => navigateTo('addNext')}
+            onOpenCurrentSeasonAdd={() => openSeasonalAddView('addCurrent', 'bookmarks')}
+            onOpenNextSeasonAdd={() => openSeasonalAddView('addNext', 'bookmarks')}
             onBackHome={() => navigateTo('home')}
             onToggleBookmark={handleToggleBookmark}
             onMarkWatched={handleMarkBookmarkAsWatched}
@@ -1272,8 +1278,8 @@ function App() {
               backgrounds={homeQuickActionBackgrounds}
               onOpenMyList={() => navigateTo('mylist')}
               onOpenBookmarks={() => navigateTo('bookmarks')}
-              onOpenCurrentSeason={() => navigateTo('addCurrent')}
-              onOpenNextSeason={() => navigateTo('addNext')}
+              onOpenCurrentSeason={() => openSeasonalAddView('addCurrent', 'home')}
+              onOpenNextSeason={() => openSeasonalAddView('addNext', 'home')}
               onOpenShare={() => handleOpenShareMethod()}
               shareDisabled={animeList.length === 0}
             />

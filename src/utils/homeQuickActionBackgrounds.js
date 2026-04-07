@@ -7,22 +7,46 @@ export const HOME_QUICK_ACTION_KEYS = Object.freeze({
   nextSeason: 'nextSeason',
 });
 
-const HOME_QUICK_ACTION_KEY_LIST = Object.values(HOME_QUICK_ACTION_KEYS);
+export const HOME_QUICK_ACTION_OVERLAY_TONES = Object.freeze({
+  dark: 'dark',
+  light: 'light',
+});
 
-const createBackgroundEntry = (overrides = {}) => ({
+const HOME_QUICK_ACTION_KEY_LIST = Object.values(HOME_QUICK_ACTION_KEYS);
+const HOME_QUICK_ACTION_LIBRARY_KEYS = new Set([
+  HOME_QUICK_ACTION_KEYS.myList,
+  HOME_QUICK_ACTION_KEYS.bookmarks,
+]);
+
+export const getDefaultHomeQuickActionOverlayTone = (key) => (
+  HOME_QUICK_ACTION_LIBRARY_KEYS.has(key)
+    ? HOME_QUICK_ACTION_OVERLAY_TONES.dark
+    : HOME_QUICK_ACTION_OVERLAY_TONES.light
+);
+
+const normalizeOverlayTone = (value, key) => (
+  value === HOME_QUICK_ACTION_OVERLAY_TONES.light
+    ? HOME_QUICK_ACTION_OVERLAY_TONES.light
+    : value === HOME_QUICK_ACTION_OVERLAY_TONES.dark
+      ? HOME_QUICK_ACTION_OVERLAY_TONES.dark
+      : getDefaultHomeQuickActionOverlayTone(key)
+);
+
+const createBackgroundEntry = (key, overrides = {}) => ({
   image: '',
   positionX: 50,
   positionY: 50,
+  overlayTone: getDefaultHomeQuickActionOverlayTone(key),
   ...overrides,
 });
 
-const sanitizeBackgroundEntry = (value) => {
+const sanitizeBackgroundEntry = (key, value) => {
   if (typeof value === 'string') {
-    return createBackgroundEntry({ image: value });
+    return createBackgroundEntry(key, { image: value });
   }
 
   if (!value || typeof value !== 'object') {
-    return createBackgroundEntry();
+    return createBackgroundEntry(key);
   }
 
   const image = typeof value.image === 'string'
@@ -37,18 +61,19 @@ const sanitizeBackgroundEntry = (value) => {
     return Math.min(100, Math.max(0, Math.round(parsed)));
   };
 
-  return createBackgroundEntry({
+  return createBackgroundEntry(key, {
     image,
     positionX: parsePosition(value.positionX),
     positionY: parsePosition(value.positionY),
+    overlayTone: normalizeOverlayTone(value.overlayTone ?? value.overlayColor, key),
   });
 };
 
 export const createEmptyHomeQuickActionBackgrounds = () => ({
-  [HOME_QUICK_ACTION_KEYS.myList]: createBackgroundEntry(),
-  [HOME_QUICK_ACTION_KEYS.bookmarks]: createBackgroundEntry(),
-  [HOME_QUICK_ACTION_KEYS.currentSeason]: createBackgroundEntry(),
-  [HOME_QUICK_ACTION_KEYS.nextSeason]: createBackgroundEntry(),
+  [HOME_QUICK_ACTION_KEYS.myList]: createBackgroundEntry(HOME_QUICK_ACTION_KEYS.myList),
+  [HOME_QUICK_ACTION_KEYS.bookmarks]: createBackgroundEntry(HOME_QUICK_ACTION_KEYS.bookmarks),
+  [HOME_QUICK_ACTION_KEYS.currentSeason]: createBackgroundEntry(HOME_QUICK_ACTION_KEYS.currentSeason),
+  [HOME_QUICK_ACTION_KEYS.nextSeason]: createBackgroundEntry(HOME_QUICK_ACTION_KEYS.nextSeason),
 });
 
 export const sanitizeHomeQuickActionBackgrounds = (value) => {
@@ -56,7 +81,7 @@ export const sanitizeHomeQuickActionBackgrounds = (value) => {
   const source = value && typeof value === 'object' ? value : {};
 
   HOME_QUICK_ACTION_KEY_LIST.forEach((key) => {
-    base[key] = sanitizeBackgroundEntry(source[key]);
+    base[key] = sanitizeBackgroundEntry(key, source[key]);
   });
 
   return base;

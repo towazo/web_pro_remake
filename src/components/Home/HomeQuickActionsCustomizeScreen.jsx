@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import HomeQuickActionsSection from './HomeQuickActionsSection';
 import {
   HOME_QUICK_ACTION_KEYS,
+  HOME_QUICK_ACTION_OVERLAY_TONES,
   createEmptyHomeQuickActionBackgrounds,
+  getDefaultHomeQuickActionOverlayTone,
   sanitizeHomeQuickActionBackgrounds,
 } from '../../utils/homeQuickActionBackgrounds';
 import {
@@ -16,22 +18,22 @@ const TILE_IMAGE_CONTROLS = [
   {
     key: HOME_QUICK_ACTION_KEYS.myList,
     label: 'マイリストの背景画像',
-    note: '画像を設定しても黒いオーバーレイがかかった状態で表示されます。',
+    note: 'プレビューをタップするとオーバーレイが黒/白で切り替わります。初期値は黒です。',
   },
   {
     key: HOME_QUICK_ACTION_KEYS.bookmarks,
     label: 'ブックマークの背景画像',
-    note: '画像を設定しても黒いオーバーレイがかかった状態で表示されます。',
+    note: 'プレビューをタップするとオーバーレイが黒/白で切り替わります。初期値は黒です。',
   },
   {
     key: HOME_QUICK_ACTION_KEYS.currentSeason,
     label: '今季作品の背景画像',
-    note: '画像の上に白い靄をかけた状態で表示されます。',
+    note: 'プレビューをタップするとオーバーレイが黒/白で切り替わります。初期値は白です。',
   },
   {
     key: HOME_QUICK_ACTION_KEYS.nextSeason,
     label: '来季作品の背景画像',
-    note: '画像の上に白い靄をかけた状態で表示されます。',
+    note: 'プレビューをタップするとオーバーレイが黒/白で切り替わります。初期値は白です。',
   },
 ];
 
@@ -42,6 +44,7 @@ const areSameBackgrounds = (a, b) => {
     left[key].image === right[key].image
     && left[key].positionX === right[key].positionX
     && left[key].positionY === right[key].positionY
+    && left[key].overlayTone === right[key].overlayTone
   ));
 };
 
@@ -107,6 +110,7 @@ function HomeQuickActionsCustomizeScreen({
             image: dataUrl,
             positionX: clampBackgroundPosition(current.positionX),
             positionY: clampBackgroundPosition(current.positionY),
+            overlayTone: current.overlayTone || getDefaultHomeQuickActionOverlayTone(tileKey),
           },
         };
       });
@@ -125,9 +129,33 @@ function HomeQuickActionsCustomizeScreen({
         image: '',
         positionX: 50,
         positionY: 50,
+        overlayTone: prev[tileKey]?.overlayTone || getDefaultHomeQuickActionOverlayTone(tileKey),
       },
     }));
     setNotice({ type: 'success', message: '選択した背景をリセットしました。' });
+  };
+
+  const handleChangeTileOverlayTone = (tileKey, overlayTone) => {
+    setDraftBackgrounds((prev) => {
+      const current = prev[tileKey] || {};
+      return {
+        ...prev,
+        [tileKey]: {
+          image: typeof current.image === 'string' ? current.image : '',
+          positionX: clampBackgroundPosition(current.positionX),
+          positionY: clampBackgroundPosition(current.positionY),
+          overlayTone,
+        },
+      };
+    });
+  };
+
+  const handleToggleTileOverlayTone = (tileKey) => {
+    const currentOverlayTone = draftBackgrounds?.[tileKey]?.overlayTone || getDefaultHomeQuickActionOverlayTone(tileKey);
+    const nextOverlayTone = currentOverlayTone === HOME_QUICK_ACTION_OVERLAY_TONES.dark
+      ? HOME_QUICK_ACTION_OVERLAY_TONES.light
+      : HOME_QUICK_ACTION_OVERLAY_TONES.dark;
+    handleChangeTileOverlayTone(tileKey, nextOverlayTone);
   };
 
   const handleChangeTilePosition = (tileKey, axis, value) => {
@@ -140,6 +168,7 @@ function HomeQuickActionsCustomizeScreen({
           image: typeof current.image === 'string' ? current.image : '',
           positionX: axis === 'positionX' ? normalizedValue : clampBackgroundPosition(current.positionX),
           positionY: axis === 'positionY' ? normalizedValue : clampBackgroundPosition(current.positionY),
+          overlayTone: current.overlayTone || getDefaultHomeQuickActionOverlayTone(tileKey),
         },
       };
     });
@@ -154,6 +183,7 @@ function HomeQuickActionsCustomizeScreen({
           image: typeof current.image === 'string' ? current.image : '',
           positionX: 50,
           positionY: 50,
+          overlayTone: current.overlayTone || getDefaultHomeQuickActionOverlayTone(tileKey),
         },
       };
     });
@@ -184,14 +214,14 @@ function HomeQuickActionsCustomizeScreen({
       <header className="home-stats-customize-header">
         <h2 className="page-main-title">クイック操作背景カスタマイズ</h2>
         <p className="home-stats-customize-subtitle">
-          4つのショートカットごとに背景画像を設定できます。プレビューはその場で更新されます。
+          4つのショートカットごとに背景画像を設定できます。プレビューのボタンをタップするとオーバーレイ色が切り替わります。
         </p>
       </header>
 
       <section className="home-stats-customize-preview home-stats-customize-preview-summary" aria-label="クイック操作のプレビュー">
         <h3 className="home-stats-customize-section-title">プレビュー</h3>
         <p className="home-stats-customize-section-note">
-          マイリスト・ブックマークは黒く、今季・来季作品は白い靄を重ねた状態で表示されます。
+          各プレビューのボタンをタップすると、黒と白のオーバーレイを切り替えられます。
         </p>
         <div className="home-stats-customize-preview-frame home-quick-actions-customize-preview-frame">
           <HomeQuickActionsSection
@@ -200,6 +230,11 @@ function HomeQuickActionsCustomizeScreen({
             backgrounds={draftBackgrounds}
             title="クイック操作プレビュー"
             isPreview
+            isInteractivePreview
+            onOpenMyList={() => handleToggleTileOverlayTone(HOME_QUICK_ACTION_KEYS.myList)}
+            onOpenBookmarks={() => handleToggleTileOverlayTone(HOME_QUICK_ACTION_KEYS.bookmarks)}
+            onOpenCurrentSeason={() => handleToggleTileOverlayTone(HOME_QUICK_ACTION_KEYS.currentSeason)}
+            onOpenNextSeason={() => handleToggleTileOverlayTone(HOME_QUICK_ACTION_KEYS.nextSeason)}
           />
         </div>
       </section>
@@ -209,7 +244,12 @@ function HomeQuickActionsCustomizeScreen({
           <h3 className="home-stats-customize-section-title">背景画像を選択</h3>
           <div className="home-stats-customize-control-list">
             {TILE_IMAGE_CONTROLS.map(({ key, label, note }) => {
-              const tileBackground = draftBackgrounds[key] || { image: '', positionX: 50, positionY: 50 };
+              const tileBackground = draftBackgrounds[key] || {
+                image: '',
+                positionX: 50,
+                positionY: 50,
+                overlayTone: getDefaultHomeQuickActionOverlayTone(key),
+              };
               const hasBackground = Boolean(tileBackground.image);
               const isProcessing = processingTileKey === key;
               return (
@@ -227,6 +267,11 @@ function HomeQuickActionsCustomizeScreen({
                       showHeader={false}
                       showShareShortcut={false}
                       isPreview
+                      isInteractivePreview
+                      onOpenMyList={() => handleToggleTileOverlayTone(key)}
+                      onOpenBookmarks={() => handleToggleTileOverlayTone(key)}
+                      onOpenCurrentSeason={() => handleToggleTileOverlayTone(key)}
+                      onOpenNextSeason={() => handleToggleTileOverlayTone(key)}
                     />
                   </div>
                   <div className="home-stats-customize-control-buttons">
