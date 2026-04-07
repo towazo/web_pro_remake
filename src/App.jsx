@@ -57,7 +57,10 @@ import {
   isSameAnimeTrailer,
   normalizeAnimeTrailer,
 } from './utils/trailer';
-import { probeAnimeTrailerPlayback } from './hooks/useTrailerPlaybackStatus';
+import {
+  probeAnimeTrailerPlayback,
+  TRAILER_PROBE_PRIORITY_USER_INITIATED,
+} from './hooks/useTrailerPlaybackStatus';
 
 const ONBOARDING_STEPS = [
   {
@@ -180,6 +183,7 @@ function App() {
   });
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
+  const [bookmarkVisibleAnimeIds, setBookmarkVisibleAnimeIds] = useState([]);
   const [sharePresetAnimeIds, setSharePresetAnimeIds] = useState([]);
   const [isOnboardingDismissed, setIsOnboardingDismissed] = useState(false);
   const [isOnboardingCurrentSeasonFlow, setIsOnboardingCurrentSeasonFlow] = useState(false);
@@ -474,17 +478,19 @@ function App() {
   }, [view, isSelectionMode]);
 
   useEffect(() => {
-    const pendingIds = Array.from(new Set(
-      [...animeList, ...bookmarkList]
-        .filter((anime) => (
-          anime?.id
-          && (
-            !hasAnimeTagMetadata(anime)
-            || anime?.trailerChecked !== true
-          )
-        ))
-        .map((anime) => anime.id)
-    )).filter((id) => !detailEnrichmentAttemptedIdsRef.current.has(id));
+    const animeById = new Map();
+    [...animeList, ...bookmarkList].forEach((anime) => {
+      const animeId = Number(anime?.id);
+      if (!Number.isFinite(animeId) || animeById.has(animeId)) return;
+      animeById.set(animeId, anime);
+    });
+
+    const pendingIds = prioritizedDetailAnimeIds.filter((id) => {
+      if (detailEnrichmentAttemptedIdsRef.current.has(id)) return false;
+      const anime = animeById.get(id);
+      if (!anime) return false;
+      return !hasAnimeTagMetadata(anime) || anime?.trailerChecked !== true;
+    });
 
     if (pendingIds.length === 0) return undefined;
 
@@ -544,7 +550,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [animeList, bookmarkList]);
+  }, [animeList, bookmarkList, prioritizedDetailAnimeIds]);
 
   useEffect(() => {
     if (!isOnboardingActive || view === 'home' || typeof window === 'undefined') return;
@@ -598,7 +604,10 @@ function App() {
     trailerOpenRequestIdRef.current = requestId;
     setActiveTrailerAnime({ ...anime, trailer, trailerLoading: true });
 
-    const playable = await probeAnimeTrailerPlayback(trailer, { timeoutMs: 5600 });
+    const playable = await probeAnimeTrailerPlayback(trailer, {
+      timeoutMs: 5600,
+      priority: TRAILER_PROBE_PRIORITY_USER_INITIATED,
+    });
     if (trailerOpenRequestIdRef.current !== requestId) return false;
     if (!playable) {
       setActiveTrailerAnime(null);
@@ -845,6 +854,29 @@ function App() {
   }, [animeList, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
   const selectedAnimeIdSet = useMemo(() => new Set(selectedAnimeIds), [selectedAnimeIds]);
   const visibleAnimeIds = useMemo(() => filteredList.map((anime) => anime.id), [filteredList]);
+  const prioritizedDetailAnimeIds = useMemo(() => {
+    const orderedIds = [];
+    const seenIds = new Set();
+    const pushIds = (ids) => {
+      ids.forEach((id) => {
+        const numericId = Number(id);
+        if (!Number.isFinite(numericId) || seenIds.has(numericId)) return;
+        seenIds.add(numericId);
+        orderedIds.push(numericId);
+      });
+    };
+
+    if (view === 'mylist') {
+      pushIds(visibleAnimeIds);
+    }
+    if (view === 'bookmarks') {
+      pushIds(bookmarkVisibleAnimeIds);
+    }
+
+    pushIds(animeList.map((anime) => anime?.id));
+    pushIds(bookmarkList.map((anime) => anime?.id));
+    return orderedIds;
+  }, [view, visibleAnimeIds, bookmarkVisibleAnimeIds, animeList, bookmarkList]);
   const isAllVisibleSelected = visibleAnimeIds.length > 0
     && visibleAnimeIds.every((id) => selectedAnimeIdSet.has(id));
 
@@ -1009,6 +1041,7 @@ function App() {
             onMarkWatched={handleMarkBookmarkAsWatched}
             onBulkRemoveBookmarks={handleBulkRemoveBookmarks}
             onPlayTrailer={handleOpenTrailer}
+            onVisibleAnimeIdsChange={setBookmarkVisibleAnimeIds}
           />
         </main>
       ) : view === 'homeCustomize' ? (

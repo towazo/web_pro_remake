@@ -3,6 +3,7 @@ import { translateGenre } from '../../constants/animeData';
 import WatchCountBadge from '../Shared/WatchCountBadge';
 import { normalizeAnimeWatchCount } from '../../utils/animeList';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
+import useViewportTrailerPriority from '../../hooks/useViewportTrailerPriority';
 
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
@@ -35,20 +36,32 @@ function AnimeCard({
   const [isTrailerLoading, setIsTrailerLoading] = useState(false);
   const rating = normalizeRating(anime?.rating);
   const watchCount = normalizeAnimeWatchCount(anime?.watchCount, { minimum: 1, defaultValue: 1 });
+  const supportsTrailerControl = !isSelectionMode && typeof onPlayTrailer === 'function';
+  const { shouldAutoProbe, probePriority } = useViewportTrailerPriority(cardRef, {
+    enabled: supportsTrailerControl,
+  });
   const canEditRating = typeof onUpdateRating === 'function'
     && (!isSelectionMode || allowRatingEditInSelectionMode);
   const canEditWatchCount = typeof onUpdateWatchCount === 'function'
     && (!isSelectionMode || allowWatchCountEditInSelectionMode);
-  const { isTrailerPlayable } = useTrailerPlaybackStatus(anime, {
-    autoProbe: !isSelectionMode && typeof onPlayTrailer === 'function',
+  const { hasTrailer, isTrailerPlayable, status } = useTrailerPlaybackStatus(anime, {
+    autoProbe: shouldAutoProbe,
     timeoutMs: 5200,
+    probePriority,
   });
-  const canPlayTrailer = !isSelectionMode
-    && typeof onPlayTrailer === 'function'
-    && isTrailerPlayable;
+  const isTrailerPending = supportsTrailerControl
+    && (
+      anime?.trailerChecked !== true
+      || (hasTrailer && status === 'unknown')
+    );
+  const canPlayTrailer = supportsTrailerControl && isTrailerPlayable;
+  const shouldShowTrailerControl = canPlayTrailer || isTrailerPending;
+  const isTrailerButtonBusy = isTrailerLoading || isTrailerPending;
   const trailerButtonLabel = isTrailerLoading
     ? `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを読み込み中`
-    : `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを再生`;
+    : isTrailerPending
+      ? `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} のトレーラーを確認中`
+      : `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを再生`;
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -273,18 +286,18 @@ function AnimeCard({
         </div>
         <div className={`card-watch-section${canEditWatchCount ? ' editable' : ''}${isWatchControlsPinned ? ' controls-open' : ''}`}>
           <div className="card-watch-primary">
-            {canPlayTrailer && (
+            {shouldShowTrailerControl && (
               <button
                 type="button"
-                className={`card-trailer-button${isTrailerLoading ? ' loading' : ''}`}
+                className={`card-trailer-button${isTrailerButtonBusy ? ' loading' : ''}`}
                 onPointerDown={handleTrailerPointerDown}
                 onClick={handlePlayTrailer}
                 aria-label={trailerButtonLabel}
-                aria-busy={isTrailerLoading}
-                disabled={isTrailerLoading}
-                title={isTrailerLoading ? 'トレーラーを読み込み中' : '公式トレーラーを再生'}
+                aria-busy={isTrailerButtonBusy}
+                disabled={isTrailerButtonBusy}
+                title={isTrailerLoading ? 'トレーラーを読み込み中' : isTrailerPending ? 'トレーラーを確認中' : '公式トレーラーを再生'}
               >
-                {isTrailerLoading ? (
+                {isTrailerButtonBusy ? (
                   <span className="card-trailer-spinner" aria-hidden="true" />
                 ) : (
                   <span className="card-trailer-icon" aria-hidden="true">▶</span>

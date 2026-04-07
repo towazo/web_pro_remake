@@ -36,6 +36,7 @@ function BookmarkScreen({
   onMarkWatched,
   onBulkRemoveBookmarks,
   onPlayTrailer,
+  onVisibleAnimeIdsChange,
 }) {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedBookmarkIds, setSelectedBookmarkIds] = useState([]);
@@ -93,6 +94,15 @@ function BookmarkScreen({
       addedAtFields: ['bookmarkedAt', 'addedAt'],
     });
   }, [sortedBookmarks, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
+
+  useEffect(() => {
+    if (typeof onVisibleAnimeIdsChange !== 'function') return;
+    onVisibleAnimeIdsChange(filteredBookmarks.map((anime) => anime.id));
+  }, [filteredBookmarks, onVisibleAnimeIdsChange]);
+
+  useEffect(() => () => {
+    onVisibleAnimeIdsChange?.([]);
+  }, [onVisibleAnimeIdsChange]);
 
   useEffect(() => {
     setSelectedBookmarkIds((prev) =>
