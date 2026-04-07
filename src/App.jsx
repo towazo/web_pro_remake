@@ -44,8 +44,9 @@ import {
 } from './utils/homeStatsBackgrounds';
 import {
   readHomeQuickActionBackgroundsFromStorage,
+  readHomeQuickActionBackgroundsFromPersistentStorage,
   sanitizeHomeQuickActionBackgrounds,
-  writeHomeQuickActionBackgroundsToStorage,
+  writeHomeQuickActionBackgroundsToPersistentStorage,
 } from './utils/homeQuickActionBackgrounds';
 import {
   ANIME_SORT_OPTIONS,
@@ -186,6 +187,7 @@ function App() {
   const [homeQuickActionBackgrounds, setHomeQuickActionBackgrounds] = useState(() =>
     readHomeQuickActionBackgroundsFromStorage()
   );
+  const [isHomeQuickActionBackgroundsHydrated, setIsHomeQuickActionBackgroundsHydrated] = useState(false);
   const [seasonalAddSource, setSeasonalAddSource] = useState('home');
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
@@ -311,6 +313,33 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    readHomeQuickActionBackgroundsFromPersistentStorage()
+      .then((savedBackgrounds) => {
+        if (cancelled) return;
+
+        setHomeQuickActionBackgrounds((currentBackgrounds) => {
+          const currentPayload = JSON.stringify(sanitizeHomeQuickActionBackgrounds(currentBackgrounds));
+          const nextPayload = JSON.stringify(sanitizeHomeQuickActionBackgrounds(savedBackgrounds));
+          return currentPayload === nextPayload ? currentBackgrounds : savedBackgrounds;
+        });
+      })
+      .catch(() => {
+        // Ignore hydration failures and keep the localStorage snapshot.
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsHomeQuickActionBackgroundsHydrated(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return undefined;
 
     const warmYouTubeApi = () => {
@@ -342,8 +371,13 @@ function App() {
   }, [homeStatsCardBackgrounds]);
 
   useEffect(() => {
-    writeHomeQuickActionBackgroundsToStorage(homeQuickActionBackgrounds);
-  }, [homeQuickActionBackgrounds]);
+    if (!isHomeQuickActionBackgroundsHydrated) return;
+
+    writeHomeQuickActionBackgroundsToPersistentStorage(homeQuickActionBackgrounds)
+      .catch(() => {
+        // Ignore storage write failures and keep the in-memory state.
+      });
+  }, [homeQuickActionBackgrounds, isHomeQuickActionBackgroundsHydrated]);
 
   useEffect(() => {
     if (!isServerLibraryReady) return;
