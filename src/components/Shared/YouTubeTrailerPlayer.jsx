@@ -142,7 +142,24 @@ function YouTubeTrailerPlayer({
         hostRef.current.innerHTML = '';
       }
     };
-  }, [autoplay, controls, loop, videoId]);
+  }, [controls, loop, videoId]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !readyRef.current) return;
+
+    if (autoplay) {
+      requestPlaybackResume(player);
+      return;
+    }
+
+    clearPlaybackRetryTimeouts();
+    try {
+      player.pauseVideo();
+    } catch (_) {
+      // Ignore pause failures.
+    }
+  }, [autoplay, videoId]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -157,7 +174,9 @@ function YouTubeTrailerPlayer({
     } catch (_) {
       // Ignore mute sync failures.
     }
-    requestPlaybackResume(player);
+    if (autoplay) {
+      requestPlaybackResume(player);
+    }
   }, [autoplay, muted, videoId]);
 
   return (

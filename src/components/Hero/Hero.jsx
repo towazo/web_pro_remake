@@ -39,7 +39,7 @@ function Hero({
         hasTrailer,
         isTrailerPlayable,
     } = useTrailerPlaybackStatus(anime, {
-        autoProbe: isActive && !isTutorial,
+        autoProbe: !isTutorial,
         timeoutMs: 5200,
     });
 
@@ -143,7 +143,7 @@ function Hero({
             .filter(Boolean)
             .join(', ')
         : '';
-    const shouldRenderTrailerPreview = isActive && hasTrailer && isTrailerPlayable;
+    const shouldRenderTrailerPreview = hasTrailer && isTrailerPlayable;
 
     return (
         <section className={`hero ${isActive ? 'active' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>

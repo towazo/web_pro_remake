@@ -569,10 +569,11 @@ function App() {
 
   const handleOpenTrailer = async (anime) => {
     const trailer = normalizeAnimeTrailer(anime?.trailer);
-    if (!anime || !trailer || !canAttemptTrailerPlayback(trailer)) return;
+    if (!anime || !trailer || !canAttemptTrailerPlayback(trailer)) return false;
     const playable = await probeAnimeTrailerPlayback(trailer, { timeoutMs: 5600 });
-    if (!playable) return;
+    if (!playable) return false;
     setActiveTrailerAnime({ ...anime, trailer });
+    return true;
   };
 
   const handleCloseTrailer = () => {

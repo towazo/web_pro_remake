@@ -30,7 +30,9 @@ function AnimeCard({
   const cardRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
+  const isMountedRef = useRef(true);
   const [isWatchControlsPinned, setIsWatchControlsPinned] = useState(false);
+  const [isTrailerLoading, setIsTrailerLoading] = useState(false);
   const rating = normalizeRating(anime?.rating);
   const watchCount = normalizeAnimeWatchCount(anime?.watchCount, { minimum: 1, defaultValue: 1 });
   const canEditRating = typeof onUpdateRating === 'function'
@@ -44,6 +46,9 @@ function AnimeCard({
   const canPlayTrailer = !isSelectionMode
     && typeof onPlayTrailer === 'function'
     && isTrailerPlayable;
+  const trailerButtonLabel = isTrailerLoading
+    ? `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを読み込み中`
+    : `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを再生`;
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -53,8 +58,15 @@ function AnimeCard({
   };
 
   useEffect(() => {
-    return () => clearLongPressTimer();
+    return () => {
+      isMountedRef.current = false;
+      clearLongPressTimer();
+    };
   }, []);
+
+  useEffect(() => {
+    setIsTrailerLoading(false);
+  }, [anime?.id]);
 
   useEffect(() => {
     if (!canEditWatchCount) {
@@ -160,10 +172,18 @@ function AnimeCard({
     event.stopPropagation();
   };
 
-  const handlePlayTrailer = (event) => {
+  const handlePlayTrailer = async (event) => {
     event.stopPropagation();
-    if (!canPlayTrailer) return;
-    onPlayTrailer(anime);
+    if (!canPlayTrailer || isTrailerLoading) return;
+
+    setIsTrailerLoading(true);
+    try {
+      await Promise.resolve(onPlayTrailer(anime));
+    } finally {
+      if (isMountedRef.current) {
+        setIsTrailerLoading(false);
+      }
+    }
   };
 
   return (
@@ -256,13 +276,19 @@ function AnimeCard({
             {canPlayTrailer && (
               <button
                 type="button"
-                className="card-trailer-button"
+                className={`card-trailer-button${isTrailerLoading ? ' loading' : ''}`}
                 onPointerDown={handleTrailerPointerDown}
                 onClick={handlePlayTrailer}
-                aria-label={`${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを再生`}
-                title="公式トレーラーを再生"
+                aria-label={trailerButtonLabel}
+                aria-busy={isTrailerLoading}
+                disabled={isTrailerLoading}
+                title={isTrailerLoading ? 'トレーラーを読み込み中' : '公式トレーラーを再生'}
               >
-                <span className="card-trailer-icon" aria-hidden="true">▶</span>
+                {isTrailerLoading ? (
+                  <span className="card-trailer-spinner" aria-hidden="true" />
+                ) : (
+                  <span className="card-trailer-icon" aria-hidden="true">▶</span>
+                )}
               </button>
             )}
             {canEditWatchCount ? (
