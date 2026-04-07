@@ -1,6 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import Hero from './Hero';
 
+function RefreshIcon({ spinning = false }) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className={`slider-refresh-icon ${spinning ? 'spinning' : ''}`}
+        >
+            <path
+                d="M20 4v7h-7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <path
+                d="M20 11a8 8 0 1 0-2.34 5.66"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
 function HeroSlider({
     slides,
     onRefresh,
@@ -74,11 +101,7 @@ function HeroSlider({
                     aria-label={isRefreshing ? 'スライダーを更新中' : 'スライダーを更新'}
                     title={isRefreshing ? '更新中' : 'スライダーを更新'}
                 >
-                    <img
-                        src="/images/icon-update.png"
-                        alt=""
-                        className={`slider-refresh-icon ${isRefreshing ? 'spinning' : ''}`}
-                    />
+                    <RefreshIcon spinning={isRefreshing} />
                     <span className="slider-refresh-label">{isRefreshing ? '更新中' : '更新'}</span>
                 </button>
             )}

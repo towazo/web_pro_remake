@@ -339,7 +339,6 @@ function BookmarkScreen({
       <div className="bookmark-screen-header">
         <div>
           <h2 className="page-main-title">ブックマーク</h2>
-          <p className="bookmark-screen-sub">{sortedBookmarks.length} 件の作品</p>
           <p className="bookmark-screen-desc page-main-subtitle">今後見たい作品や気になる作品を保存できます。</p>
         </div>
         <div className="bookmark-screen-actions">

@@ -1038,7 +1038,7 @@ body {
 }
 
 .mylist-page-main .controls {
-    margin: 22px 0 28px;
+    margin: 30px 0 28px;
 }
 
 .page-main-title {
@@ -2598,14 +2598,14 @@ button.card-watch-summary {
 }
 
 .slider-refresh-icon {
-    --slider-refresh-icon-scale: 1.7;
-    width: 24px;
-    height: 24px;
-    object-fit: contain;
+    --slider-refresh-icon-scale: 1.15;
+    width: 18px;
+    height: 18px;
+    display: block;
     flex-shrink: 0;
-    filter: brightness(0) invert(1);
     opacity: 0.96;
     transform: scale(var(--slider-refresh-icon-scale));
+    transform-origin: center;
 }
 
 .slider-refresh-icon.spinning {
@@ -2689,9 +2689,9 @@ button.card-watch-summary {
     }
 
     .slider-refresh-icon {
-        --slider-refresh-icon-scale: 1.5;
-        width: 22px;
-        height: 22px;
+        --slider-refresh-icon-scale: 1.05;
+        width: 18px;
+        height: 18px;
     }
 
     .slider-refresh-loading {
@@ -3408,7 +3408,7 @@ button.card-watch-summary {
 }
 
 .bookmark-screen-controls {
-    margin: 8px 0 12px;
+    margin: 18px 0 12px;
 }
 
 .bookmark-screen-controls .search-box {
@@ -5422,8 +5422,9 @@ body.trailer-modal-open .add-toast {
     .bookmark-screen-header {
         flex-direction: column;
         align-items: stretch;
-        margin-bottom: 14px;
-        padding-bottom: 12px;
+        gap: 16px;
+        margin-bottom: 18px;
+        padding-bottom: 16px;
         border-bottom: 1px solid #ececec;
     }
 
@@ -5431,7 +5432,14 @@ body.trailer-modal-open .add-toast {
         width: 100%;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
+        padding-top: 2px;
+    }
+
+    .mylist-screen-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
     }
 
     .mylist-copy-controls {
@@ -5443,7 +5451,7 @@ body.trailer-modal-open .add-toast {
     }
 
     .bookmark-screen-controls {
-        margin: 10px 0 10px;
+        margin: 22px 0 12px;
     }
 
     .bookmark-screen-controls .sort-box {
@@ -5457,10 +5465,16 @@ body.trailer-modal-open .add-toast {
     .bookmark-season-nav-buttons {
         min-width: 0;
         width: 100%;
+        gap: 12px;
     }
 
     .bookmark-screen-add,
     .bookmark-screen-home {
+        width: 100%;
+    }
+
+    .mylist-screen-actions .bookmark-screen-add,
+    .mylist-screen-actions .mylist-share-button {
         width: 100%;
     }
 
@@ -5590,7 +5604,7 @@ body.trailer-modal-open .add-toast {
     }
 
     .bookmark-screen-actions {
-        gap: 8px;
+        gap: 10px;
     }
 
     .mylist-copy-controls {
@@ -5650,7 +5664,19 @@ body.trailer-modal-open .add-toast {
     }
 
     .bookmark-season-nav-buttons {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .bookmark-season-nav-button {
+        min-width: 0;
+        min-height: 44px;
+        padding: 6px 8px;
+        font-size: 0.72rem;
+        line-height: 1.3;
+        white-space: normal;
+        text-align: center;
+        justify-content: center;
     }
 
     .bookmark-screen-add,
@@ -5695,11 +5721,11 @@ body.trailer-modal-open .add-toast {
     }
 
     .mylist-section-header+.controls {
-        margin-top: 12px;
+        margin-top: 18px;
     }
 
     .mylist-page-main .controls {
-        margin: 14px 0 18px;
+        margin: 22px 0 18px;
     }
 
     .page-guide-text {
@@ -9169,7 +9195,7 @@ body.trailer-modal-open .add-toast {
     }
 
     .mylist-page-main .controls {
-        margin: 16px 0 20px;
+        margin: 22px 0 20px;
     }
 
     .search-box,
