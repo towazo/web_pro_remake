@@ -329,6 +329,8 @@ function App() {
     && !isCurrentSeasonFeaturedLoading
     && !hasCurrentSeasonFeaturedSlides
     && hasCurrentSeasonFeaturedError;
+  const shouldShowFeaturedSliderLoading = homeFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
+    && !hasCurrentSeasonFeaturedLoaded;
 
   const buildNextFeaturedSliderState = useCallback((options = {}) => {
     featuredShuffleTokenRef.current += 1;
@@ -1681,6 +1683,7 @@ function App() {
             onCycleComplete={handleFeaturedSlideCycleComplete}
             showRefreshButton={featuredSliderState.showRefreshButton}
             isRefreshing={isRefreshingFeatured}
+            isLoading={shouldShowFeaturedSliderLoading}
           />
 
           <main className="main-content">

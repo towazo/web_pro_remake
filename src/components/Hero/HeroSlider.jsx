@@ -33,6 +33,30 @@ function RestartIcon() {
     );
 }
 
+function HeroSliderLoading() {
+    return (
+        <div className="hero-slider-shell hero-slider-shell-loading" aria-busy="true" aria-live="polite">
+            <div className="hero-slider-container hero-slider-loading-container">
+                <div className="hero-slider-loading-layout">
+                    <div className="hero-slider-loading-copy">
+                        <span className="hero-slider-loading-chip hero-slider-loading-block" />
+                        <span className="hero-slider-loading-title hero-slider-loading-block" />
+                        <span className="hero-slider-loading-meta hero-slider-loading-block" />
+                        <span className="hero-slider-loading-text hero-slider-loading-block" />
+                        <span className="hero-slider-loading-text short hero-slider-loading-block" />
+                    </div>
+                    <div className="hero-slider-loading-media hero-slider-loading-block" />
+                </div>
+            </div>
+
+            <div className="hero-slider-toolbar hero-slider-toolbar-loading" role="status">
+                <div className="hero-slider-loading-toolbar-box hero-slider-loading-block" />
+                <span className="hero-slider-loading-message">スライドを読み込み中…</span>
+            </div>
+        </div>
+    );
+}
+
 function HeroSlider({
     slides,
     sourceType = '',
@@ -45,6 +69,7 @@ function HeroSlider({
     onCycleComplete,
     showRefreshButton = false,
     isRefreshing = false,
+    isLoading = false,
 }) {
     const totalSlides = Array.isArray(slides) ? slides.length : 0;
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -214,7 +239,13 @@ function HeroSlider({
         handleTogglePreviewMuted();
     };
 
-    if (totalSlides === 0) return null;
+    if (totalSlides === 0) {
+        if (isLoading) {
+            return <HeroSliderLoading />;
+        }
+
+        return null;
+    }
 
     const shouldShowDots = totalSlides <= MAX_DOT_INDICATORS;
     const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
