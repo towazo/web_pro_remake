@@ -12,6 +12,7 @@ const AUTOPLAY_STARTUP_SOFT_RETRY_MS = 2200;
 const AUTOPLAY_STARTUP_RECOVERY_MS = 4200;
 const AUTOPLAY_STARTUP_STALL_MS = 6200;
 const MAX_AUTOPLAY_PLAYER_RECOVERY_RESTARTS = 1;
+const PROGRESS_PLAYER_RESAMPLE_MS = 450;
 
 function YouTubeTrailerPlayer({
   trailer,
@@ -49,6 +50,11 @@ function YouTubeTrailerPlayer({
   const autoplayStartupTimeoutIdsRef = useRef([]);
   const autoplayRecoveryRestartCountRef = useRef(0);
   const progressAnimationFrameIdRef = useRef(0);
+  const progressBaselinePlayerTimeRef = useRef(0);
+  const progressBaselineTimestampRef = useRef(0);
+  const progressDurationRef = useRef(0);
+  const progressLastSampleTimestampRef = useRef(0);
+  const progressLastEmittedValueRef = useRef(0);
   const [playerRestartNonce, setPlayerRestartNonce] = useState(0);
   const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
@@ -117,6 +123,14 @@ function YouTubeTrailerPlayer({
     }
   };
 
+  const resetProgressTracking = () => {
+    progressBaselinePlayerTimeRef.current = 0;
+    progressBaselineTimestampRef.current = 0;
+    progressDurationRef.current = 0;
+    progressLastSampleTimestampRef.current = 0;
+    progressLastEmittedValueRef.current = 0;
+  };
+
   const hasActivePlayback = () => (
     playbackStateRef.current === YT_PLAYER_STATE_PLAYING
     || playbackStateRef.current === YT_PLAYER_STATE_BUFFERING
@@ -161,38 +175,79 @@ function YouTubeTrailerPlayer({
     }
   };
 
-  const emitProgress = (value) => {
+  const emitProgress = (value, options = {}) => {
     if (typeof onProgressChangeRef.current !== 'function') return;
     const normalizedValue = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+    const nextValue = options.allowDecrease
+      ? normalizedValue
+      : Math.max(progressLastEmittedValueRef.current, normalizedValue);
+    progressLastEmittedValueRef.current = nextValue;
     try {
-      onProgressChangeRef.current(normalizedValue);
+      onProgressChangeRef.current(nextValue);
     } catch (_) {
       // Ignore progress callback failures.
     }
   };
 
-  const syncPlaybackProgress = (player) => {
+  const samplePlaybackProgress = (player, options = {}) => {
     if (!player) return;
 
     try {
       const duration = Number(player.getDuration?.()) || 0;
       const currentTime = Number(player.getCurrentTime?.()) || 0;
       if (duration > 0) {
-        emitProgress(currentTime / duration);
+        const now = window.performance?.now?.() ?? Date.now();
+        progressDurationRef.current = duration;
+        progressBaselinePlayerTimeRef.current = currentTime;
+        progressBaselineTimestampRef.current = now;
+        progressLastSampleTimestampRef.current = now;
+        emitProgress(currentTime / duration, options);
       }
     } catch (_) {
       // Ignore progress-read failures.
     }
   };
 
+  const getEstimatedProgress = (timestamp) => {
+    const duration = progressDurationRef.current;
+    if (!(duration > 0)) return null;
+
+    const isPlaying = playbackStateRef.current === YT_PLAYER_STATE_PLAYING;
+    const elapsedSeconds = isPlaying && progressBaselineTimestampRef.current
+      ? Math.max(0, (timestamp - progressBaselineTimestampRef.current) / 1000)
+      : 0;
+    const estimatedCurrentTime = Math.min(
+      duration,
+      progressBaselinePlayerTimeRef.current + elapsedSeconds,
+    );
+
+    return estimatedCurrentTime / duration;
+  };
+
   const startProgressPolling = (player) => {
     clearProgressPollInterval();
-    const tick = () => {
-      syncPlaybackProgress(player);
+    samplePlaybackProgress(player, { allowDecrease: true });
+
+    const tick = (timestamp) => {
+      if (!playerRef.current || playerRef.current !== player) return;
+
+      const shouldResample = (
+        !progressLastSampleTimestampRef.current
+        || (timestamp - progressLastSampleTimestampRef.current) >= PROGRESS_PLAYER_RESAMPLE_MS
+      );
+      if (shouldResample) {
+        samplePlaybackProgress(player);
+      }
+
+      const estimatedProgress = getEstimatedProgress(timestamp);
+      if (estimatedProgress !== null) {
+        emitProgress(estimatedProgress);
+      }
+
       progressAnimationFrameIdRef.current = window.requestAnimationFrame(tick);
     };
 
-    tick();
+    progressAnimationFrameIdRef.current = window.requestAnimationFrame(tick);
   };
 
   const requestDeferredUnmute = (player, options = {}) => {
@@ -390,7 +445,8 @@ function YouTubeTrailerPlayer({
               playerRef.current = event.target;
               readyRef.current = true;
               playbackStateRef.current = null;
-              emitProgress(0);
+              resetProgressTracking();
+              emitProgress(0, { allowDecrease: true });
               syncIframeAttributes(event.target);
               syncDesiredMuteState(event.target);
 
@@ -448,6 +504,7 @@ function YouTubeTrailerPlayer({
               if (cancelled) return;
               const errorCode = Number(event?.data) || 0;
               clearProgressPollInterval();
+              resetProgressTracking();
               clearAutoplayStartupTimeouts();
               emitPlaybackStalled();
               markAnimeTrailerUnplayable(normalizedTrailer, { errorCode });
@@ -475,6 +532,7 @@ function YouTubeTrailerPlayer({
       clearUnmuteRetryTimeouts();
       clearAutoplayStartupTimeouts();
       clearProgressPollInterval();
+      resetProgressTracking();
       if (localPlayer) {
         try {
           localPlayer.destroy();
@@ -510,6 +568,7 @@ function YouTubeTrailerPlayer({
     clearUnmuteRetryTimeouts();
     clearAutoplayStartupTimeouts();
     clearProgressPollInterval();
+    resetProgressTracking();
     try {
       player.pauseVideo();
     } catch (_) {
