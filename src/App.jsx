@@ -226,6 +226,8 @@ function App() {
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
+  const featuredShuffleTokenRef = useRef(0);
+  const animeListRef = useRef(animeList);
   const detailEnrichmentStateRef = useRef(new Map());
   const detailEnrichmentRequestInFlightRef = useRef(false);
   const detailEnrichmentAbortControllerRef = useRef(null);
@@ -238,6 +240,14 @@ function App() {
     () => animeList.map((anime) => String(anime?.id ?? '')).join('|'),
     [animeList]
   );
+
+  const buildNextFeaturedSliderState = useCallback((options = {}) => {
+    featuredShuffleTokenRef.current += 1;
+    return buildFeaturedSliderState(animeListRef.current, {
+      shuffleToken: featuredShuffleTokenRef.current,
+      avoidStartingAnimeId: options?.avoidStartingAnimeId,
+    });
+  }, []);
 
   const scheduleDetailEnrichmentRetry = useCallback(() => {
     if (!detailEnrichmentMountedRef.current) return;
@@ -453,6 +463,10 @@ function App() {
   }, [animeList]);
 
   useEffect(() => {
+    animeListRef.current = animeList;
+  }, [animeList]);
+
+  useEffect(() => {
     writeListToStorage(BOOKMARK_LIST_STORAGE_KEY, bookmarkList);
   }, [bookmarkList]);
 
@@ -499,8 +513,47 @@ function App() {
       featuredRefreshTimerRef.current = null;
     }
     setIsRefreshingFeatured(false);
-    setFeaturedSliderState(buildFeaturedSliderState(animeList));
-  }, [featuredSliderAnimeKey]);
+    setFeaturedSliderState(buildNextFeaturedSliderState());
+  }, [featuredSliderAnimeKey, buildNextFeaturedSliderState]);
+
+  useEffect(() => {
+    setFeaturedSliderState((currentState) => {
+      if (!currentState?.slides?.length) return currentState;
+
+      const latestAnimeMap = new Map(
+        animeList
+          .filter((anime) => Number.isFinite(Number(anime?.id)))
+          .map((anime) => [Number(anime.id), anime])
+      );
+
+      let hasChanges = false;
+      const nextSlides = currentState.slides.map((slide) => {
+        if (!slide || slide.isTutorial) return slide;
+
+        const latestAnime = latestAnimeMap.get(Number(slide.id));
+        if (!latestAnime) return slide;
+
+        const nextSlide = {
+          ...latestAnime,
+          selectionReason: slide.selectionReason,
+          uniqueId: slide.uniqueId,
+        };
+
+        if (latestAnime !== slide) {
+          hasChanges = true;
+          return nextSlide;
+        }
+
+        return slide;
+      });
+
+      if (!hasChanges) return currentState;
+      return {
+        ...currentState,
+        slides: nextSlides,
+      };
+    });
+  }, [animeList]);
 
   useEffect(() => () => {
     if (featuredRefreshTimerRef.current) {
@@ -653,11 +706,20 @@ function App() {
       clearTimeout(featuredRefreshTimerRef.current);
     }
     featuredRefreshTimerRef.current = setTimeout(() => {
-      setFeaturedSliderState(buildFeaturedSliderState(animeList));
+      setFeaturedSliderState(buildNextFeaturedSliderState());
       setIsRefreshingFeatured(false);
       featuredRefreshTimerRef.current = null;
     }, 360);
   };
+
+  const handleFeaturedSlideCycleComplete = useCallback((completedAnime) => {
+    if (animeList.length <= 1) return;
+
+    const completedAnimeId = Number(completedAnime?.id);
+    setFeaturedSliderState(buildNextFeaturedSliderState({
+      avoidStartingAnimeId: Number.isFinite(completedAnimeId) ? completedAnimeId : undefined,
+    }));
+  }, [animeList.length, buildNextFeaturedSliderState]);
 
   const handleOpenTrailer = async (anime) => {
     const trailer = normalizeAnimeTrailer(anime?.trailer);
@@ -1463,6 +1525,7 @@ function App() {
             slides={featuredSliderState.slides}
             onRefresh={handleRefreshFeaturedSlides}
             onPlayTrailer={handleOpenTrailer}
+            onCycleComplete={handleFeaturedSlideCycleComplete}
             showRefreshButton={featuredSliderState.showRefreshButton}
             isRefreshing={isRefreshingFeatured}
           />

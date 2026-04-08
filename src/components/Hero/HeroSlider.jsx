@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import Hero from './Hero';
 
+const MAX_DOT_INDICATORS = 8;
+const SLIDE_ADVANCE_FALLBACK_MS = 8200;
+const INITIAL_BUFFER_SIZE = 10;
+const BUFFER_REPLENISH_THRESHOLD = 5;
+
 function RefreshIcon({ spinning = false }) {
     return (
         <svg
@@ -32,35 +37,52 @@ function HeroSlider({
     slides,
     onRefresh,
     onPlayTrailer,
+    onCycleComplete,
     showRefreshButton = false,
     isRefreshing = false,
 }) {
+    const totalSlides = Array.isArray(slides) ? slides.length : 0;
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [isPreviewMuted, setIsPreviewMuted] = useState(true);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
     const slideIdentityKey = Array.isArray(slides)
         ? slides.map((anime, index) => String(anime?.uniqueId || anime?.id || index)).join('|')
         : '';
     const getSlideKey = (anime, index) => String(anime?.uniqueId || anime?.id || index);
-    const getWrappedDistance = (fromIndex, toIndex) => {
-        if (!Array.isArray(slides) || slides.length <= 1) return 0;
-        const rawDistance = Math.abs(fromIndex - toIndex);
-        return Math.min(rawDistance, slides.length - rawDistance);
-    };
+    const getSlideDistance = (fromIndex, toIndex) => Math.abs(fromIndex - toIndex);
 
     // Reset index when slides change
     useEffect(() => {
         setCurrentIndex(0);
     }, [slideIdentityKey]);
 
-    if (!slides || slides.length === 0) return null;
+    if (totalSlides === 0) return null;
 
     const nextSlide = () => {
-        setCurrentIndex((prev) => (prev + 1) % slides.length);
+        if (totalSlides <= 1) return;
+        const nextIndex = currentIndex + 1;
+        if (nextIndex < totalSlides) {
+            setCurrentIndex(nextIndex);
+            return;
+        }
+
+        if (typeof onCycleComplete === 'function') {
+            onCycleComplete(slides[currentIndex]);
+            return;
+        }
+
+        setCurrentIndex(0);
     };
 
     const prevSlide = () => {
-        setCurrentIndex((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
+        if (totalSlides <= 1) return;
+        if (currentIndex === 0) {
+            setCurrentIndex(totalSlides - 1);
+            return;
+        }
+
+        setCurrentIndex((prev) => prev - 1);
     };
 
     // the required distance between touchStart and touchEnd to be detected as a swipe
@@ -90,6 +112,11 @@ function HeroSlider({
         onRefresh();
     };
 
+    const shouldShowDots = totalSlides <= MAX_DOT_INDICATORS;
+    const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
+    const bufferEndIndex = Math.min(totalSlides, bufferStartIndex + INITIAL_BUFFER_SIZE);
+    const bufferedSlides = slides.slice(bufferStartIndex, bufferEndIndex);
+
     return (
         <div
             className="hero-slider-container"
@@ -107,7 +134,6 @@ function HeroSlider({
                     title={isRefreshing ? '更新中' : 'スライダーを更新'}
                 >
                     <RefreshIcon spinning={isRefreshing} />
-                    <span className="slider-refresh-label">{isRefreshing ? '更新中' : '更新'}</span>
                 </button>
             )}
 
@@ -117,16 +143,26 @@ function HeroSlider({
                 </div>
             )}
 
-            {slides.map((anime, index) => (
-                <Hero
-                    key={getSlideKey(anime, index)}
-                    anime={anime}
-                    isActive={index === currentIndex}
-                    shouldPreloadTrailer={getWrappedDistance(index, currentIndex) === 1}
-                />
-            ))}
+            {bufferedSlides.map((anime, index) => {
+                const actualIndex = bufferStartIndex + index;
+                const slideDistance = getSlideDistance(actualIndex, currentIndex);
+                if (slideDistance > 1) return null;
 
-            {slides.length > 1 && (
+                return (
+                    <Hero
+                        key={getSlideKey(anime, actualIndex)}
+                        anime={anime}
+                        isActive={actualIndex === currentIndex}
+                        shouldPreloadTrailer={slideDistance === 1}
+                        noTrailerAdvanceDelayMs={SLIDE_ADVANCE_FALLBACK_MS}
+                        previewMuted={isPreviewMuted}
+                        onTogglePreviewMuted={() => setIsPreviewMuted((prev) => !prev)}
+                        onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
+                    />
+                );
+            })}
+
+            {totalSlides > 1 && (
                 <>
                     <button type="button" className="slider-nav-button slider-prev" onClick={prevSlide}>
                         &#10094;
@@ -134,17 +170,23 @@ function HeroSlider({
                     <button type="button" className="slider-nav-button slider-next" onClick={nextSlide}>
                         &#10095;
                     </button>
-                    <div className="slider-indicators">
-                        {slides.map((_, index) => (
-                            <button
-                                key={index}
-                                type="button"
-                                className={`slider-dot ${index === currentIndex ? 'active' : ''}`}
-                                onClick={() => setCurrentIndex(index)}
-                                aria-label={`${index + 1}枚目を表示`}
-                            />
-                        ))}
-                    </div>
+                    {shouldShowDots ? (
+                        <div className="slider-indicators">
+                            {slides.map((_, index) => (
+                                <button
+                                    key={index}
+                                    type="button"
+                                    className={`slider-dot ${index === currentIndex ? 'active' : ''}`}
+                                    onClick={() => setCurrentIndex(index)}
+                                    aria-label={`${index + 1}枚目を表示`}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="slider-progress-count" aria-live="polite">
+                            {currentIndex + 1} / {totalSlides}
+                        </div>
+                    )}
                 </>
             )}
         </div>

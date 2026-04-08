@@ -29,10 +29,13 @@ function Hero({
     anime,
     isActive,
     shouldPreloadTrailer = false,
+    noTrailerAdvanceDelayMs = 8000,
+    previewMuted = true,
+    onTogglePreviewMuted,
+    onRequestAdvance,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
-    const [isPreviewMuted, setIsPreviewMuted] = useState(true);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -90,12 +93,6 @@ function Hero({
 
         loadDescription();
     }, [anime, isTutorial]);
-
-    useEffect(() => {
-        if (!isActive) {
-            setIsPreviewMuted(true);
-        }
-    }, [isActive]);
 
     const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
 
@@ -156,6 +153,25 @@ function Hero({
             : "(max-width: 768px) 42vw, 220px";
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && shouldPrepareTrailerPlayer;
     const shouldEagerLoadHeroAssets = isActive || shouldPreloadTrailer;
+    const effectivePreviewMuted = isActive ? previewMuted : true;
+
+    useEffect(() => {
+        if (!isActive || isTutorial || typeof onRequestAdvance !== 'function') {
+            return undefined;
+        }
+
+        if (shouldRenderTrailerPreview) {
+            return undefined;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            onRequestAdvance();
+        }, Math.max(1000, Number(noTrailerAdvanceDelayMs) || 8000));
+
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [isActive, isTutorial, noTrailerAdvanceDelayMs, onRequestAdvance, shouldRenderTrailerPreview, anime?.id]);
 
     return (
         <section className={`hero ${isActive ? 'active' : ''}${shouldPreloadTrailer ? ' is-preloading' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
@@ -234,16 +250,17 @@ function Hero({
                                         title={`${anime.title?.native || anime.title?.romaji || anime.title?.english || '作品'} のトレーラープレビュー`}
                                         className="hero-media-preview-frame"
                                         autoplay={isActive}
-                                        loop
+                                        loop={false}
                                         controls={false}
-                                        muted={isPreviewMuted}
+                                        muted={effectivePreviewMuted}
                                         deferVisibilityUntilPlaying
+                                        onEnded={isActive ? onRequestAdvance : undefined}
                                     />
                                     {isActive && (
                                         <AudioToggleButton
-                                            muted={isPreviewMuted}
+                                            muted={previewMuted}
                                             className="hero-media-audio-toggle"
-                                            onClick={() => setIsPreviewMuted((prev) => !prev)}
+                                            onClick={onTogglePreviewMuted}
                                             labelOn="トレーラーの音声をオンにする"
                                             labelOff="トレーラーの音声をオフにする"
                                         />

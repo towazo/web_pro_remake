@@ -19,6 +19,7 @@ function YouTubeTrailerPlayer({
   deferVisibilityUntilPlaying = false,
   className = '',
   onError,
+  onEnded,
 }) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
@@ -26,6 +27,7 @@ function YouTubeTrailerPlayer({
   const playbackRetryTimeoutIdsRef = useRef([]);
   const autoplayRef = useRef(autoplay);
   const mutedRef = useRef(muted);
+  const onEndedRef = useRef(onEnded);
   const playbackStateRef = useRef(null);
   const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
@@ -38,6 +40,10 @@ function YouTubeTrailerPlayer({
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+  }, [onEnded]);
 
   useLayoutEffect(() => {
     setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
@@ -148,6 +154,14 @@ function YouTubeTrailerPlayer({
               if (event?.data === YT.PlayerState.PLAYING) {
                 setIsPlaybackVisible(true);
                 syncDesiredMuteState(event.target, { forceUnmute: true });
+              }
+
+              if (event?.data === YT.PlayerState.ENDED && typeof onEndedRef.current === 'function') {
+                try {
+                  onEndedRef.current();
+                } catch (_) {
+                  // Ignore callback failures.
+                }
               }
 
               if (!loop) return;

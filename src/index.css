@@ -2590,18 +2590,15 @@ button.card-watch-summary {
     top: 12px;
     right: 12px;
     z-index: 14;
-    min-height: 42px;
-    min-width: 84px;
+    width: 44px;
+    height: 44px;
     border: 1px solid rgba(255, 255, 255, 0.32);
     background: rgba(20, 20, 20, 0.45);
     color: #fff;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 0 11px;
-    font-size: 0.72rem;
-    font-weight: 800;
+    padding: 0;
     cursor: pointer;
     backdrop-filter: blur(4px);
     transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
@@ -2634,11 +2631,6 @@ button.card-watch-summary {
 
 .slider-refresh-icon.spinning {
     animation: sliderRefreshSpin 0.9s linear infinite;
-}
-
-.slider-refresh-label {
-    white-space: nowrap;
-    line-height: 1;
 }
 
 .slider-refresh-loading {
@@ -2700,16 +2692,10 @@ button.card-watch-summary {
 
 @media (max-width: 480px) {
     .slider-refresh-button {
-        min-width: 88px;
-        min-height: 46px;
-        padding: 0 11px;
+        width: 46px;
+        height: 46px;
         top: 10px;
         right: 10px;
-    }
-
-    .slider-refresh-label {
-        display: inline;
-        font-size: 0.72rem;
     }
 
     .slider-refresh-icon {
@@ -2829,6 +2815,39 @@ button.card-watch-summary {
 
 .tutorial-hero.active~.slider-indicators .slider-dot.active {
     background: black;
+}
+
+.slider-progress-count {
+    position: absolute;
+    right: 18px;
+    bottom: 20px;
+    z-index: 10;
+    min-width: 72px;
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: rgba(0, 0, 0, 0.42);
+    color: #fff;
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1;
+    text-align: center;
+    backdrop-filter: blur(4px);
+}
+
+.tutorial-hero.active~.slider-progress-count {
+    border-color: rgba(0, 0, 0, 0.18);
+    background: rgba(255, 255, 255, 0.78);
+    color: #111;
+}
+
+@media (max-width: 480px) {
+    .slider-progress-count {
+        right: 10px;
+        bottom: 14px;
+        min-width: 66px;
+        padding: 6px 9px;
+        font-size: 0.72rem;
+    }
 }
 
 .selection-reason-badge {

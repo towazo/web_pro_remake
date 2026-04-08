@@ -1,4 +1,3 @@
-import { translateGenre } from '../constants/animeData';
 import {
   DISPLAY_ALLOWED_COUNTRY_OF_ORIGIN,
   DISPLAY_ALLOWED_MEDIA_FORMATS,
@@ -6,6 +5,7 @@ import {
   filterOutHentaiAnimeList,
   isDisplayEligibleAnime,
 } from '../utils/contentFilters';
+import { normalizeAnimeTrailer } from '../utils/trailer';
 
 const ANILIST_ENDPOINT = String(
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ANILIST_ENDPOINT)
@@ -2167,8 +2167,97 @@ const createTutorialFeaturedSlides = () => ([
   }
 ]);
 
-export const buildFeaturedSliderState = (allAnimes) => {
+const shuffleAnimeList = (list) => {
+  const next = Array.isArray(list) ? [...list] : [];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+};
+
+const moveAnimeIdAwayFromFront = (list, animeId) => {
+  const numericAnimeId = Number(animeId);
+  if (!Number.isFinite(numericAnimeId) || !Array.isArray(list) || list.length <= 1) {
+    return Array.isArray(list) ? list : [];
+  }
+
+  if (Number(list[0]?.id) !== numericAnimeId) {
+    return list;
+  }
+
+  const swapIndex = list.findIndex((anime, index) => index > 0 && Number(anime?.id) !== numericAnimeId);
+  if (swapIndex <= 0) {
+    return list;
+  }
+
+  const next = [...list];
+  [next[0], next[swapIndex]] = [next[swapIndex], next[0]];
+  return next;
+};
+
+const splitAnimeByTrailerAvailability = (list) => {
+  const withTrailer = [];
+  const withoutTrailer = [];
+
+  (Array.isArray(list) ? list : []).forEach((anime) => {
+    if (normalizeAnimeTrailer(anime)) {
+      withTrailer.push(anime);
+      return;
+    }
+
+    withoutTrailer.push(anime);
+  });
+
+  return {
+    withTrailer: shuffleAnimeList(withTrailer),
+    withoutTrailer: shuffleAnimeList(withoutTrailer),
+  };
+};
+
+const mergeAnimeListsEvenly = (withTrailer, withoutTrailer) => {
+  const withTrailerQueue = Array.isArray(withTrailer) ? [...withTrailer] : [];
+  const withoutTrailerQueue = Array.isArray(withoutTrailer) ? [...withoutTrailer] : [];
+  const totalWithTrailer = withTrailerQueue.length;
+  const totalWithoutTrailer = withoutTrailerQueue.length;
+  const totalCount = totalWithTrailer + totalWithoutTrailer;
+  const merged = [];
+  let placedWithTrailer = 0;
+  let placedWithoutTrailer = 0;
+
+  while (merged.length < totalCount) {
+    if (withTrailerQueue.length === 0) {
+      merged.push(...withoutTrailerQueue.splice(0));
+      break;
+    }
+
+    if (withoutTrailerQueue.length === 0) {
+      merged.push(...withTrailerQueue.splice(0));
+      break;
+    }
+
+    const nextPosition = merged.length + 1;
+    const withTrailerDeficit = ((nextPosition * totalWithTrailer) / totalCount) - placedWithTrailer;
+    const withoutTrailerDeficit = ((nextPosition * totalWithoutTrailer) / totalCount) - placedWithoutTrailer;
+    const shouldPickWithTrailer = withTrailerDeficit === withoutTrailerDeficit
+      ? withTrailerQueue.length >= withoutTrailerQueue.length
+      : withTrailerDeficit > withoutTrailerDeficit;
+
+    if (shouldPickWithTrailer) {
+      merged.push(withTrailerQueue.shift());
+      placedWithTrailer += 1;
+    } else {
+      merged.push(withoutTrailerQueue.shift());
+      placedWithoutTrailer += 1;
+    }
+  }
+
+  return merged.filter(Boolean);
+};
+
+export const buildFeaturedSliderState = (allAnimes, options = {}) => {
   const safeAnimes = filterOutHentaiAnimeList(allAnimes);
+  const shuffleToken = String(options?.shuffleToken ?? 'default');
   // Case 0: Tutorial / Zero State
   if (!safeAnimes || safeAnimes.length === 0) {
     return {
@@ -2191,46 +2280,20 @@ export const buildFeaturedSliderState = (allAnimes) => {
     };
   }
 
-  // Case 2: Many items, pick random via genres
-  const allGenres = [...new Set(safeAnimes.flatMap(a => a.genres))];
-  const shuffledGenres = allGenres.sort(() => 0.5 - Math.random());
-  const targetGenres = shuffledGenres.slice(0, 3);
-
-  const selected = [];
-  const selectedIds = new Set();
-
-  targetGenres.forEach(genre => {
-    const candidates = safeAnimes.filter(a =>
-      a.genres.includes(genre) && !selectedIds.has(a.id)
-    );
-
-    if (candidates.length > 0) {
-      const picked = candidates[Math.floor(Math.random() * candidates.length)];
-      selected.push({
-        ...picked,
-        selectionReason: `ジャンル: ${translateGenre(genre)}`,
-        uniqueId: `genre-${picked.id}-${genre}`
-      });
-      selectedIds.add(picked.id);
-    }
-  });
-
-  while (selected.length < 3 && selected.length < safeAnimes.length) {
-    const remaining = safeAnimes.filter(a => !selectedIds.has(a.id));
-    if (remaining.length === 0) break;
-
-    const picked = remaining[Math.floor(Math.random() * remaining.length)];
-    selected.push({
-      ...picked,
-      selectionReason: "おすすめ",
-      uniqueId: `random-${picked.id}`
-    });
-    selectedIds.add(picked.id);
-  }
+  const { withTrailer, withoutTrailer } = splitAnimeByTrailerAvailability(safeAnimes);
+  const shuffledAnimes = moveAnimeIdAwayFromFront(
+    mergeAnimeListsEvenly(withTrailer, withoutTrailer),
+    options?.avoidStartingAnimeId
+  );
+  const selected = shuffledAnimes.map((anime, index) => ({
+    ...anime,
+    selectionReason: 'マイリストシャッフル',
+    uniqueId: `shuffle-${shuffleToken}-${index}-${anime.id}`,
+  }));
 
   return {
     slides: selected,
-    sourceType: 'mylist-linked',
+    sourceType: 'mylist-balanced-shuffle',
     showRefreshButton: true,
   };
 };
