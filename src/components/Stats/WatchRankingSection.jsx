@@ -64,11 +64,17 @@ function WatchRankingSection({ animeList = [] }) {
 
     let previousWatchCount = null;
     let previousDisplayRank = 0;
+    let previousRankTone = 'light';
 
     return sortedItems.map((anime, index) => {
       const currentWatchCount = anime.watchCount || 0;
       const isTied = index > 0 && currentWatchCount === previousWatchCount;
       const displayRank = isTied ? previousDisplayRank : index + 1;
+      const rankTone = isTied
+        ? previousRankTone
+        : previousRankTone === 'dark'
+          ? 'light'
+          : 'dark';
       const metaParts = [];
       const seasonYear = Number(anime?.seasonYear);
       if (Number.isFinite(seasonYear) && seasonYear > 0) {
@@ -85,10 +91,12 @@ function WatchRankingSection({ animeList = [] }) {
 
       previousWatchCount = currentWatchCount;
       previousDisplayRank = displayRank;
+      previousRankTone = rankTone;
 
       return {
         ...anime,
         displayRank,
+        rankTone,
         metaText: metaParts.join(' ・ '),
       };
     });
@@ -127,7 +135,7 @@ function WatchRankingSection({ animeList = [] }) {
       <div className="watch-ranking-list">
         {rankingItems.map((anime) => (
           <article key={anime.id} className="watch-ranking-item">
-            <div className={`watch-ranking-rank rank-${anime.displayRank}`}>
+            <div className={`watch-ranking-rank rank-${anime.displayRank} rank-tone-${anime.rankTone}`}>
               {anime.displayRank}
             </div>
             <img

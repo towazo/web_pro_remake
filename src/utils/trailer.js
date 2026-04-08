@@ -17,12 +17,15 @@ const hasTrailerPayload = (value) => (
 );
 
 const TRAILER_PLAYBACK_CACHE_KEY = 'animeTrailerPlaybackCache';
+const TRAILER_PLAYBACK_CACHE_VERSION = 2;
+const PERSISTED_PLAYABLE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const PERSISTED_UNPLAYABLE_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const PERSISTED_UNPLAYABLE_ERROR_CODES = new Set([2, 100, 101, 150]);
-const playableTrailerIds = new Set();
+const playableTrailerMap = new Map();
 const unplayableTrailerMap = new Map();
 const playbackStatusListeners = new Set();
 let playbackCacheLoaded = false;
+let persistPlaybackCacheTimeoutId = 0;
 
 const hasLocalStorage = () => (
   typeof window !== 'undefined'
@@ -76,7 +79,7 @@ export const hasAnimeTrailerMetadata = (anime) => (
 );
 
 const emitPlaybackStatus = (videoId) => {
-  const status = playableTrailerIds.has(videoId)
+  const status = playableTrailerMap.has(videoId)
     ? 'playable'
     : unplayableTrailerMap.has(videoId)
       ? 'invalid'
@@ -100,15 +103,27 @@ const loadPersistedPlaybackCache = () => {
     const raw = window.localStorage.getItem(TRAILER_PLAYBACK_CACHE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
+    const version = Number(parsed?.version) || 1;
     const items = Array.isArray(parsed?.items) ? parsed.items : [];
     const now = Date.now();
 
     items.forEach((item) => {
-      const [videoIdRaw, errorCodeRaw, checkedAtRaw] = Array.isArray(item) ? item : [];
+      const [
+        videoIdRaw,
+        statusRaw,
+        errorCodeRaw,
+        checkedAtRaw,
+      ] = Array.isArray(item) ? item : [];
       const videoId = String(videoIdRaw || '').trim();
-      const checkedAt = Number(checkedAtRaw);
-      const errorCode = Number(errorCodeRaw) || 0;
+      const status = String(version >= 2 ? statusRaw : 'invalid').trim();
+      const checkedAt = Number(version >= 2 ? checkedAtRaw : errorCodeRaw);
+      const errorCode = Number(version >= 2 ? errorCodeRaw : statusRaw) || 0;
       if (!videoId || !Number.isFinite(checkedAt)) return;
+      if (status === 'playable') {
+        if ((now - checkedAt) > PERSISTED_PLAYABLE_TTL_MS) return;
+        playableTrailerMap.set(videoId, { checkedAt, persisted: true });
+        return;
+      }
       if ((now - checkedAt) > PERSISTED_UNPLAYABLE_TTL_MS) return;
       unplayableTrailerMap.set(videoId, { errorCode, checkedAt, persisted: true });
     });
@@ -119,11 +134,17 @@ const loadPersistedPlaybackCache = () => {
 
 const persistPlaybackCache = () => {
   if (!hasLocalStorage()) return;
+  persistPlaybackCacheTimeoutId = 0;
 
   try {
-    const items = Array.from(unplayableTrailerMap.entries())
-      .filter(([, value]) => value?.persisted)
-      .map(([videoId, value]) => [videoId, Number(value.errorCode) || 0, Number(value.checkedAt) || Date.now()]);
+    const items = [
+      ...Array.from(playableTrailerMap.entries())
+        .filter(([, value]) => value?.persisted)
+        .map(([videoId, value]) => [videoId, 'playable', 0, Number(value.checkedAt) || Date.now()]),
+      ...Array.from(unplayableTrailerMap.entries())
+        .filter(([, value]) => value?.persisted)
+        .map(([videoId, value]) => [videoId, 'invalid', Number(value.errorCode) || 0, Number(value.checkedAt) || Date.now()]),
+    ];
 
     if (items.length === 0) {
       window.localStorage.removeItem(TRAILER_PLAYBACK_CACHE_KEY);
@@ -131,12 +152,22 @@ const persistPlaybackCache = () => {
     }
 
     window.localStorage.setItem(TRAILER_PLAYBACK_CACHE_KEY, JSON.stringify({
-      version: 1,
+      version: TRAILER_PLAYBACK_CACHE_VERSION,
       items,
     }));
   } catch (_) {
     // Ignore storage failures.
   }
+};
+
+const schedulePersistPlaybackCache = () => {
+  if (!hasLocalStorage()) return;
+  if (persistPlaybackCacheTimeoutId) {
+    window.clearTimeout(persistPlaybackCacheTimeoutId);
+  }
+  persistPlaybackCacheTimeoutId = window.setTimeout(() => {
+    persistPlaybackCache();
+  }, 180);
 };
 
 export const subscribeTrailerPlaybackStatus = (listener) => {
@@ -153,7 +184,7 @@ export const getAnimeTrailerPlaybackStatus = (animeOrTrailer) => {
 
   loadPersistedPlaybackCache();
 
-  if (playableTrailerIds.has(trailer.id)) return 'playable';
+  if (playableTrailerMap.has(trailer.id)) return 'playable';
   if (unplayableTrailerMap.has(trailer.id)) return 'invalid';
   return 'unknown';
 };
@@ -172,11 +203,12 @@ export const markAnimeTrailerPlayable = (animeOrTrailer) => {
   if (!trailer) return;
 
   loadPersistedPlaybackCache();
-  playableTrailerIds.add(trailer.id);
-  const hadUnplayableEntry = unplayableTrailerMap.delete(trailer.id);
-  if (hadUnplayableEntry) {
-    persistPlaybackCache();
-  }
+  playableTrailerMap.set(trailer.id, {
+    checkedAt: Date.now(),
+    persisted: true,
+  });
+  unplayableTrailerMap.delete(trailer.id);
+  schedulePersistPlaybackCache();
   emitPlaybackStatus(trailer.id);
 };
 
@@ -188,15 +220,13 @@ export const markAnimeTrailerUnplayable = (animeOrTrailer, options = {}) => {
 
   const errorCode = Number(options.errorCode ?? options.code) || 0;
   const persisted = options.persist === true || PERSISTED_UNPLAYABLE_ERROR_CODES.has(errorCode);
-  playableTrailerIds.delete(trailer.id);
+  playableTrailerMap.delete(trailer.id);
   unplayableTrailerMap.set(trailer.id, {
     errorCode,
     checkedAt: Date.now(),
     persisted,
   });
-  if (persisted) {
-    persistPlaybackCache();
-  }
+  schedulePersistPlaybackCache();
   emitPlaybackStatus(trailer.id);
 };
 

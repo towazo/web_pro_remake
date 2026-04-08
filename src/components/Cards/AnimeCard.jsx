@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
 import WatchCountBadge from '../Shared/WatchCountBadge';
 import { normalizeAnimeWatchCount } from '../../utils/animeList';
@@ -38,6 +38,8 @@ function AnimeCard({
   const [isTrailerLoading, setIsTrailerLoading] = useState(false);
   const rating = normalizeRating(anime?.rating);
   const watchCount = normalizeAnimeWatchCount(anime?.watchCount, { minimum: 1, defaultValue: 1 });
+  const [watchControlCount, setWatchControlCount] = useState(() => watchCount);
+  const editableWatchCount = normalizeAnimeWatchCount(watchControlCount, { minimum: 1, defaultValue: watchCount });
   const supportsTrailerControl = !isSelectionMode && typeof onPlayTrailer === 'function';
   const shouldTrackViewportPriority = typeof onViewportPriorityChange === 'function';
   const { shouldAutoProbe, probePriority } = useViewportTrailerPriority(cardRef, {
@@ -84,6 +86,10 @@ function AnimeCard({
   useEffect(() => {
     setIsTrailerLoading(false);
   }, [anime?.id]);
+
+  useEffect(() => {
+    setWatchControlCount(watchCount);
+  }, [anime?.id, watchCount]);
 
   useEffect(() => {
     if (!shouldTrackViewportPriority) return undefined;
@@ -193,8 +199,12 @@ function AnimeCard({
   const handleWatchCountChange = (event, nextValue) => {
     event.stopPropagation();
     if (!canEditWatchCount) return;
-    onUpdateWatchCount(anime.id, nextValue);
-    setIsWatchControlsPinned(false);
+    const normalizedNextValue = normalizeAnimeWatchCount(nextValue, {
+      minimum: 1,
+      defaultValue: editableWatchCount,
+    });
+    onUpdateWatchCount(anime.id, normalizedNextValue);
+    setWatchControlCount(normalizedNextValue);
   };
 
   const handleTrailerPointerDown = (event) => {
@@ -327,7 +337,7 @@ function AnimeCard({
                 onPointerDown={handleWatchPointerDown}
                 onClick={handleToggleWatchControls}
                 aria-expanded={isWatchControlsPinned}
-                aria-label={`視聴回数 ${watchCount}回。タップで変更ボタンを${isWatchControlsPinned ? '閉じる' : '表示'}`}
+                aria-label={`視聴回数 ${watchCount}回。タップで変更欄を${isWatchControlsPinned ? '閉じる' : '表示'}`}
               >
                 <WatchCountBadge
                   count={watchCount}
@@ -355,8 +365,8 @@ function AnimeCard({
                 type="button"
                 className="card-watch-adjust"
                 onPointerDown={handleWatchPointerDown}
-                onClick={(event) => handleWatchCountChange(event, watchCount - 1)}
-                disabled={watchCount <= 1}
+                onClick={(event) => handleWatchCountChange(event, editableWatchCount - 1)}
+                disabled={editableWatchCount <= 1}
                 aria-label="視聴回数を1減らす"
               >
                 −
@@ -365,7 +375,7 @@ function AnimeCard({
                 type="button"
                 className="card-watch-adjust"
                 onPointerDown={handleWatchPointerDown}
-                onClick={(event) => handleWatchCountChange(event, watchCount + 1)}
+                onClick={(event) => handleWatchCountChange(event, editableWatchCount + 1)}
                 aria-label="視聴回数を1増やす"
               >
                 ＋
@@ -378,4 +388,14 @@ function AnimeCard({
   );
 }
 
-export default AnimeCard;
+const areAnimeCardPropsEqual = (prevProps, nextProps) => (
+  prevProps.anime === nextProps.anime
+  && prevProps.isSelectionMode === nextProps.isSelectionMode
+  && prevProps.isSelected === nextProps.isSelected
+  && prevProps.allowRatingEditInSelectionMode === nextProps.allowRatingEditInSelectionMode
+  && prevProps.allowWatchCountEditInSelectionMode === nextProps.allowWatchCountEditInSelectionMode
+  && Boolean(prevProps.onPlayTrailer) === Boolean(nextProps.onPlayTrailer)
+  && Boolean(prevProps.onViewportPriorityChange) === Boolean(nextProps.onViewportPriorityChange)
+);
+
+export default memo(AnimeCard, areAnimeCardPropsEqual);

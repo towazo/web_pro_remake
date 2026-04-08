@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
+import { startTransition } from 'react';
+
 // Services
 import { buildFeaturedSliderState, fetchAnimeByYearAllPages, fetchAnimeDetailsByIds } from './services/animeService';
 import { fetchLibrarySnapshot, saveLibrarySnapshot } from './services/libraryService';
@@ -55,6 +57,10 @@ import {
   readHomeFeaturedSliderSourceFromStorage,
   writeHomeFeaturedSliderSourceToStorage,
 } from './utils/homeFeaturedSliderSource';
+import {
+  readHomeCurrentSeasonFeaturedAnimeListFromStorage,
+  writeHomeCurrentSeasonFeaturedAnimeListToStorage,
+} from './utils/homeCurrentSeasonFeaturedCache';
 import {
   ANIME_SORT_OPTIONS,
   buildFilteredAnimeList,
@@ -236,12 +242,21 @@ function App() {
     description: '来季に放送予定の作品を表示しています。気になる作品を先にブックマークできます。',
     locked: true,
   }), [nextSeasonInfo, nextSeasonLabel]);
+  const cachedCurrentSeasonFeaturedAnimeList = useMemo(() => (
+    filterDisplayEligibleAnimeList(
+      readHomeCurrentSeasonFeaturedAnimeListFromStorage(currentSeasonInfo),
+      {
+        allowUnknownFormat: true,
+        allowUnknownCountry: true,
+      }
+    )
+  ), [currentSeasonInfo]);
   const [homeFeaturedSliderSource, setHomeFeaturedSliderSource] = useState(() =>
     readHomeFeaturedSliderSourceFromStorage()
   );
-  const [currentSeasonFeaturedAnimeList, setCurrentSeasonFeaturedAnimeList] = useState([]);
+  const [currentSeasonFeaturedAnimeList, setCurrentSeasonFeaturedAnimeList] = useState(() => cachedCurrentSeasonFeaturedAnimeList);
   const [isCurrentSeasonFeaturedLoading, setIsCurrentSeasonFeaturedLoading] = useState(false);
-  const [hasCurrentSeasonFeaturedLoaded, setHasCurrentSeasonFeaturedLoaded] = useState(false);
+  const [hasCurrentSeasonFeaturedLoaded, setHasCurrentSeasonFeaturedLoaded] = useState(() => cachedCurrentSeasonFeaturedAnimeList.length > 0);
   const [hasCurrentSeasonFeaturedError, setHasCurrentSeasonFeaturedError] = useState(false);
   const [featuredSliderState, setFeaturedSliderState] = useState(() => (
     homeFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
@@ -643,9 +658,12 @@ function App() {
           }
         );
 
-        setCurrentSeasonFeaturedAnimeList(nextItems);
-        setHasCurrentSeasonFeaturedLoaded(true);
-        setHasCurrentSeasonFeaturedError(Boolean(result?.error) && nextItems.length === 0);
+        startTransition(() => {
+          setCurrentSeasonFeaturedAnimeList(nextItems);
+          setHasCurrentSeasonFeaturedLoaded(true);
+          setHasCurrentSeasonFeaturedError(Boolean(result?.error) && nextItems.length === 0);
+        });
+        writeHomeCurrentSeasonFeaturedAnimeListToStorage(currentSeasonInfo, nextItems);
       } catch (error) {
         if (controller.signal.aborted || currentSeasonFeaturedRequestIdRef.current !== requestId) return;
         setCurrentSeasonFeaturedAnimeList([]);
@@ -665,6 +683,7 @@ function App() {
     };
   }, [
     currentSeasonAddPreset,
+    currentSeasonInfo,
     hasCurrentSeasonFeaturedLoaded,
     homeFeaturedSliderSource,
   ]);
@@ -892,6 +911,18 @@ function App() {
     });
     const requestId = trailerOpenRequestIdRef.current + 1;
     trailerOpenRequestIdRef.current = requestId;
+    const isLikelyMobileTrailerEnvironment = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && (
+        window.matchMedia('(pointer: coarse)').matches
+        || window.matchMedia('(max-width: 768px)').matches
+      );
+
+    if (isLikelyMobileTrailerEnvironment) {
+      setActiveTrailerAnime({ ...anime, trailer, trailerLoading: false });
+      return true;
+    }
+
     setActiveTrailerAnime({ ...anime, trailer, trailerLoading: true });
 
     const playable = await probeAnimeTrailerPlayback(trailer, {
@@ -1302,8 +1333,10 @@ function App() {
         });
 
         if (enrichedMap.size > 0) {
-          setAnimeList((prev) => applyEnrichedDetails(prev, enrichedMap));
-          setBookmarkList((prev) => applyEnrichedDetails(prev, enrichedMap));
+          startTransition(() => {
+            setAnimeList((prev) => applyEnrichedDetails(prev, enrichedMap));
+            setBookmarkList((prev) => applyEnrichedDetails(prev, enrichedMap));
+          });
         }
       } finally {
         if (detailEnrichmentAbortControllerRef.current === abortController) {

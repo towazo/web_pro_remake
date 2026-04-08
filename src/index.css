@@ -910,25 +910,28 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #111;
-    background: linear-gradient(180deg, #ffffff 0%, #eef1f5 100%);
+    border: 2px solid #111;
+    background: #fff;
     color: #111;
     font-size: 1rem;
     font-weight: 900;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.92),
+        0 2px 0 rgba(17, 17, 17, 0.08);
 }
 
-.watch-ranking-rank.rank-1 {
-    background: linear-gradient(180deg, #111111 0%, #2a2a2a 100%);
+.watch-ranking-rank.rank-tone-dark {
+    background: #111;
     color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.watch-ranking-rank.rank-2 {
-    background: linear-gradient(180deg, #e9edf1 0%, #cfd6de 100%);
-}
-
-.watch-ranking-rank.rank-3 {
-    background: linear-gradient(180deg, #f5f5f5 0%, #dddddd 100%);
+.watch-ranking-rank.rank-tone-light {
+    background: #fff;
+    color: #111;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.92),
+        0 2px 0 rgba(17, 17, 17, 0.08);
 }
 
 .watch-ranking-thumb {
@@ -1823,6 +1826,7 @@ button.card-watch-summary {
         height: 22px;
         font-size: 0.84rem;
     }
+
 }
 
 @media (max-width: 380px) {

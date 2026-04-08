@@ -55,7 +55,8 @@ function Hero({
 
     // Effect to handle translation
     useEffect(() => {
-        if (!anime || isTutorial) return;
+        if (!anime || isTutorial || (!isActive && !shouldPreloadTrailer)) return undefined;
+        let cancelled = false;
 
         async function loadDescription() {
             // Step 1: Check ANIME_DESCRIPTIONS dictionary
@@ -73,7 +74,9 @@ function Hero({
 
             // If found in dictionary, use it
             if (localDesc) {
-                setTranslatedDesc(localDesc);
+                if (!cancelled) {
+                    setTranslatedDesc(localDesc);
+                }
                 return;
             }
 
@@ -81,15 +84,22 @@ function Hero({
             const animeId = anime.id || anime.title?.romaji || anime.title?.native;
             const cached = getCachedTranslation(animeId);
             if (cached) {
-                setTranslatedDesc(cached);
+                if (!cancelled) {
+                    setTranslatedDesc(cached);
+                }
                 return;
             }
 
             // Step 3: If we have English description, translate it
             if (anime.description) {
-                setIsTranslating(true);
+                if (!cancelled) {
+                    setIsTranslating(true);
+                }
                 const translated = await translateText(anime.description);
 
+                if (cancelled) {
+                    return;
+                }
                 if (translated) {
                     setTranslatedDesc(translated);
                     setCachedTranslation(animeId, translated);
@@ -102,7 +112,10 @@ function Hero({
         }
 
         loadDescription();
-    }, [anime, isTutorial]);
+        return () => {
+            cancelled = true;
+        };
+    }, [anime, isTutorial, isActive, shouldPreloadTrailer]);
 
     const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
 
