@@ -21,6 +21,7 @@ function YouTubeTrailerPlayer({
   className = '',
   onError,
   onEnded,
+  onMuteStateChange,
 }) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
@@ -30,6 +31,7 @@ function YouTubeTrailerPlayer({
   const autoplayRef = useRef(autoplay);
   const mutedRef = useRef(muted);
   const onEndedRef = useRef(onEnded);
+  const onMuteStateChangeRef = useRef(onMuteStateChange);
   const playbackStateRef = useRef(null);
   const lastHandledMuteChangeTokenRef = useRef(muteChangeToken);
   const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
@@ -47,6 +49,10 @@ function YouTubeTrailerPlayer({
   useEffect(() => {
     onEndedRef.current = onEnded;
   }, [onEnded]);
+
+  useEffect(() => {
+    onMuteStateChangeRef.current = onMuteStateChange;
+  }, [onMuteStateChange]);
 
   useLayoutEffect(() => {
     setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
@@ -71,15 +77,27 @@ function YouTubeTrailerPlayer({
     )
   );
 
+  const emitMuteState = (player) => {
+    if (typeof onMuteStateChangeRef.current !== 'function' || !player) return;
+
+    try {
+      onMuteStateChangeRef.current(player.isMuted());
+    } catch (_) {
+      // Ignore player mute-read failures.
+    }
+  };
+
   const requestDeferredUnmute = (player, options = {}) => {
     if (!player || mutedRef.current) {
       clearUnmuteRetryTimeouts();
+      emitMuteState(player);
       return;
     }
 
     const allowAutoplayUnmute = options.userInitiated === true || !isLikelyMobileAutoplayEnvironment();
     if (!allowAutoplayUnmute) {
       clearUnmuteRetryTimeouts();
+      emitMuteState(player);
       return;
     }
 
@@ -94,6 +112,7 @@ function YouTubeTrailerPlayer({
       } catch (_) {
         // Ignore playback resume failures.
       }
+      emitMuteState(player);
     };
 
     attemptUnmute();
@@ -163,6 +182,7 @@ function YouTubeTrailerPlayer({
       } else {
         player.unMute();
       }
+      emitMuteState(player);
     } catch (_) {
       // Ignore mute sync failures.
     }

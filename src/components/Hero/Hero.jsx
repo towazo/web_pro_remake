@@ -33,10 +33,12 @@ function Hero({
     previewMuted = true,
     previewMutedChangeToken = 0,
     onTogglePreviewMuted,
+    onRetryPreviewUnmute,
     onRequestAdvance,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
+    const [actualPreviewMuted, setActualPreviewMuted] = useState(true);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -157,6 +159,21 @@ function Hero({
     const effectivePreviewMuted = isActive ? previewMuted : true;
 
     useEffect(() => {
+        if (!isActive || !shouldRenderTrailerPreview) {
+            setActualPreviewMuted(true);
+            return;
+        }
+
+        setActualPreviewMuted(true);
+    }, [anime?.id, isActive, shouldRenderTrailerPreview]);
+
+    useEffect(() => {
+        if (previewMuted) {
+            setActualPreviewMuted(true);
+        }
+    }, [previewMuted]);
+
+    useEffect(() => {
         if (!isActive || isTutorial || typeof onRequestAdvance !== 'function') {
             return undefined;
         }
@@ -173,6 +190,15 @@ function Hero({
             window.clearTimeout(timeoutId);
         };
     }, [isActive, isTutorial, noTrailerAdvanceDelayMs, onRequestAdvance, shouldRenderTrailerPreview, anime?.id]);
+
+    const handleAudioTogglePress = () => {
+        if (actualPreviewMuted && !previewMuted) {
+            onRetryPreviewUnmute?.();
+            return;
+        }
+
+        onTogglePreviewMuted?.();
+    };
 
     return (
         <section className={`hero ${isActive ? 'active' : ''}${shouldPreloadTrailer ? ' is-preloading' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
@@ -257,12 +283,13 @@ function Hero({
                                         muteChangeToken={previewMutedChangeToken}
                                         deferVisibilityUntilPlaying
                                         onEnded={isActive ? onRequestAdvance : undefined}
+                                        onMuteStateChange={isActive ? setActualPreviewMuted : undefined}
                                     />
                                     {isActive && (
                                         <AudioToggleButton
-                                            muted={previewMuted}
+                                            muted={actualPreviewMuted}
                                             className="hero-media-audio-toggle"
-                                            onClick={onTogglePreviewMuted}
+                                            onClick={handleAudioTogglePress}
                                             labelOn="トレーラーの音声をオンにする"
                                             labelOff="トレーラーの音声をオフにする"
                                         />

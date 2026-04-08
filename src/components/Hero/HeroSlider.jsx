@@ -118,6 +118,10 @@ function HeroSlider({
         setPreviewMutedChangeToken((prev) => prev + 1);
     };
 
+    const handleRetryPreviewUnmute = () => {
+        setPreviewMutedChangeToken((prev) => prev + 1);
+    };
+
     const shouldShowDots = totalSlides <= MAX_DOT_INDICATORS;
     const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
     const bufferEndIndex = Math.min(totalSlides, bufferStartIndex + INITIAL_BUFFER_SIZE);
@@ -164,6 +168,7 @@ function HeroSlider({
                         previewMuted={isPreviewMuted}
                         previewMutedChangeToken={previewMutedChangeToken}
                         onTogglePreviewMuted={handleTogglePreviewMuted}
+                        onRetryPreviewUnmute={handleRetryPreviewUnmute}
                         onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
                     />
                 );
