@@ -2,16 +2,19 @@ function AudioToggleButton({
   muted = true,
   onClick,
   className = '',
+  disabled = false,
   labelOn = '音声をオン',
   labelOff = '音声をオフ',
+  labelDisabled = '音声は利用できません',
 }) {
-  const label = muted ? labelOn : labelOff;
+  const label = disabled ? labelDisabled : (muted ? labelOn : labelOff);
 
   return (
     <button
       type="button"
       className={`audio-toggle-button${className ? ` ${className}` : ''}`.trim()}
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       aria-pressed={!muted}
       title={label}

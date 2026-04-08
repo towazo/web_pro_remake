@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Hero from './Hero';
+import AudioToggleButton from '../Shared/AudioToggleButton';
 
 const MAX_DOT_INDICATORS = 8;
 const INITIAL_BUFFER_SIZE = 10;
@@ -44,6 +45,8 @@ function HeroSlider({
     const [isPreviewMuted, setIsPreviewMuted] = useState(true);
     const [hasUnlockedPreviewAudio, setHasUnlockedPreviewAudio] = useState(false);
     const [previewMutedChangeToken, setPreviewMutedChangeToken] = useState(0);
+    const [activePreviewMuted, setActivePreviewMuted] = useState(true);
+    const [activePreviewAudioAvailable, setActivePreviewAudioAvailable] = useState(false);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
     const slideIdentityKey = Array.isArray(slides)
@@ -56,6 +59,11 @@ function HeroSlider({
     useEffect(() => {
         setCurrentIndex(0);
     }, [slideIdentityKey]);
+
+    useEffect(() => {
+        setActivePreviewMuted(true);
+        setActivePreviewAudioAvailable(false);
+    }, [currentIndex, slideIdentityKey]);
 
     const nextSlide = useCallback(() => {
         if (totalSlides <= 1) return;
@@ -123,87 +131,125 @@ function HeroSlider({
         setPreviewMutedChangeToken((prev) => prev + 1);
     };
 
+    const handleSliderAudioToggle = () => {
+        if (activePreviewAudioAvailable && activePreviewMuted && !isPreviewMuted) {
+            handleRetryPreviewUnmute();
+            return;
+        }
+
+        handleTogglePreviewMuted();
+    };
+
     if (totalSlides === 0) return null;
 
     const shouldShowDots = totalSlides <= MAX_DOT_INDICATORS;
     const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
     const bufferEndIndex = Math.min(totalSlides, bufferStartIndex + INITIAL_BUFFER_SIZE);
     const bufferedSlides = slides.slice(bufferStartIndex, bufferEndIndex);
+    const sliderAudioStatusText = !activePreviewAudioAvailable
+        ? (isPreviewMuted
+            ? '音声設定はオフです。次のトレーラーにもこの設定を引き継ぎます'
+            : '音声設定はオンです。次のトレーラーで自動的に適用を試みます')
+        : isPreviewMuted
+            ? 'トレーラー音声はオフです'
+            : activePreviewMuted
+                ? '音声オンを維持しています。必要ならもう一度押すと再試行します'
+                : 'トレーラー音声はオンです';
 
     return (
-        <div
-            className="hero-slider-container"
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-        >
-            {showRefreshButton && typeof onRefresh === 'function' && (
-                <button
-                    type="button"
-                    className={`slider-refresh-button ${isRefreshing ? 'loading' : ''}`}
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    aria-label={isRefreshing ? 'スライダーを更新中' : 'スライダーを更新'}
-                    title={isRefreshing ? '更新中' : 'スライダーを更新'}
-                >
-                    <RefreshIcon spinning={isRefreshing} />
-                </button>
-            )}
+        <div className="hero-slider-shell">
+            <div
+                className="hero-slider-container"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+            >
+                {showRefreshButton && typeof onRefresh === 'function' && (
+                    <button
+                        type="button"
+                        className={`slider-refresh-button ${isRefreshing ? 'loading' : ''}`}
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                        aria-label={isRefreshing ? 'スライダーを更新中' : 'スライダーを更新'}
+                        title={isRefreshing ? '更新中' : 'スライダーを更新'}
+                    >
+                        <RefreshIcon spinning={isRefreshing} />
+                    </button>
+                )}
 
-            {showRefreshButton && isRefreshing && (
-                <div className="slider-refresh-loading" role="status" aria-live="polite">
-                    スライダーを更新中...
-                </div>
-            )}
+                {showRefreshButton && isRefreshing && (
+                    <div className="slider-refresh-loading" role="status" aria-live="polite">
+                        スライダーを更新中...
+                    </div>
+                )}
 
-            {bufferedSlides.map((anime, index) => {
-                const actualIndex = bufferStartIndex + index;
-                const slideDistance = getSlideDistance(actualIndex, currentIndex);
-                if (slideDistance > 1) return null;
+                {bufferedSlides.map((anime, index) => {
+                    const actualIndex = bufferStartIndex + index;
+                    const slideDistance = getSlideDistance(actualIndex, currentIndex);
+                    if (slideDistance > 1) return null;
 
-                return (
-                    <Hero
-                        key={getSlideKey(anime, actualIndex)}
-                        anime={anime}
-                        isActive={actualIndex === currentIndex}
-                        shouldPreloadTrailer={slideDistance === 1}
-                        previewMuted={isPreviewMuted}
-                        allowPersistentPreviewAudio={hasUnlockedPreviewAudio}
-                        previewMutedChangeToken={previewMutedChangeToken}
-                        onTogglePreviewMuted={handleTogglePreviewMuted}
-                        onRetryPreviewUnmute={handleRetryPreviewUnmute}
-                        onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
+                    return (
+                        <Hero
+                            key={getSlideKey(anime, actualIndex)}
+                            anime={anime}
+                            isActive={actualIndex === currentIndex}
+                            shouldPreloadTrailer={slideDistance === 1}
+                            previewMuted={isPreviewMuted}
+                            allowPersistentPreviewAudio={hasUnlockedPreviewAudio}
+                            previewMutedChangeToken={previewMutedChangeToken}
+                            onPreviewMuteStateChange={actualIndex === currentIndex ? setActivePreviewMuted : undefined}
+                            onPreviewAvailabilityChange={actualIndex === currentIndex ? setActivePreviewAudioAvailable : undefined}
+                            onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
+                        />
+                    );
+                })}
+
+                {totalSlides > 1 && (
+                    <>
+                        <button type="button" className="slider-nav-button slider-prev" onClick={prevSlide}>
+                            &#10094;
+                        </button>
+                        <button type="button" className="slider-nav-button slider-next" onClick={nextSlide}>
+                            &#10095;
+                        </button>
+                        {shouldShowDots ? (
+                            <div className="slider-indicators">
+                                {slides.map((_, index) => (
+                                    <button
+                                        key={index}
+                                        type="button"
+                                        className={`slider-dot ${index === currentIndex ? 'active' : ''}`}
+                                        onClick={() => setCurrentIndex(index)}
+                                        aria-label={`${index + 1}枚目を表示`}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="slider-progress-count" aria-live="polite">
+                                {currentIndex + 1} / {totalSlides}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            <div className="hero-slider-toolbar" role="group" aria-label="スライダー音声コントロール">
+                <div className="hero-slider-audio-control">
+                    <AudioToggleButton
+                        muted={isPreviewMuted}
+                        className="slider-audio-toggle"
+                        onClick={handleSliderAudioToggle}
+                        labelOn="スライダーのトレーラー音声をオンにする"
+                        labelOff="スライダーのトレーラー音声をオフにする"
                     />
-                );
-            })}
-
-            {totalSlides > 1 && (
-                <>
-                    <button type="button" className="slider-nav-button slider-prev" onClick={prevSlide}>
-                        &#10094;
-                    </button>
-                    <button type="button" className="slider-nav-button slider-next" onClick={nextSlide}>
-                        &#10095;
-                    </button>
-                    {shouldShowDots ? (
-                        <div className="slider-indicators">
-                            {slides.map((_, index) => (
-                                <button
-                                    key={index}
-                                    type="button"
-                                    className={`slider-dot ${index === currentIndex ? 'active' : ''}`}
-                                    onClick={() => setCurrentIndex(index)}
-                                    aria-label={`${index + 1}枚目を表示`}
-                                />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="slider-progress-count" aria-live="polite">
-                            {currentIndex + 1} / {totalSlides}
-                        </div>
-                    )}
-                </>
-            )}
+                    <div className="slider-audio-copy">
+                        <span className="slider-audio-label">トレーラー音声</span>
+                        <span className="slider-audio-status" aria-live="polite">
+                            {sliderAudioStatusText}
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

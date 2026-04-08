@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
-import AudioToggleButton from '../Shared/AudioToggleButton';
 import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
+
+const TRAILER_START_TIMEOUT_MS = 8000;
+const NO_TRAILER_ADVANCE_DELAY_MS = 8200;
+const STALLED_TRAILER_ADVANCE_DELAY_MS = 2400;
 
 const normalizeAnimeRating = (value) => {
     const parsed = Number(value);
@@ -32,13 +35,14 @@ function Hero({
     previewMuted = true,
     allowPersistentPreviewAudio = false,
     previewMutedChangeToken = 0,
-    onTogglePreviewMuted,
-    onRetryPreviewUnmute,
+    onPreviewMuteStateChange,
+    onPreviewAvailabilityChange,
     onRequestAdvance,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
     const [actualPreviewMuted, setActualPreviewMuted] = useState(true);
+    const [hasTrailerPlaybackStarted, setHasTrailerPlaybackStarted] = useState(false);
     const [hasTrailerPlaybackStalled, setHasTrailerPlaybackStalled] = useState(false);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
@@ -159,11 +163,13 @@ function Hero({
     useEffect(() => {
         if (!isActive || !shouldRenderTrailerPreview) {
             setActualPreviewMuted(true);
+            setHasTrailerPlaybackStarted(false);
             setHasTrailerPlaybackStalled(false);
             return;
         }
 
         setActualPreviewMuted(true);
+        setHasTrailerPlaybackStarted(false);
         setHasTrailerPlaybackStalled(false);
     }, [anime?.id, isActive, shouldRenderTrailerPreview]);
 
@@ -174,31 +180,67 @@ function Hero({
     }, [previewMuted]);
 
     useEffect(() => {
+        if (typeof onPreviewAvailabilityChange !== 'function') {
+            return undefined;
+        }
+
+        onPreviewAvailabilityChange(Boolean(isActive && shouldRenderTrailerPreview && !hasTrailerPlaybackStalled));
+        return undefined;
+    }, [hasTrailerPlaybackStalled, isActive, onPreviewAvailabilityChange, shouldRenderTrailerPreview, anime?.id]);
+
+    useEffect(() => {
+        if (typeof onPreviewMuteStateChange !== 'function') {
+            return undefined;
+        }
+
+        if (!isActive || !shouldRenderTrailerPreview || hasTrailerPlaybackStalled) {
+            onPreviewMuteStateChange(true);
+            return undefined;
+        }
+
+        onPreviewMuteStateChange(actualPreviewMuted);
+        return undefined;
+    }, [
+        actualPreviewMuted,
+        hasTrailerPlaybackStalled,
+        isActive,
+        onPreviewMuteStateChange,
+        shouldRenderTrailerPreview,
+        anime?.id,
+    ]);
+
+    useEffect(() => {
         if (!isActive || isTutorial || typeof onRequestAdvance !== 'function') {
             return undefined;
         }
 
-        if (shouldRenderTrailerPreview && !hasTrailerPlaybackStalled) {
+        if (shouldRenderTrailerPreview && hasTrailerPlaybackStarted && !hasTrailerPlaybackStalled) {
             return undefined;
+        }
+
+        let timeoutMs = NO_TRAILER_ADVANCE_DELAY_MS;
+        if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted) {
+            timeoutMs = TRAILER_START_TIMEOUT_MS;
+        } else if (shouldRenderTrailerPreview && hasTrailerPlaybackStalled) {
+            timeoutMs = STALLED_TRAILER_ADVANCE_DELAY_MS;
         }
 
         const timeoutId = window.setTimeout(() => {
             onRequestAdvance();
-        }, shouldRenderTrailerPreview && hasTrailerPlaybackStalled ? 2400 : 8200);
+        }, timeoutMs);
 
         return () => {
             window.clearTimeout(timeoutId);
         };
-    }, [hasTrailerPlaybackStalled, isActive, isTutorial, onRequestAdvance, shouldRenderTrailerPreview, anime?.id]);
-
-    const handleAudioTogglePress = () => {
-        if (actualPreviewMuted && !previewMuted) {
-            onRetryPreviewUnmute?.();
-            return;
-        }
-
-        onTogglePreviewMuted?.();
-    };
+    }, [
+        hasTrailerPlaybackStarted,
+        hasTrailerPlaybackStalled,
+        isActive,
+        isTutorial,
+        onRequestAdvance,
+        shouldRenderTrailerPreview,
+        anime?.id,
+    ]);
 
     if (!anime) return null;
 
@@ -286,16 +328,12 @@ function Hero({
                                         muteChangeToken={previewMutedChangeToken}
                                         deferVisibilityUntilPlaying
                                         onEnded={isActive ? onRequestAdvance : undefined}
-                                        onPlaybackStart={isActive ? () => setHasTrailerPlaybackStalled(false) : undefined}
+                                        onPlaybackStart={isActive ? () => {
+                                            setHasTrailerPlaybackStarted(true);
+                                            setHasTrailerPlaybackStalled(false);
+                                        } : undefined}
                                         onPlaybackStalled={isActive ? () => setHasTrailerPlaybackStalled(true) : undefined}
                                         onMuteStateChange={isActive ? setActualPreviewMuted : undefined}
-                                    />
-                                    <AudioToggleButton
-                                        muted={actualPreviewMuted}
-                                        className="hero-media-audio-toggle"
-                                        onClick={handleAudioTogglePress}
-                                        labelOn="トレーラーの音声をオンにする"
-                                        labelOff="トレーラーの音声をオフにする"
                                     />
                                 </>
                             )}
