@@ -9,24 +9,23 @@ function TrailerPlayButton({ anime, onPlayTrailer, className = '' }) {
   const buttonRef = useRef(null);
   const [isTrailerLoading, setIsTrailerLoading] = useState(false);
   const supportsTrailerControl = typeof onPlayTrailer === 'function';
+  const hasTrailerMetadata = hasAnimeTrailerMetadata(anime);
+  const shouldProbeTrailerPlayback = supportsTrailerControl && hasTrailerMetadata;
   const { shouldAutoProbe, probePriority } = useViewportTrailerPriority(buttonRef, {
-    enabled: supportsTrailerControl,
+    enabled: shouldProbeTrailerPlayback,
   });
   const { hasTrailer, isTrailerPlayable, status } = useTrailerPlaybackStatus(anime, {
-    autoProbe: shouldAutoProbe,
+    autoProbe: shouldProbeTrailerPlayback && shouldAutoProbe,
     timeoutMs: 5200,
     probePriority,
   });
   const title = resolveAnimeTitle(anime);
-  const hasTrailerMetadata = hasAnimeTrailerMetadata(anime);
-  const isTrailerPending = supportsTrailerControl
-    && (
-      !hasTrailerMetadata
-      || (hasTrailer && status === 'unknown')
-    );
-  const canPlayTrailer = supportsTrailerControl && isTrailerPlayable;
-  const shouldShowTrailerControl = canPlayTrailer || isTrailerPending;
-  const isTrailerButtonBusy = isTrailerLoading || isTrailerPending;
+  const canPlayTrailer = supportsTrailerControl
+    && hasTrailerMetadata
+    && hasTrailer
+    && status !== 'invalid';
+  const shouldShowTrailerControl = canPlayTrailer;
+  const isTrailerButtonBusy = isTrailerLoading;
 
   useEffect(() => {
     setIsTrailerLoading(false);
@@ -65,10 +64,10 @@ function TrailerPlayButton({ anime, onPlayTrailer, className = '' }) {
       className={`card-trailer-button${isTrailerButtonBusy ? ' loading' : ''}${className ? ` ${className}` : ''}`.trim()}
       onPointerDown={handlePointerDown}
       onClick={handleClick}
-      aria-label={isTrailerLoading ? `${title} の公式トレーラーを読み込み中` : isTrailerPending ? `${title} のトレーラーを確認中` : `${title} の公式トレーラーを再生`}
+      aria-label={isTrailerLoading ? `${title} の公式トレーラーを読み込み中` : `${title} の公式トレーラーを再生`}
       aria-busy={isTrailerButtonBusy}
       disabled={isTrailerButtonBusy}
-      title={isTrailerLoading ? 'トレーラーを読み込み中' : isTrailerPending ? 'トレーラーを確認中' : '公式トレーラーを再生'}
+      title={isTrailerLoading ? 'トレーラーを読み込み中' : '公式トレーラーを再生'}
     >
       {isTrailerButtonBusy ? (
         <span className="card-trailer-spinner" aria-hidden="true" />

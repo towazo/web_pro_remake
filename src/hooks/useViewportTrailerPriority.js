@@ -4,6 +4,7 @@ import usePageScrollIdle from './usePageScrollIdle';
 const DEFAULT_ROOT_MARGIN = '260px 0px 360px 0px';
 const DEFAULT_PRIORITY = 160;
 const DEFAULT_THRESHOLD = [0, 0.01, 0.35, 0.75];
+const PRIORITY_QUANTUM = 40;
 
 const getViewportHeight = () => {
   if (typeof window === 'undefined') return 0;
@@ -23,7 +24,11 @@ const buildProbePriority = (entry) => {
     Math.max(0, Math.min(1, Number(entry.intersectionRatio) || 0)) * 180
   );
 
-  return DEFAULT_PRIORITY + centerBonus + visibilityBonus;
+  const rawPriority = DEFAULT_PRIORITY + centerBonus + visibilityBonus;
+  return Math.max(
+    DEFAULT_PRIORITY,
+    Math.round(rawPriority / PRIORITY_QUANTUM) * PRIORITY_QUANTUM,
+  );
 };
 
 const isNearViewportEntry = (entry) => {

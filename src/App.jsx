@@ -117,7 +117,9 @@ const ONBOARDING_STEPS = [
   },
 ];
 
-const DETAIL_ENRICHMENT_BATCH_SIZE = 12;
+const DETAIL_ENRICHMENT_BATCH_SIZE = 6;
+const DETAIL_ENRICHMENT_VISIBLE_PRIORITY_LIMIT = 24;
+const DETAIL_ENRICHMENT_BACKGROUND_LIMIT = 24;
 const DETAIL_ENRICHMENT_RETRY_BASE_MS = 4000;
 const DETAIL_ENRICHMENT_RETRY_MAX_MS = 60000;
 const FEATURED_SLIDER_CURRENT_SEASON_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
@@ -1205,16 +1207,24 @@ function App() {
       });
     };
 
+    const myListPriorityIds = myListViewportAnimeIds.length > 0
+      ? myListViewportAnimeIds
+      : visibleAnimeIds.slice(0, DETAIL_ENRICHMENT_VISIBLE_PRIORITY_LIMIT);
+    const bookmarkPriorityIds = bookmarkVisibleAnimeIds.slice(0, DETAIL_ENRICHMENT_VISIBLE_PRIORITY_LIMIT);
+
     if (view === 'mylist') {
-      pushIds(myListViewportAnimeIds);
-      pushIds(visibleAnimeIds);
+      pushIds(myListPriorityIds);
     }
     if (view === 'bookmarks') {
-      pushIds(bookmarkVisibleAnimeIds);
+      pushIds(bookmarkPriorityIds);
     }
 
-    pushIds(animeList.map((anime) => anime?.id));
-    pushIds(bookmarkList.map((anime) => anime?.id));
+    if (view !== 'mylist') {
+      pushIds(animeList.slice(0, DETAIL_ENRICHMENT_BACKGROUND_LIMIT).map((anime) => anime?.id));
+    }
+    if (view !== 'bookmarks') {
+      pushIds(bookmarkList.slice(0, DETAIL_ENRICHMENT_BACKGROUND_LIMIT).map((anime) => anime?.id));
+    }
     return orderedIds;
   }, [view, myListViewportAnimeIds, visibleAnimeIds, bookmarkVisibleAnimeIds, animeList, bookmarkList]);
 

@@ -42,32 +42,29 @@ function AnimeCard({
   const editableWatchCount = normalizeAnimeWatchCount(watchControlCount, { minimum: 1, defaultValue: watchCount });
   const supportsTrailerControl = !isSelectionMode && typeof onPlayTrailer === 'function';
   const shouldTrackViewportPriority = typeof onViewportPriorityChange === 'function';
+  const hasTrailerMetadata = hasAnimeTrailerMetadata(anime);
+  const shouldProbeTrailerPlayback = supportsTrailerControl && hasTrailerMetadata;
   const { shouldAutoProbe, probePriority } = useViewportTrailerPriority(cardRef, {
-    enabled: supportsTrailerControl || shouldTrackViewportPriority,
+    enabled: shouldProbeTrailerPlayback || shouldTrackViewportPriority,
   });
   const canEditRating = typeof onUpdateRating === 'function'
     && (!isSelectionMode || allowRatingEditInSelectionMode);
   const canEditWatchCount = typeof onUpdateWatchCount === 'function'
     && (!isSelectionMode || allowWatchCountEditInSelectionMode);
   const { hasTrailer, isTrailerPlayable, status } = useTrailerPlaybackStatus(anime, {
-    autoProbe: supportsTrailerControl && shouldAutoProbe,
+    autoProbe: shouldProbeTrailerPlayback && shouldAutoProbe,
     timeoutMs: 5200,
     probePriority,
   });
-  const hasTrailerMetadata = hasAnimeTrailerMetadata(anime);
-  const isTrailerPending = supportsTrailerControl
-    && (
-      !hasTrailerMetadata
-      || (hasTrailer && status === 'unknown')
-    );
-  const canPlayTrailer = supportsTrailerControl && isTrailerPlayable;
-  const shouldShowTrailerControl = canPlayTrailer || isTrailerPending;
-  const isTrailerButtonBusy = isTrailerLoading || isTrailerPending;
+  const canPlayTrailer = supportsTrailerControl
+    && hasTrailerMetadata
+    && hasTrailer
+    && status !== 'invalid';
+  const shouldShowTrailerControl = canPlayTrailer;
+  const isTrailerButtonBusy = isTrailerLoading;
   const trailerButtonLabel = isTrailerLoading
     ? `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを読み込み中`
-    : isTrailerPending
-      ? `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} のトレーラーを確認中`
-      : `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを再生`;
+    : `${anime.title.native || anime.title.romaji || anime.title.english || '作品'} の公式トレーラーを再生`;
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -321,7 +318,7 @@ function AnimeCard({
                 aria-label={trailerButtonLabel}
                 aria-busy={isTrailerButtonBusy}
                 disabled={isTrailerButtonBusy}
-                title={isTrailerLoading ? 'トレーラーを読み込み中' : isTrailerPending ? 'トレーラーを確認中' : '公式トレーラーを再生'}
+                title={isTrailerLoading ? 'トレーラーを読み込み中' : '公式トレーラーを再生'}
               >
                 {isTrailerButtonBusy ? (
                   <span className="card-trailer-spinner" aria-hidden="true" />
