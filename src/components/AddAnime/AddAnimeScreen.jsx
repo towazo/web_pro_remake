@@ -509,6 +509,7 @@ function AddAnimeScreen({
     const searchAbortControllerRef = React.useRef(null);
     const bulkAbortControllerRef = React.useRef(null);
     const searchFieldWrapperRef = React.useRef(null);
+    const normalMultiAddPanelRef = React.useRef(null);
     const bottomHomeNavRef = React.useRef(null);
     const suggestionAutoScrollAtRef = React.useRef(0);
 
@@ -2554,6 +2555,18 @@ function AddAnimeScreen({
         setShowSuggestions(false);
     };
 
+    const handleCommitSuggestionSelection = () => {
+        setShowSuggestions(false);
+        if (selectedSuggestionCount <= 0) return;
+
+        requestAnimationFrame(() => {
+            normalMultiAddPanelRef.current?.scrollIntoView?.({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        });
+    };
+
     const handleToggleSuggestionSelection = (anime, checked) => {
         const animeId = Number(anime?.id);
         if (!Number.isFinite(animeId)) return;
@@ -3468,6 +3481,7 @@ function AddAnimeScreen({
                                 placeholder="作品タイトルを入力（日本語・英語可）"
                                 disabled={isSearching}
                                 className="search-input"
+                                enterKeyHint="search"
                                 onFocus={() => {
                                     if (query.trim().length >= 2) setShowSuggestions(true);
                                 }}
@@ -3625,16 +3639,22 @@ function AddAnimeScreen({
                                         <button
                                             type="button"
                                             className="suggestions-bottom-close-button"
-                                            onClick={handleCloseSuggestions}
+                                            onClick={handleCommitSuggestionSelection}
                                         >
-                                            候補一覧を閉じる
+                                            {selectedSuggestionCount > 0 ? '選択リストに追加する' : '候補一覧を閉じる'}
                                         </button>
                                     </div>
                                 </div>
                             )}
                         </div>
-                        {(suggestions.length > 0 || selectedSuggestionCount > 0) && (
-                            <div className="normal-multi-add-panel">
+                        {selectedSuggestionCount === 0 && (
+                            <div className="normal-search-helper" role="note">
+                                <p className="normal-search-helper-title">候補をタップして追加候補に入れられます</p>
+                                <p className="normal-search-helper-text">直接作品を開きたいときは、キーボードの検索 / Enter を使えます。</p>
+                            </div>
+                        )}
+                        {selectedSuggestionCount > 0 && (
+                            <div ref={normalMultiAddPanelRef} className="normal-multi-add-panel">
                                 <div className="normal-multi-add-header">
                                     <span className="normal-multi-add-count">{selectedSuggestionCount}件選択中</span>
                                     <button
@@ -3723,15 +3743,6 @@ function AddAnimeScreen({
                                     {`選択した作品を${normalTargetLabel}に追加`}
                                 </button>
                             </div>
-                        )}
-                        {selectedSuggestionCount === 0 && (
-                            <button
-                                type="submit"
-                                className="action-button primary-button"
-                                disabled={isSearching || searchRetryCountdownSec > 0}
-                            >
-                                {isSearching ? '検索中...' : '作品を検索する'}
-                            </button>
                         )}
                     </form>
                 )

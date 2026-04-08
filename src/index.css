@@ -7445,6 +7445,30 @@ body.trailer-modal-open .add-toast {
     margin-top: 6px;
 }
 
+.normal-search-helper {
+    border: 1px solid #d9d9d9;
+    background: linear-gradient(180deg, #fcfcfc 0%, #f6f6f6 100%);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.normal-search-helper-title {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #111;
+}
+
+.normal-search-helper-text {
+    margin: 0;
+    font-size: 0.74rem;
+    line-height: 1.5;
+    color: #5a5a5a;
+    font-weight: 600;
+}
+
 .normal-multi-add-panel {
     border: 1px solid #000;
     background: #fff;
@@ -7649,6 +7673,18 @@ body.trailer-modal-open .add-toast {
 
     .normal-selection-review-rating-picker {
         margin-left: 0;
+    }
+
+    .normal-search-helper {
+        padding: 10px 12px;
+    }
+
+    .normal-search-helper-title {
+        font-size: 0.78rem;
+    }
+
+    .normal-search-helper-text {
+        font-size: 0.71rem;
     }
 
     .suggestions-panel-toolbar {
