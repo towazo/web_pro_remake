@@ -5,6 +5,7 @@ import AudioToggleButton from '../Shared/AudioToggleButton';
 const MAX_DOT_INDICATORS = 8;
 const INITIAL_BUFFER_SIZE = 10;
 const BUFFER_REPLENISH_THRESHOLD = 5;
+const TIMELINE_HANDLE_EDGE_OFFSET_PX = 7;
 
 function RestartIcon() {
     return (
@@ -80,11 +81,18 @@ function HeroSlider({
     const [activePreviewAudioAvailable, setActivePreviewAudioAvailable] = useState(false);
     const [lastViewedAnime, setLastViewedAnime] = useState(null);
     const [currentSlideRestartToken, setCurrentSlideRestartToken] = useState(0);
+    const timelineRef = useRef(null);
     const progressFillRef = useRef(null);
+    const progressHandleRef = useRef(null);
+    const activeHeroRef = useRef(null);
     const activeSlideAnimeRef = useRef(null);
     const slideSessionKeyRef = useRef('');
-    const [touchStart, setTouchStart] = useState(null);
-    const [touchEnd, setTouchEnd] = useState(null);
+    const timelineDragCleanupRef = useRef(null);
+    const isTimelineScrubbingRef = useRef(false);
+    const currentProgressRef = useRef(0);
+    const touchStartRef = useRef(null);
+    const touchEndRef = useRef(null);
+    const suppressSwipeUntilRef = useRef(0);
     const slideIdentityKey = Array.isArray(slides)
         ? slides.map((anime, index) => String(anime?.uniqueId || anime?.id || index)).join('|')
         : '';
@@ -141,15 +149,33 @@ function HeroSlider({
     useEffect(() => {
         setActivePreviewMuted(true);
         setActivePreviewAudioAvailable(false);
+        currentProgressRef.current = 0;
         if (progressFillRef.current) {
-            progressFillRef.current.style.transform = 'scaleX(0)';
+            progressFillRef.current.style.transform = 'translateY(-50%) scaleX(0)';
+        }
+        if (progressHandleRef.current) {
+            progressHandleRef.current.style.left = `${TIMELINE_HANDLE_EDGE_OFFSET_PX}px`;
         }
     }, [currentIndex, slideIdentityKey]);
 
-    const handleSlideProgressChange = useCallback((value) => {
+    const syncTimelineProgress = useCallback((value) => {
         const normalizedValue = Math.min(1, Math.max(0, Number(value) || 0));
-        if (!progressFillRef.current) return;
-        progressFillRef.current.style.transform = `scaleX(${normalizedValue})`;
+        currentProgressRef.current = normalizedValue;
+        if (progressFillRef.current) {
+            progressFillRef.current.style.transform = `translateY(-50%) scaleX(${normalizedValue})`;
+        }
+        if (progressHandleRef.current) {
+            progressHandleRef.current.style.left = `clamp(${TIMELINE_HANDLE_EDGE_OFFSET_PX}px, ${normalizedValue * 100}%, calc(100% - ${TIMELINE_HANDLE_EDGE_OFFSET_PX}px))`;
+        }
+    }, []);
+
+    const handleSlideProgressChange = useCallback((value) => {
+        if (isTimelineScrubbingRef.current) return;
+        syncTimelineProgress(value);
+    }, [syncTimelineProgress]);
+
+    useEffect(() => () => {
+        timelineDragCleanupRef.current?.();
     }, []);
 
     const resetMobilePreviewAudioForNextSlide = useCallback(() => {
@@ -187,18 +213,55 @@ function HeroSlider({
         setCurrentIndex((prev) => prev - 1);
     }, [currentIndex, resetMobilePreviewAudioForNextSlide, totalSlides]);
 
+    const clearSwipeGesture = useCallback(() => {
+        touchStartRef.current = null;
+        touchEndRef.current = null;
+    }, []);
+
+    const suppressSwipeGesture = useCallback((durationMs = 220) => {
+        const now = window.performance?.now?.() ?? Date.now();
+        suppressSwipeUntilRef.current = now + durationMs;
+        clearSwipeGesture();
+    }, [clearSwipeGesture]);
+
+    const shouldIgnoreSwipeGesture = useCallback((eventTarget = null) => {
+        const now = window.performance?.now?.() ?? Date.now();
+        return (
+            isTimelineScrubbingRef.current
+            || suppressSwipeUntilRef.current > now
+            || Boolean(eventTarget && timelineRef.current?.contains(eventTarget))
+        );
+    }, []);
+
     // the required distance between touchStart and touchEnd to be detected as a swipe
     const minSwipeDistance = 50;
 
     const onTouchStart = (e) => {
-        setTouchEnd(null);
-        setTouchStart(e.targetTouches[0].clientX);
+        if (shouldIgnoreSwipeGesture(e.target)) {
+            clearSwipeGesture();
+            return;
+        }
+        touchEndRef.current = null;
+        touchStartRef.current = e.targetTouches[0].clientX;
     };
 
-    const onTouchMove = (e) => setTouchEnd(e.targetTouches[0].clientX);
+    const onTouchMove = (e) => {
+        if (shouldIgnoreSwipeGesture(e.target)) {
+            clearSwipeGesture();
+            return;
+        }
+        touchEndRef.current = e.targetTouches[0].clientX;
+    };
 
     const onTouchEnd = () => {
-        if (!touchStart || !touchEnd) return;
+        if (shouldIgnoreSwipeGesture()) {
+            clearSwipeGesture();
+            return;
+        }
+        const touchStart = touchStartRef.current;
+        const touchEnd = touchEndRef.current;
+        clearSwipeGesture();
+        if (touchStart == null || touchEnd == null) return;
         const distance = touchStart - touchEnd;
         const isLeftSwipe = distance > minSwipeDistance;
         const isRightSwipe = distance < -minSwipeDistance;
@@ -212,9 +275,7 @@ function HeroSlider({
     const handleRestartCurrentSlide = () => {
         if (totalSlides === 0) return;
         resetMobilePreviewAudioForNextSlide();
-        if (progressFillRef.current) {
-            progressFillRef.current.style.transform = 'scaleX(0)';
-        }
+        syncTimelineProgress(0);
         setCurrentSlideRestartToken((prev) => prev + 1);
     };
 
@@ -305,6 +366,100 @@ function HeroSlider({
         onToggleBookmark(lastViewedAnime);
     };
 
+    const getTimelineProgressFromClientX = useCallback((clientX) => {
+        const timelineNode = timelineRef.current;
+        if (!timelineNode) return 0;
+        const rect = timelineNode.getBoundingClientRect();
+        if (!(rect.width > 0)) return 0;
+        return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    }, []);
+
+    const applyTimelineSeek = useCallback((nextProgress) => {
+        const normalizedProgress = Math.min(1, Math.max(0, Number(nextProgress) || 0));
+        syncTimelineProgress(normalizedProgress);
+        activeHeroRef.current?.seekToProgress?.(normalizedProgress);
+    }, [syncTimelineProgress]);
+
+    const handleTimelinePointerDown = useCallback((event) => {
+        if (totalSlides === 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        suppressSwipeGesture(320);
+        timelineDragCleanupRef.current?.();
+        isTimelineScrubbingRef.current = true;
+        applyTimelineSeek(getTimelineProgressFromClientX(event.clientX));
+
+        const finishScrub = (clientX = null) => {
+            if (clientX !== null) {
+                applyTimelineSeek(getTimelineProgressFromClientX(clientX));
+            }
+            isTimelineScrubbingRef.current = false;
+            suppressSwipeGesture(220);
+            timelineDragCleanupRef.current?.();
+            timelineDragCleanupRef.current = null;
+        };
+
+        const handlePointerMove = (moveEvent) => {
+            applyTimelineSeek(getTimelineProgressFromClientX(moveEvent.clientX));
+        };
+
+        const handlePointerUp = (upEvent) => {
+            finishScrub(upEvent.clientX);
+        };
+
+        const handlePointerCancel = () => {
+            finishScrub();
+        };
+
+        timelineDragCleanupRef.current = () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('pointercancel', handlePointerCancel);
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('pointercancel', handlePointerCancel);
+    }, [applyTimelineSeek, getTimelineProgressFromClientX, suppressSwipeGesture, totalSlides]);
+
+    const handleTimelineTouchStartCapture = useCallback((event) => {
+        suppressSwipeGesture(320);
+        event.stopPropagation();
+    }, [suppressSwipeGesture]);
+
+    const handleTimelineTouchMoveCapture = useCallback((event) => {
+        suppressSwipeGesture(320);
+        event.stopPropagation();
+    }, [suppressSwipeGesture]);
+
+    const handleTimelineTouchEndCapture = useCallback((event) => {
+        suppressSwipeGesture(220);
+        event.stopPropagation();
+    }, [suppressSwipeGesture]);
+
+    const handleTimelineKeyDown = useCallback((event) => {
+        const step = event.shiftKey ? 0.1 : 0.05;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            applyTimelineSeek(currentProgressRef.current - step);
+            return;
+        }
+        if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            applyTimelineSeek(currentProgressRef.current + step);
+            return;
+        }
+        if (event.key === 'Home') {
+            event.preventDefault();
+            applyTimelineSeek(0);
+            return;
+        }
+        if (event.key === 'End') {
+            event.preventDefault();
+            applyTimelineSeek(1);
+        }
+    }, [applyTimelineSeek]);
+
     return (
         <div className="hero-slider-shell">
             <div
@@ -332,6 +487,7 @@ function HeroSlider({
 
                     return (
                         <Hero
+                            ref={actualIndex === currentIndex ? activeHeroRef : undefined}
                             key={getSlideKey(anime, actualIndex)}
                             anime={anime}
                             isActive={actualIndex === currentIndex}
@@ -372,10 +528,25 @@ function HeroSlider({
                     </>
                 )}
 
-                <div className="slider-timeline" aria-hidden="true">
+                <div
+                    ref={timelineRef}
+                    className="slider-timeline"
+                    onPointerDown={handleTimelinePointerDown}
+                    onKeyDown={handleTimelineKeyDown}
+                    onTouchStartCapture={handleTimelineTouchStartCapture}
+                    onTouchMoveCapture={handleTimelineTouchMoveCapture}
+                    onTouchEndCapture={handleTimelineTouchEndCapture}
+                    tabIndex={0}
+                    aria-label="スライド進捗を操作"
+                    title="進捗をドラッグして再生位置や表示時間を変更"
+                >
                     <div
                         ref={progressFillRef}
                         className="slider-timeline-fill"
+                    />
+                    <div
+                        ref={progressHandleRef}
+                        className="slider-timeline-handle"
                     />
                 </div>
             </div>

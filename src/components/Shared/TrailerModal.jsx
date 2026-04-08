@@ -9,6 +9,7 @@ function TrailerModal({ anime, onClose }) {
   const closeButtonRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
   const [muteChangeToken, setMuteChangeToken] = useState(0);
+  const [isAudioToggleReady, setIsAudioToggleReady] = useState(false);
   const { trailer, isTrailerInvalid } = useTrailerPlaybackStatus(anime);
   const animeId = anime?.id || 'current';
   const trailerId = trailer?.id || '';
@@ -42,6 +43,7 @@ function TrailerModal({ anime, onClose }) {
   useEffect(() => {
     setIsMuted(true);
     setMuteChangeToken(0);
+    setIsAudioToggleReady(false);
   }, [animeId]);
 
   if (!anime || !trailer) return null;
@@ -91,6 +93,7 @@ function TrailerModal({ anime, onClose }) {
               muted={isMuted}
               allowPersistentAutoplayUnmute
               muteChangeToken={muteChangeToken}
+              onPlaybackStart={() => setIsAudioToggleReady(true)}
             />
           )}
         </div>
@@ -100,12 +103,15 @@ function TrailerModal({ anime, onClose }) {
             <AudioToggleButton
               muted={isMuted}
               className="trailer-audio-toggle"
+              disabled={!isAudioToggleReady}
               onClick={() => {
+                if (!isAudioToggleReady) return;
                 setIsMuted((prev) => !prev);
                 setMuteChangeToken((prev) => prev + 1);
               }}
               labelOn="トレーラーの音声をオンにする"
               labelOff="トレーラーの音声をオフにする"
+              labelDisabled="動画の再生開始後に音声を切り替えられます"
             />
           )}
           {watchUrl && (

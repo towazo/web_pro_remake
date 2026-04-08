@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, useRef } from 'react';
 import { ANIME_DESCRIPTIONS, translateGenre } from '../../constants/animeData';
 import { getCachedTranslation, setCachedTranslation, translateText } from '../../services/translationService';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
@@ -28,7 +28,9 @@ const splitTutorialDescriptionLines = (value) => {
         .filter(Boolean);
 };
 
-function Hero({
+const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) || 0));
+
+const Hero = React.forwardRef(function Hero({
     anime,
     isActive,
     shouldPreloadTrailer = false,
@@ -40,12 +42,19 @@ function Hero({
     onPreviewAvailabilityChange,
     onSlideProgressChange,
     onRequestAdvance,
-}) {
+}, ref) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
     const [actualPreviewMuted, setActualPreviewMuted] = useState(true);
     const [hasTrailerPlaybackStarted, setHasTrailerPlaybackStarted] = useState(false);
     const [hasTrailerPlaybackStalled, setHasTrailerPlaybackStalled] = useState(false);
+    const trailerPlayerRef = useRef(null);
+    const fallbackTimelineFrameRef = useRef(0);
+    const fallbackTimelineStartedAtRef = useRef(0);
+    const fallbackTimelineDurationRef = useRef(NO_TRAILER_ADVANCE_DELAY_MS);
+    const fallbackTimelineAdvanceTriggeredRef = useRef(false);
+    const slideProgressChangeRef = useRef(onSlideProgressChange);
+    const requestAdvanceRef = useRef(onRequestAdvance);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -174,6 +183,93 @@ function Hero({
     const shouldPrepareTrailerPlayer = !isTutorial && isActive;
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && shouldPrepareTrailerPlayer;
     const shouldEagerLoadHeroAssets = isActive || shouldPreloadTrailer;
+    const shouldUseFallbackTimeline = isActive
+        && !isTutorial
+        && (!shouldRenderTrailerPreview || hasTrailerPlaybackStalled);
+    const shouldUseTrailerStartupTimeout = isActive
+        && !isTutorial
+        && shouldRenderTrailerPreview
+        && !hasTrailerPlaybackStarted
+        && !hasTrailerPlaybackStalled;
+    const getFallbackTimelineDuration = () => (
+        shouldRenderTrailerPreview && hasTrailerPlaybackStalled
+            ? STALLED_TRAILER_ADVANCE_DELAY_MS
+            : NO_TRAILER_ADVANCE_DELAY_MS
+    );
+
+    useEffect(() => {
+        slideProgressChangeRef.current = onSlideProgressChange;
+    }, [onSlideProgressChange]);
+
+    useEffect(() => {
+        requestAdvanceRef.current = onRequestAdvance;
+    }, [onRequestAdvance]);
+
+    const clearFallbackTimeline = () => {
+        if (fallbackTimelineFrameRef.current) {
+            window.cancelAnimationFrame(fallbackTimelineFrameRef.current);
+            fallbackTimelineFrameRef.current = 0;
+        }
+        fallbackTimelineAdvanceTriggeredRef.current = false;
+    };
+
+    const startFallbackTimeline = (durationMs, initialProgress = 0) => {
+        clearFallbackTimeline();
+        const safeDurationMs = Math.max(1, Number(durationMs) || NO_TRAILER_ADVANCE_DELAY_MS);
+        const safeProgress = normalizeProgressRatio(initialProgress);
+        fallbackTimelineDurationRef.current = safeDurationMs;
+        fallbackTimelineStartedAtRef.current = (window.performance?.now?.() ?? Date.now()) - (safeProgress * safeDurationMs);
+        fallbackTimelineAdvanceTriggeredRef.current = false;
+        slideProgressChangeRef.current?.(safeProgress);
+
+        const tick = (timestamp) => {
+            const elapsedMs = Math.max(0, timestamp - fallbackTimelineStartedAtRef.current);
+            const nextProgress = Math.min(1, elapsedMs / fallbackTimelineDurationRef.current);
+            slideProgressChangeRef.current?.(nextProgress);
+
+            if (nextProgress >= 1) {
+                fallbackTimelineFrameRef.current = 0;
+                if (!fallbackTimelineAdvanceTriggeredRef.current) {
+                    fallbackTimelineAdvanceTriggeredRef.current = true;
+                    requestAdvanceRef.current?.();
+                }
+                return;
+            }
+
+            fallbackTimelineFrameRef.current = window.requestAnimationFrame(tick);
+        };
+
+        fallbackTimelineFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    const seekFallbackTimeline = (progressRatio) => {
+        const safeProgress = normalizeProgressRatio(progressRatio);
+        fallbackTimelineStartedAtRef.current = (window.performance?.now?.() ?? Date.now())
+            - (safeProgress * fallbackTimelineDurationRef.current);
+        fallbackTimelineAdvanceTriggeredRef.current = false;
+        slideProgressChangeRef.current?.(safeProgress);
+
+        if (!fallbackTimelineFrameRef.current) {
+            startFallbackTimeline(fallbackTimelineDurationRef.current, safeProgress);
+        }
+    };
+
+    useImperativeHandle(ref, () => ({
+        seekToProgress(progressRatio) {
+            const safeProgress = normalizeProgressRatio(progressRatio);
+            if (!isActive || isTutorial) return false;
+
+            if (shouldRenderTrailerPreview) {
+                return trailerPlayerRef.current?.seekToProgress?.(safeProgress, {
+                    userInitiated: true,
+                    resumePlayback: true,
+                }) || false;
+            }
+
+            seekFallbackTimeline(safeProgress);
+            return true;
+        },
+    }), [isActive, isTutorial, shouldRenderTrailerPreview, anime?.id]);
 
     useEffect(() => {
         if (!isActive || !shouldRenderTrailerPreview) {
@@ -237,87 +333,49 @@ function Hero({
     }, [isActive, onSlideProgressChange, anime?.id]);
 
     useEffect(() => {
-        if (!isActive || isTutorial || typeof onRequestAdvance !== 'function') {
+        if (!shouldUseTrailerStartupTimeout || typeof onRequestAdvance !== 'function') {
             return undefined;
         }
 
-        if (shouldRenderTrailerPreview && hasTrailerPlaybackStarted && !hasTrailerPlaybackStalled) {
-            return undefined;
-        }
-
-        let timeoutMs = NO_TRAILER_ADVANCE_DELAY_MS;
-        if (shouldRenderTrailerPreview && hasTrailerPlaybackStalled) {
-            timeoutMs = STALLED_TRAILER_ADVANCE_DELAY_MS;
-        } else if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted) {
-            timeoutMs = TRAILER_START_TIMEOUT_MS;
-        }
+        clearFallbackTimeline();
+        slideProgressChangeRef.current?.(0);
 
         const timeoutId = window.setTimeout(() => {
             onRequestAdvance();
-        }, timeoutMs);
+        }, TRAILER_START_TIMEOUT_MS);
 
         return () => {
             window.clearTimeout(timeoutId);
         };
     }, [
-        hasTrailerPlaybackStarted,
-        hasTrailerPlaybackStalled,
-        isActive,
-        isTutorial,
         onRequestAdvance,
         restartToken,
-        shouldRenderTrailerPreview,
+        shouldUseTrailerStartupTimeout,
         anime?.id,
     ]);
 
     useEffect(() => {
-        if (!isActive || isTutorial || typeof onSlideProgressChange !== 'function') {
+        if (!shouldUseFallbackTimeline || typeof onSlideProgressChange !== 'function') {
+            clearFallbackTimeline();
             return undefined;
         }
 
-        let progressDurationMs = NO_TRAILER_ADVANCE_DELAY_MS;
-        if (shouldRenderTrailerPreview && hasTrailerPlaybackStarted && !hasTrailerPlaybackStalled) {
-            return undefined;
-        }
-
-        if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted && !hasTrailerPlaybackStalled) {
-            onSlideProgressChange(0);
-            return undefined;
-        }
-
-        if (shouldRenderTrailerPreview && hasTrailerPlaybackStalled) {
-            progressDurationMs = STALLED_TRAILER_ADVANCE_DELAY_MS;
-        } else if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted) {
-            progressDurationMs = TRAILER_START_TIMEOUT_MS;
-        }
-
-        const startedAt = window.performance.now();
-        let animationFrameId = 0;
-
-        const updateProgress = (timestamp) => {
-            const elapsedMs = Math.max(0, timestamp - startedAt);
-            onSlideProgressChange(Math.min(1, elapsedMs / progressDurationMs));
-            animationFrameId = window.requestAnimationFrame(updateProgress);
-        };
-
-        onSlideProgressChange(0);
-        animationFrameId = window.requestAnimationFrame(updateProgress);
+        startFallbackTimeline(getFallbackTimelineDuration(), 0);
 
         return () => {
-            if (animationFrameId) {
-                window.cancelAnimationFrame(animationFrameId);
-            }
+            clearFallbackTimeline();
         };
     }, [
-        hasTrailerPlaybackStarted,
         hasTrailerPlaybackStalled,
-        isActive,
-        isTutorial,
         onSlideProgressChange,
         restartToken,
-        shouldRenderTrailerPreview,
+        shouldUseFallbackTimeline,
         anime?.id,
     ]);
+
+    useEffect(() => () => {
+        clearFallbackTimeline();
+    }, []);
 
     if (!anime) return null;
 
@@ -394,6 +452,7 @@ function Hero({
                             {shouldMountTrailerPlayer && (
                                 <>
                                     <YouTubeTrailerPlayer
+                                        ref={trailerPlayerRef}
                                         trailer={trailer}
                                         title={`${anime.title?.native || anime.title?.romaji || anime.title?.english || '作品'} のトレーラープレビュー`}
                                         className="hero-media-preview-frame"
@@ -422,6 +481,6 @@ function Hero({
             )}
         </section>
     );
-}
+});
 
 export default Hero;

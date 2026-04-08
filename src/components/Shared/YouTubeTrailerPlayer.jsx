@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { loadYouTubeIframeApi } from '../../services/youtubePlayerService';
 import {
   markAnimeTrailerPlayable,
@@ -15,8 +15,11 @@ const BUFFER_STALL_SOFT_RETRY_MS = 1800;
 const BUFFER_STALL_HARD_RETRY_MS = 4200;
 const MAX_AUTOPLAY_PLAYER_RECOVERY_RESTARTS = 1;
 const PROGRESS_PLAYER_RESAMPLE_MS = 450;
+const USER_PLAYBACK_INTERACTION_GRACE_MS = 2200;
 
-function YouTubeTrailerPlayer({
+const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) || 0));
+
+const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   trailer,
   title = 'Trailer',
   autoplay = false,
@@ -34,7 +37,7 @@ function YouTubeTrailerPlayer({
   onPlaybackStalled,
   onMuteStateChange,
   onProgressChange,
-}) {
+}, ref) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
   const readyRef = useRef(false);
@@ -61,6 +64,8 @@ function YouTubeTrailerPlayer({
   const progressDurationRef = useRef(0);
   const progressLastSampleTimestampRef = useRef(0);
   const progressLastEmittedValueRef = useRef(0);
+  const pendingSeekProgressRef = useRef(null);
+  const userPlaybackInteractionUntilRef = useRef(0);
   const [playerRestartNonce, setPlayerRestartNonce] = useState(0);
   const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
@@ -105,6 +110,8 @@ function YouTubeTrailerPlayer({
   useEffect(() => {
     autoplayRecoveryRestartCountRef.current = 0;
     playbackStartedOnceRef.current = false;
+    pendingSeekProgressRef.current = null;
+    userPlaybackInteractionUntilRef.current = 0;
     setPlayerRestartNonce(0);
   }, [videoId]);
 
@@ -158,6 +165,16 @@ function YouTubeTrailerPlayer({
       || window.matchMedia('(max-width: 768px)').matches
     )
   );
+
+  const markUserPlaybackInteraction = (durationMs = USER_PLAYBACK_INTERACTION_GRACE_MS) => {
+    const now = window.performance?.now?.() ?? Date.now();
+    userPlaybackInteractionUntilRef.current = now + durationMs;
+  };
+
+  const hasRecentUserPlaybackInteraction = () => {
+    const now = window.performance?.now?.() ?? Date.now();
+    return userPlaybackInteractionUntilRef.current > now;
+  };
 
   const emitMuteState = (player) => {
     if (typeof onMuteStateChangeRef.current !== 'function' || !player) return;
@@ -273,6 +290,7 @@ function YouTubeTrailerPlayer({
     const isPlaybackActive = hasActivePlayback();
     const allowAutoplayUnmute = (
       options.userInitiated === true
+      || hasRecentUserPlaybackInteraction()
       || (!isMobileAutoplayEnvironment && allowPersistentAutoplayUnmuteRef.current && isPlaybackActive)
     );
     if (!allowAutoplayUnmute) {
@@ -339,6 +357,72 @@ function YouTubeTrailerPlayer({
       window.setTimeout(attemptPlay, 2600),
     ];
   };
+
+  const seekPlayerToProgress = (player, progressRatio, options = {}) => {
+    const normalizedProgress = normalizeProgressRatio(progressRatio);
+    if (options.userInitiated === true) {
+      markUserPlaybackInteraction();
+    }
+    if (!player) {
+      pendingSeekProgressRef.current = normalizedProgress;
+      return true;
+    }
+
+    let duration = 0;
+    try {
+      duration = Number(player.getDuration?.()) || 0;
+    } catch (_) {
+      duration = 0;
+    }
+
+    if (!(duration > 0)) {
+      pendingSeekProgressRef.current = normalizedProgress;
+      return true;
+    }
+
+    pendingSeekProgressRef.current = null;
+    const targetTime = duration * normalizedProgress;
+
+    try {
+      player.seekTo(targetTime, true);
+    } catch (_) {
+      pendingSeekProgressRef.current = normalizedProgress;
+      return false;
+    }
+
+    const now = window.performance?.now?.() ?? Date.now();
+    progressDurationRef.current = duration;
+    progressBaselinePlayerTimeRef.current = targetTime;
+    progressBaselineTimestampRef.current = now;
+    progressLastSampleTimestampRef.current = now;
+    emitProgress(normalizedProgress, { allowDecrease: true });
+
+    syncDesiredMuteState(player, {
+      userInitiated: options.userInitiated === true,
+    });
+    requestDeferredUnmute(player, {
+      userInitiated: options.userInitiated === true,
+    });
+
+    if (options.resumePlayback !== false) {
+      requestPlaybackResume(player);
+      scheduleAutoplayStartupWatch(player);
+    }
+
+    emitMuteState(player);
+    return true;
+  };
+
+  const flushPendingSeekProgress = (player, options = {}) => {
+    if (pendingSeekProgressRef.current == null) return;
+    seekPlayerToProgress(player, pendingSeekProgressRef.current, options);
+  };
+
+  useImperativeHandle(ref, () => ({
+    seekToProgress(progressRatio, options = {}) {
+      return seekPlayerToProgress(playerRef.current, progressRatio, options);
+    },
+  }), []);
 
   const requestAutoplayPlayerRecovery = () => {
     if (!autoplayRef.current) return false;
@@ -426,13 +510,19 @@ function YouTubeTrailerPlayer({
     if (!player) return;
 
     const isPlaybackActive = hasActivePlayback();
+    const hasUserPlaybackIntent = options.userInitiated === true || hasRecentUserPlaybackInteraction();
     const shouldForceMutedForMobileAutoplay = (
       autoplayRef.current
       && !mutedRef.current
       && isLikelyMobileAutoplayEnvironment()
-      && options.userInitiated !== true
+      && !hasUserPlaybackIntent
     );
-    const shouldKeepMutedForAutoplay = autoplayRef.current && !mutedRef.current && !isPlaybackActive;
+    const shouldKeepMutedForAutoplay = (
+      autoplayRef.current
+      && !mutedRef.current
+      && !isPlaybackActive
+      && !hasUserPlaybackIntent
+    );
 
     try {
       if (mutedRef.current || shouldKeepMutedForAutoplay || shouldForceMutedForMobileAutoplay) {
@@ -491,6 +581,7 @@ function YouTubeTrailerPlayer({
 
               requestPlaybackResume(event.target);
               scheduleAutoplayStartupWatch(event.target);
+              flushPendingSeekProgress(event.target, { resumePlayback: false });
 
               markAnimeTrailerPlayable(normalizedTrailer);
             },
@@ -501,6 +592,10 @@ function YouTubeTrailerPlayer({
                 || event?.data === YT.PlayerState.BUFFERING
               ) {
                 setIsPlaybackVisible(true);
+                flushPendingSeekProgress(event.target, {
+                  userInitiated: false,
+                  resumePlayback: false,
+                });
               }
 
               if (event?.data === YT.PlayerState.PLAYING) {
@@ -705,6 +800,6 @@ function YouTubeTrailerPlayer({
       />
     </div>
   );
-}
+});
 
 export default YouTubeTrailerPlayer;
