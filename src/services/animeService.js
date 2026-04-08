@@ -2258,8 +2258,20 @@ const mergeAnimeListsEvenly = (withTrailer, withoutTrailer) => {
 export const buildFeaturedSliderState = (allAnimes, options = {}) => {
   const safeAnimes = filterOutHentaiAnimeList(allAnimes);
   const shuffleToken = String(options?.shuffleToken ?? 'default');
+  const selectionReasonLabel = String(options?.selectionReasonLabel || 'マイリスト登録作品').trim() || 'マイリスト登録作品';
+  const staticSelectionReasonLabel = String(options?.staticSelectionReasonLabel || 'マイリスト登録作品').trim() || 'マイリスト登録作品';
+  const sourceType = String(options?.sourceType || 'mylist-balanced-shuffle').trim() || 'mylist-balanced-shuffle';
+  const emptyState = options?.emptyState === 'empty' ? 'empty' : 'tutorial';
   // Case 0: Tutorial / Zero State
   if (!safeAnimes || safeAnimes.length === 0) {
+    if (emptyState === 'empty') {
+      return {
+        slides: [],
+        sourceType: `${sourceType}-empty`,
+        showRefreshButton: false,
+      };
+    }
+
     return {
       slides: createTutorialFeaturedSlides(),
       sourceType: 'initial',
@@ -2272,10 +2284,10 @@ export const buildFeaturedSliderState = (allAnimes, options = {}) => {
     return {
       slides: safeAnimes.map(a => ({
         ...a,
-        selectionReason: "コレクション",
+        selectionReason: staticSelectionReasonLabel,
         uniqueId: `all-${a.id}`
       })),
-      sourceType: 'static-collection',
+      sourceType: `${sourceType}-static`,
       showRefreshButton: false,
     };
   }
@@ -2287,13 +2299,13 @@ export const buildFeaturedSliderState = (allAnimes, options = {}) => {
   );
   const selected = shuffledAnimes.map((anime, index) => ({
     ...anime,
-    selectionReason: 'マイリストシャッフル',
+    selectionReason: selectionReasonLabel,
     uniqueId: `shuffle-${shuffleToken}-${index}-${anime.id}`,
   }));
 
   return {
     slides: selected,
-    sourceType: 'mylist-balanced-shuffle',
+    sourceType,
     showRefreshButton: true,
   };
 };

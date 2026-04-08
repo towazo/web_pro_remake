@@ -486,6 +486,7 @@ function AddAnimeScreen({
     const [query, setQuery] = useState('');
     const [normalTarget, setNormalTarget] = useState('mylist'); // mylist | bookmark
     const [selectedSuggestionIds, setSelectedSuggestionIds] = useState([]);
+    const [selectedSuggestionItems, setSelectedSuggestionItems] = useState([]);
     const [normalAddRating, setNormalAddRating] = useState(null); // single preview add
     const [suggestionRatingById, setSuggestionRatingById] = useState({});
     const [bulkQuery, setBulkQuery] = useState('');
@@ -632,13 +633,13 @@ function AddAnimeScreen({
     const bookmarkIdSet = React.useMemo(() => new Set((bookmarkList || []).map(a => a.id)), [bookmarkList]);
     const autoSelectedSuggestionIdSet = React.useMemo(() => {
         const next = new Set();
-        suggestions.forEach((anime) => {
+        selectedSuggestionItems.forEach((anime) => {
             if (normalizeRatingValue(suggestionRatingById[anime.id]) !== null) {
                 next.add(anime.id);
             }
         });
         return next;
-    }, [suggestions, suggestionRatingById]);
+    }, [selectedSuggestionItems, suggestionRatingById]);
     const manualSelectedSuggestionIdSet = React.useMemo(
         () => new Set(selectedSuggestionIds),
         [selectedSuggestionIds]
@@ -648,8 +649,8 @@ function AddAnimeScreen({
         [manualSelectedSuggestionIdSet, autoSelectedSuggestionIdSet]
     );
     const selectedSuggestions = React.useMemo(
-        () => suggestions.filter((anime) => selectedSuggestionIdSet.has(anime.id)),
-        [suggestions, selectedSuggestionIdSet]
+        () => selectedSuggestionItems.filter((anime) => selectedSuggestionIdSet.has(anime.id)),
+        [selectedSuggestionItems, selectedSuggestionIdSet]
     );
     const selectedSuggestionCount = selectedSuggestions.length;
     const tagTranslationVersion = useTagTranslationVersion();
@@ -694,6 +695,22 @@ function AddAnimeScreen({
         top: 'calc(100% + 2px)',
         bottom: 'auto'
     }), [suggestionsMaxHeight]);
+    const upsertSelectedSuggestionItem = React.useCallback((anime) => {
+        const animeId = Number(anime?.id);
+        if (!Number.isFinite(animeId)) return;
+        setSelectedSuggestionItems((prev) => {
+            const existingIndex = prev.findIndex((item) => Number(item?.id) === animeId);
+            if (existingIndex === -1) {
+                return [...prev, anime];
+            }
+            if (prev[existingIndex] === anime) {
+                return prev;
+            }
+            const next = [...prev];
+            next[existingIndex] = anime;
+            return next;
+        });
+    }, []);
     const updateSuggestionsLayout = React.useCallback(() => {
         const wrapper = searchFieldWrapperRef.current;
         if (!wrapper) return;
@@ -951,23 +968,30 @@ function AddAnimeScreen({
     }, [query, previewData, mode, entryTab, suggestionReloadToken]);
 
     useEffect(() => {
-        setSelectedSuggestionIds((prev) => prev.filter((id) => suggestions.some((anime) => anime.id === id)));
-        setSuggestionRatingById((prev) => {
-            const next = {};
-            suggestions.forEach((anime) => {
-                if (Object.prototype.hasOwnProperty.call(prev, anime.id)) {
-                    next[anime.id] = prev[anime.id];
-                }
+        if (suggestions.length === 0) return;
+        setSelectedSuggestionItems((prev) => {
+            if (prev.length === 0) return prev;
+            const latestById = new Map(
+                suggestions
+                    .filter((anime) => Number.isFinite(Number(anime?.id)))
+                    .map((anime) => [Number(anime.id), anime])
+            );
+            let changed = false;
+            const next = prev.map((anime) => {
+                const latest = latestById.get(Number(anime?.id));
+                if (!latest) return anime;
+                changed = true;
+                return latest;
             });
-            const hasSameKeys = Object.keys(next).length === Object.keys(prev).length
-                && Object.keys(next).every((key) => prev[key] === next[key]);
-            return hasSameKeys ? prev : next;
+            return changed ? next : prev;
         });
     }, [suggestions]);
 
     useEffect(() => {
         if (entryTab !== 'search' || mode !== 'normal') {
             setSelectedSuggestionIds([]);
+            setSelectedSuggestionItems([]);
+            setSuggestionRatingById({});
         }
     }, [entryTab, mode]);
 
@@ -2507,18 +2531,22 @@ function AddAnimeScreen({
 
     // 4. Selection Logic
     const handleSelectSuggestion = (anime) => {
-        const presetRating = normalizeRatingValue(suggestionRatingById[anime?.id]);
-        setPreviewData(anime);
-        setNormalAddRating(presetRating);
-        setQuery(anime.title.native || anime.title.romaji);
-        setSelectedSuggestionIds([]);
-        setSuggestions([]);
-        setIsSuggesting(false);
-        setShowSuggestions(false);
-        setSuggestionFeedback({ type: '', message: '' });
-        setSuggestionRetryUntilTs(0);
-        setSuggestionRetryCountdownSec(0);
-        setStatus({ type: 'info', message: '作品が選択されました。内容を確認してください。' });
+        const animeId = Number(anime?.id);
+        if (!Number.isFinite(animeId)) return;
+        const isAutoSelected = normalizeRatingValue(suggestionRatingById[animeId]) !== null;
+        const isSelected = selectedSuggestionIdSet.has(animeId);
+
+        if (isSelected) {
+            if (isAutoSelected) {
+                handleSuggestionRatingChange(animeId, null);
+                return;
+            }
+            handleToggleSuggestionSelection(anime, false);
+            return;
+        }
+
+        handleToggleSuggestionSelection(anime, true);
+        setStatus({ type: '', message: '' });
     };
 
     const handleCloseSuggestions = (event) => {
@@ -2526,17 +2554,29 @@ function AddAnimeScreen({
         setShowSuggestions(false);
     };
 
-    const handleToggleSuggestionSelection = (animeId, checked) => {
+    const handleToggleSuggestionSelection = (anime, checked) => {
+        const animeId = Number(anime?.id);
+        if (!Number.isFinite(animeId)) return;
         setSelectedSuggestionIds((prev) => {
             if (checked) {
                 return prev.includes(animeId) ? prev : [...prev, animeId];
             }
             return prev.filter((id) => id !== animeId);
         });
+        if (checked) {
+            upsertSelectedSuggestionItem(anime);
+            return;
+        }
+        if (normalizeRatingValue(suggestionRatingById[animeId]) === null) {
+            setSelectedSuggestionItems((prev) => prev.filter((item) => Number(item?.id) !== animeId));
+        }
     };
 
-    const handleSuggestionRatingChange = (animeId, rating) => {
+    const handleSuggestionRatingChange = (animeId, rating, anime = null) => {
         const normalizedRating = normalizeRatingValue(rating);
+        if (normalizedRating !== null && anime) {
+            upsertSelectedSuggestionItem(anime);
+        }
         setSuggestionRatingById((prev) => {
             const hasKey = Object.prototype.hasOwnProperty.call(prev, animeId);
             if (normalizedRating === null) {
@@ -2551,6 +2591,7 @@ function AddAnimeScreen({
         if (normalizedRating === null) {
             // Clear should also release manual selection so both states reset together.
             setSelectedSuggestionIds((prev) => prev.filter((id) => id !== animeId));
+            setSelectedSuggestionItems((prev) => prev.filter((item) => Number(item?.id) !== animeId));
         }
     };
 
@@ -2582,21 +2623,13 @@ function AddAnimeScreen({
 
     const handleClearSuggestionSelection = () => {
         setSelectedSuggestionIds([]);
-        setSuggestionRatingById((prev) => {
-            let changed = false;
-            const next = { ...prev };
-            suggestions.forEach((anime) => {
-                if (Object.prototype.hasOwnProperty.call(next, anime.id)) {
-                    changed = true;
-                    delete next[anime.id];
-                }
-            });
-            return changed ? next : prev;
-        });
+        setSelectedSuggestionItems([]);
+        setSuggestionRatingById({});
     };
 
     const handleRemoveSuggestionFromSelection = (animeId) => {
         setSelectedSuggestionIds((prev) => prev.filter((id) => id !== animeId));
+        setSelectedSuggestionItems((prev) => prev.filter((item) => Number(item?.id) !== animeId));
         setSuggestionRatingById((prev) => {
             if (!Object.prototype.hasOwnProperty.call(prev, animeId)) return prev;
             const next = { ...prev };
@@ -2668,8 +2701,10 @@ function AddAnimeScreen({
         });
         setStatus({ type: '', message: '' });
         setSelectedSuggestionIds([]);
+        setSelectedSuggestionItems([]);
         setShowSuggestions(false);
         setSuggestions([]);
+        setSuggestionRatingById({});
         setSuggestionFeedback({ type: '', message: '' });
         setSuggestionRetryUntilTs(0);
         setSuggestionRetryCountdownSec(0);
@@ -3128,6 +3163,7 @@ function AddAnimeScreen({
         bulkAbortControllerRef.current = null;
         setPreviewData(null);
         setSelectedSuggestionIds([]);
+        setSelectedSuggestionItems([]);
         setQuery('');
         setStatus({ type: '', message: '' });
         setSuggestions([]);
@@ -3427,7 +3463,6 @@ function AddAnimeScreen({
                                 value={query}
                                 onChange={(e) => {
                                     setQuery(e.target.value);
-                                    setSelectedSuggestionIds([]);
                                     if (previewData) setPreviewData(null); // Reset preview when typing
                                 }}
                                 placeholder="作品タイトルを入力（日本語・英語可）"
@@ -3540,7 +3575,7 @@ function AddAnimeScreen({
                                         return (
                                             <div
                                                 key={anime.id}
-                                                className="suggestion-item"
+                                                className={`suggestion-item ${isSelected ? 'selected' : ''}`.trim()}
                                                 onClick={() => handleSelectSuggestion(anime)}
                                             >
                                                 <label
@@ -3556,7 +3591,7 @@ function AddAnimeScreen({
                                                                 handleSuggestionRatingChange(anime.id, null);
                                                                 return;
                                                             }
-                                                            handleToggleSuggestionSelection(anime.id, checked);
+                                                            handleToggleSuggestionSelection(anime, checked);
                                                         }}
                                                         aria-label="追加対象として選択"
                                                     />
@@ -3577,7 +3612,7 @@ function AddAnimeScreen({
                                                     {normalTarget === 'mylist' && (
                                                         <MiniStarRating
                                                             value={suggestionRatingById[anime.id]}
-                                                            onChange={(rating) => handleSuggestionRatingChange(anime.id, rating)}
+                                                            onChange={(rating) => handleSuggestionRatingChange(anime.id, rating, anime)}
                                                             className="suggestion-mini-rating"
                                                             ariaLabel="この候補の評価"
                                                         />
@@ -3586,10 +3621,19 @@ function AddAnimeScreen({
                                             </div>
                                         );
                                     })}
+                                    <div className="suggestions-bottom-actions">
+                                        <button
+                                            type="button"
+                                            className="suggestions-bottom-close-button"
+                                            onClick={handleCloseSuggestions}
+                                        >
+                                            候補一覧を閉じる
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
-                        {suggestions.length > 0 && (showSuggestions || selectedSuggestionCount > 0) && (
+                        {(suggestions.length > 0 || selectedSuggestionCount > 0) && (
                             <div className="normal-multi-add-panel">
                                 <div className="normal-multi-add-header">
                                     <span className="normal-multi-add-count">{selectedSuggestionCount}件選択中</span>

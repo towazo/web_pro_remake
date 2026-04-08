@@ -23,6 +23,7 @@ function YouTubeTrailerPlayer({
   muted = true,
   allowPersistentAutoplayUnmute = false,
   muteChangeToken = 0,
+  restartToken = 0,
   deferVisibilityUntilPlaying = false,
   className = '',
   onError,
@@ -47,6 +48,7 @@ function YouTubeTrailerPlayer({
   const onProgressChangeRef = useRef(onProgressChange);
   const playbackStateRef = useRef(null);
   const lastHandledMuteChangeTokenRef = useRef(muteChangeToken);
+  const lastHandledRestartTokenRef = useRef(restartToken);
   const autoplayStartupTimeoutIdsRef = useRef([]);
   const autoplayRecoveryRestartCountRef = useRef(0);
   const progressAnimationFrameIdRef = useRef(0);
@@ -598,6 +600,46 @@ function YouTubeTrailerPlayer({
       scheduleAutoplayStartupWatch(player);
     }
   }, [autoplay, muted, videoId, muteChangeToken]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !readyRef.current) return;
+
+    const shouldRestart = restartToken !== lastHandledRestartTokenRef.current;
+    lastHandledRestartTokenRef.current = restartToken;
+    if (!shouldRestart) return;
+
+    playbackStateRef.current = null;
+    clearPlaybackRetryTimeouts();
+    clearUnmuteRetryTimeouts();
+    clearAutoplayStartupTimeouts();
+    clearProgressPollInterval();
+    resetProgressTracking();
+    emitProgress(0, { allowDecrease: true });
+    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
+
+    try {
+      player.pauseVideo?.();
+    } catch (_) {
+      // Ignore pause failures.
+    }
+
+    try {
+      player.seekTo(0, true);
+    } catch (_) {
+      // Ignore seek failures.
+    }
+
+    syncDesiredMuteState(player);
+
+    if (autoplay) {
+      requestPlaybackResume(player);
+      scheduleAutoplayStartupWatch(player);
+      return;
+    }
+
+    emitMuteState(player);
+  }, [autoplay, deferVisibilityUntilPlaying, restartToken, videoId]);
 
   return (
     <div

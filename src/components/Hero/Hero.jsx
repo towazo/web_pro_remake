@@ -35,6 +35,7 @@ function Hero({
     previewMuted = true,
     allowPersistentPreviewAudio = false,
     previewMutedChangeToken = 0,
+    restartToken = 0,
     onPreviewMuteStateChange,
     onPreviewAvailabilityChange,
     onSlideProgressChange,
@@ -172,7 +173,7 @@ function Hero({
         setActualPreviewMuted(true);
         setHasTrailerPlaybackStarted(false);
         setHasTrailerPlaybackStalled(false);
-    }, [anime?.id, isActive, shouldRenderTrailerPreview]);
+    }, [anime?.id, isActive, shouldRenderTrailerPreview, restartToken]);
 
     useEffect(() => {
         if (previewMuted) {
@@ -251,6 +252,7 @@ function Hero({
         isActive,
         isTutorial,
         onRequestAdvance,
+        restartToken,
         shouldRenderTrailerPreview,
         anime?.id,
     ]);
@@ -299,6 +301,7 @@ function Hero({
         isActive,
         isTutorial,
         onSlideProgressChange,
+        restartToken,
         shouldRenderTrailerPreview,
         anime?.id,
     ]);
@@ -387,6 +390,7 @@ function Hero({
                                         muted={isActive ? previewMuted : true}
                                         allowPersistentAutoplayUnmute={allowPersistentPreviewAudio}
                                         muteChangeToken={previewMutedChangeToken}
+                                        restartToken={restartToken}
                                         deferVisibilityUntilPlaying
                                         onEnded={isActive ? onRequestAdvance : undefined}
                                         onPlaybackStart={isActive ? () => {

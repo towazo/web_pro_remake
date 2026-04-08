@@ -69,11 +69,28 @@ function WatchRankingSection({ animeList = [] }) {
       const currentWatchCount = anime.watchCount || 0;
       const isTied = index > 0 && currentWatchCount === previousWatchCount;
       const displayRank = isTied ? previousDisplayRank : index + 1;
+      const metaParts = [];
+      const seasonYear = Number(anime?.seasonYear);
+      if (Number.isFinite(seasonYear) && seasonYear > 0) {
+        metaParts.push(`${seasonYear}年`);
+      }
+      const genreText = (Array.isArray(anime?.genres) ? anime.genres : [])
+        .slice(0, 2)
+        .map((genre) => translateGenre(genre))
+        .filter(Boolean)
+        .join(' / ');
+      if (genreText) {
+        metaParts.push(genreText);
+      }
 
       previousWatchCount = currentWatchCount;
       previousDisplayRank = displayRank;
 
-      return { ...anime, displayRank };
+      return {
+        ...anime,
+        displayRank,
+        metaText: metaParts.join(' ・ '),
+      };
     });
   }, [animeList, selectedGenre]);
 
@@ -82,12 +99,14 @@ function WatchRankingSection({ animeList = [] }) {
   return (
     <section className="watch-ranking-section" aria-labelledby="watch-ranking-title">
       <div className="watch-ranking-header">
-        <div>
+        <div className="watch-ranking-heading">
+          <p className="watch-ranking-eyebrow">TOP 5</p>
           <h3 id="watch-ranking-title" className="watch-ranking-title">視聴回数ランキング</h3>
           <p className="watch-ranking-subtitle">あなたが最も見たアニメは・・・？</p>
         </div>
         {genreOptions.length > 0 && (
           <label className="watch-ranking-filter">
+            <span className="watch-ranking-filter-label">表示ジャンル</span>
             <select
               className="watch-ranking-filter-select"
               value={selectedGenre}
@@ -119,6 +138,9 @@ function WatchRankingSection({ animeList = [] }) {
             />
             <div className="watch-ranking-body">
               <h4 className="watch-ranking-item-title">{resolveAnimeTitle(anime)}</h4>
+              {anime.metaText ? (
+                <p className="watch-ranking-item-subtitle">{anime.metaText}</p>
+              ) : null}
               <p className="watch-ranking-item-meta" aria-label={`視聴回数 ${anime.watchCount}回`}>
                 <WatchCountBadge
                   count={anime.watchCount}

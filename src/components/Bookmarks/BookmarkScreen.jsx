@@ -373,7 +373,7 @@ function BookmarkScreen({
         <>
           <div className="controls bookmark-screen-controls">
             <div className="search-box">
-              <i className="search-icon">🔍</i>
+              <i className="search-icon" aria-hidden="true" />
               <input
                 type="text"
                 placeholder="ブックマークからタイトル検索"

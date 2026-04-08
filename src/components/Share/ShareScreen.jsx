@@ -1357,7 +1357,7 @@ function ShareScreen({
 
         <div className="controls share-screen-controls">
           <div className="search-box">
-            <i className="search-icon">🔍</i>
+            <i className="search-icon" aria-hidden="true" />
             <input
               type="text"
               placeholder="共有する作品を検索"
