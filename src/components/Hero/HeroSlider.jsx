@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Hero from './Hero';
 import AudioToggleButton from '../Shared/AudioToggleButton';
 
@@ -47,7 +47,7 @@ function HeroSlider({
     const [previewMutedChangeToken, setPreviewMutedChangeToken] = useState(0);
     const [activePreviewMuted, setActivePreviewMuted] = useState(true);
     const [activePreviewAudioAvailable, setActivePreviewAudioAvailable] = useState(false);
-    const [currentSlideProgress, setCurrentSlideProgress] = useState(0);
+    const progressFillRef = useRef(null);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
     const slideIdentityKey = Array.isArray(slides)
@@ -64,8 +64,16 @@ function HeroSlider({
     useEffect(() => {
         setActivePreviewMuted(true);
         setActivePreviewAudioAvailable(false);
-        setCurrentSlideProgress(0);
+        if (progressFillRef.current) {
+            progressFillRef.current.style.transform = 'scaleX(0)';
+        }
     }, [currentIndex, slideIdentityKey]);
+
+    const handleSlideProgressChange = useCallback((value) => {
+        const normalizedValue = Math.min(1, Math.max(0, Number(value) || 0));
+        if (!progressFillRef.current) return;
+        progressFillRef.current.style.transform = `scaleX(${normalizedValue})`;
+    }, []);
 
     const nextSlide = useCallback(() => {
         if (totalSlides <= 1) return;
@@ -195,7 +203,7 @@ function HeroSlider({
                             previewMutedChangeToken={previewMutedChangeToken}
                             onPreviewMuteStateChange={actualIndex === currentIndex ? setActivePreviewMuted : undefined}
                             onPreviewAvailabilityChange={actualIndex === currentIndex ? setActivePreviewAudioAvailable : undefined}
-                            onSlideProgressChange={actualIndex === currentIndex ? setCurrentSlideProgress : undefined}
+                            onSlideProgressChange={actualIndex === currentIndex ? handleSlideProgressChange : undefined}
                             onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
                         />
                     );
@@ -227,8 +235,8 @@ function HeroSlider({
 
                 <div className="slider-timeline" aria-hidden="true">
                     <div
+                        ref={progressFillRef}
                         className="slider-timeline-fill"
-                        style={{ transform: `scaleX(${Math.min(1, Math.max(0, currentSlideProgress))})` }}
                     />
                 </div>
             </div>
