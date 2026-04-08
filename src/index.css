@@ -2357,6 +2357,8 @@ button.card-watch-summary {
 .hero-slider-toolbar {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 16px;
     min-height: 68px;
     padding: 12px 16px;
     border: 1px solid var(--border-strong);
@@ -2370,6 +2372,7 @@ button.card-watch-summary {
     display: inline-flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
     color: #fff;
 }
 
@@ -2389,6 +2392,7 @@ button.card-watch-summary {
     display: flex;
     flex-direction: column;
     gap: 3px;
+    min-width: 0;
 }
 
 .slider-audio-label {
@@ -2404,6 +2408,27 @@ button.card-watch-summary {
     font-size: 0.92rem;
     font-weight: 600;
     line-height: 1.35;
+}
+
+.slider-timeline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 11;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.slider-timeline-fill {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.72), #ffffff);
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform 0.05s linear;
+    will-change: transform;
 }
 
 .youtube-trailer-player,
@@ -2516,12 +2541,17 @@ button.card-watch-summary {
     .hero-slider-toolbar {
         min-height: 62px;
         padding: 10px 12px;
+        gap: 12px;
     }
 
     .slider-audio-toggle {
         width: 38px;
         min-width: 38px;
         height: 38px;
+    }
+
+    .slider-progress-count-inline {
+        min-width: 68px;
     }
 }
 
@@ -2555,6 +2585,7 @@ button.card-watch-summary {
     .hero-slider-toolbar {
         min-height: 58px;
         padding: 10px;
+        gap: 10px;
     }
 
     .slider-audio-copy {
@@ -2567,6 +2598,12 @@ button.card-watch-summary {
 
     .slider-audio-status {
         font-size: 0.82rem;
+    }
+
+    .slider-progress-count-inline {
+        min-width: 62px;
+        padding: 6px 8px;
+        font-size: 0.7rem;
     }
 }
 
@@ -2892,10 +2929,6 @@ button.card-watch-summary {
 }
 
 .slider-progress-count {
-    position: absolute;
-    right: 18px;
-    bottom: 20px;
-    z-index: 10;
     min-width: 72px;
     padding: 6px 10px;
     border: 1px solid rgba(255, 255, 255, 0.24);
@@ -2908,16 +2941,13 @@ button.card-watch-summary {
     backdrop-filter: blur(4px);
 }
 
-.tutorial-hero.active~.slider-progress-count {
-    border-color: rgba(0, 0, 0, 0.18);
-    background: rgba(255, 255, 255, 0.78);
-    color: #111;
+.slider-progress-count-inline {
+    position: static;
+    flex-shrink: 0;
 }
 
 @media (max-width: 480px) {
     .slider-progress-count {
-        right: 10px;
-        bottom: 14px;
         min-width: 66px;
         padding: 6px 9px;
         font-size: 0.72rem;

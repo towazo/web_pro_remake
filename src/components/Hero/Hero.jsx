@@ -37,6 +37,7 @@ function Hero({
     previewMutedChangeToken = 0,
     onPreviewMuteStateChange,
     onPreviewAvailabilityChange,
+    onSlideProgressChange,
     onRequestAdvance,
 }) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
@@ -210,6 +211,18 @@ function Hero({
     ]);
 
     useEffect(() => {
+        if (typeof onSlideProgressChange !== 'function') {
+            return undefined;
+        }
+
+        if (!isActive) {
+            onSlideProgressChange(0);
+        }
+
+        return undefined;
+    }, [isActive, onSlideProgressChange, anime?.id]);
+
+    useEffect(() => {
         if (!isActive || isTutorial || typeof onRequestAdvance !== 'function') {
             return undefined;
         }
@@ -219,10 +232,10 @@ function Hero({
         }
 
         let timeoutMs = NO_TRAILER_ADVANCE_DELAY_MS;
-        if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted) {
-            timeoutMs = TRAILER_START_TIMEOUT_MS;
-        } else if (shouldRenderTrailerPreview && hasTrailerPlaybackStalled) {
+        if (shouldRenderTrailerPreview && hasTrailerPlaybackStalled) {
             timeoutMs = STALLED_TRAILER_ADVANCE_DELAY_MS;
+        } else if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted) {
+            timeoutMs = TRAILER_START_TIMEOUT_MS;
         }
 
         const timeoutId = window.setTimeout(() => {
@@ -238,6 +251,54 @@ function Hero({
         isActive,
         isTutorial,
         onRequestAdvance,
+        shouldRenderTrailerPreview,
+        anime?.id,
+    ]);
+
+    useEffect(() => {
+        if (!isActive || isTutorial || typeof onSlideProgressChange !== 'function') {
+            return undefined;
+        }
+
+        let progressDurationMs = NO_TRAILER_ADVANCE_DELAY_MS;
+        if (shouldRenderTrailerPreview && hasTrailerPlaybackStarted && !hasTrailerPlaybackStalled) {
+            return undefined;
+        }
+
+        if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted && !hasTrailerPlaybackStalled) {
+            onSlideProgressChange(0);
+            return undefined;
+        }
+
+        if (shouldRenderTrailerPreview && hasTrailerPlaybackStalled) {
+            progressDurationMs = STALLED_TRAILER_ADVANCE_DELAY_MS;
+        } else if (shouldRenderTrailerPreview && !hasTrailerPlaybackStarted) {
+            progressDurationMs = TRAILER_START_TIMEOUT_MS;
+        }
+
+        const startedAt = window.performance.now();
+        let animationFrameId = 0;
+
+        const updateProgress = (timestamp) => {
+            const elapsedMs = Math.max(0, timestamp - startedAt);
+            onSlideProgressChange(Math.min(1, elapsedMs / progressDurationMs));
+            animationFrameId = window.requestAnimationFrame(updateProgress);
+        };
+
+        onSlideProgressChange(0);
+        animationFrameId = window.requestAnimationFrame(updateProgress);
+
+        return () => {
+            if (animationFrameId) {
+                window.cancelAnimationFrame(animationFrameId);
+            }
+        };
+    }, [
+        hasTrailerPlaybackStarted,
+        hasTrailerPlaybackStalled,
+        isActive,
+        isTutorial,
+        onSlideProgressChange,
         shouldRenderTrailerPreview,
         anime?.id,
     ]);
@@ -334,6 +395,7 @@ function Hero({
                                         } : undefined}
                                         onPlaybackStalled={isActive ? () => setHasTrailerPlaybackStalled(true) : undefined}
                                         onMuteStateChange={isActive ? setActualPreviewMuted : undefined}
+                                        onProgressChange={isActive ? onSlideProgressChange : undefined}
                                     />
                                 </>
                             )}

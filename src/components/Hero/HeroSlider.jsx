@@ -47,6 +47,7 @@ function HeroSlider({
     const [previewMutedChangeToken, setPreviewMutedChangeToken] = useState(0);
     const [activePreviewMuted, setActivePreviewMuted] = useState(true);
     const [activePreviewAudioAvailable, setActivePreviewAudioAvailable] = useState(false);
+    const [currentSlideProgress, setCurrentSlideProgress] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
     const slideIdentityKey = Array.isArray(slides)
@@ -63,6 +64,7 @@ function HeroSlider({
     useEffect(() => {
         setActivePreviewMuted(true);
         setActivePreviewAudioAvailable(false);
+        setCurrentSlideProgress(0);
     }, [currentIndex, slideIdentityKey]);
 
     const nextSlide = useCallback(() => {
@@ -146,15 +148,9 @@ function HeroSlider({
     const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
     const bufferEndIndex = Math.min(totalSlides, bufferStartIndex + INITIAL_BUFFER_SIZE);
     const bufferedSlides = slides.slice(bufferStartIndex, bufferEndIndex);
-    const sliderAudioStatusText = !activePreviewAudioAvailable
-        ? (isPreviewMuted
-            ? '音声設定はオフです。次のトレーラーにもこの設定を引き継ぎます'
-            : '音声設定はオンです。次のトレーラーで自動的に適用を試みます')
-        : isPreviewMuted
-            ? 'トレーラー音声はオフです'
-            : activePreviewMuted
-                ? '音声オンを維持しています。必要ならもう一度押すと再試行します'
-                : 'トレーラー音声はオンです';
+    const sliderAudioStatusText = isPreviewMuted
+        ? '音声設定はオフです'
+        : '音声設定はオンです';
 
     return (
         <div className="hero-slider-shell">
@@ -199,6 +195,7 @@ function HeroSlider({
                             previewMutedChangeToken={previewMutedChangeToken}
                             onPreviewMuteStateChange={actualIndex === currentIndex ? setActivePreviewMuted : undefined}
                             onPreviewAvailabilityChange={actualIndex === currentIndex ? setActivePreviewAudioAvailable : undefined}
+                            onSlideProgressChange={actualIndex === currentIndex ? setCurrentSlideProgress : undefined}
                             onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
                         />
                     );
@@ -212,7 +209,7 @@ function HeroSlider({
                         <button type="button" className="slider-nav-button slider-next" onClick={nextSlide}>
                             &#10095;
                         </button>
-                        {shouldShowDots ? (
+                        {shouldShowDots && (
                             <div className="slider-indicators">
                                 {slides.map((_, index) => (
                                     <button
@@ -224,13 +221,16 @@ function HeroSlider({
                                     />
                                 ))}
                             </div>
-                        ) : (
-                            <div className="slider-progress-count" aria-live="polite">
-                                {currentIndex + 1} / {totalSlides}
-                            </div>
                         )}
                     </>
                 )}
+
+                <div className="slider-timeline" aria-hidden="true">
+                    <div
+                        className="slider-timeline-fill"
+                        style={{ transform: `scaleX(${Math.min(1, Math.max(0, currentSlideProgress))})` }}
+                    />
+                </div>
             </div>
 
             <div className="hero-slider-toolbar" role="group" aria-label="スライダー音声コントロール">
@@ -249,6 +249,11 @@ function HeroSlider({
                         </span>
                     </div>
                 </div>
+                {!shouldShowDots && (
+                    <div className="slider-progress-count slider-progress-count-inline" aria-live="polite">
+                        {currentIndex + 1} / {totalSlides}
+                    </div>
+                )}
             </div>
         </div>
     );
