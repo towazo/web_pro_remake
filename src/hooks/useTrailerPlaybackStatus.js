@@ -11,11 +11,25 @@ import {
 const pendingProbeMap = new Map();
 const probeTaskQueue = [];
 const MAX_CONCURRENT_PROBES = 2;
+const MOBILE_MAX_CONCURRENT_PROBES = 1;
 const MIN_YOUTUBE_PLAYER_VIEWPORT_PX = 200;
 const DEFAULT_PROBE_PRIORITY = 0;
 export const TRAILER_PROBE_PRIORITY_USER_INITIATED = 1000;
 let activeProbeCount = 0;
 let probeTaskSequence = 0;
+
+const getMaxConcurrentProbes = () => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return MAX_CONCURRENT_PROBES;
+  }
+
+  const isMobileLikeEnvironment = window.matchMedia('(pointer: coarse)').matches
+    || window.matchMedia('(max-width: 768px)').matches;
+
+  return isMobileLikeEnvironment
+    ? MOBILE_MAX_CONCURRENT_PROBES
+    : MAX_CONCURRENT_PROBES;
+};
 
 const normalizeProbePriority = (value, fallback = DEFAULT_PROBE_PRIORITY) => {
   const parsed = Number(value);
@@ -31,7 +45,7 @@ const sortProbeTaskQueue = () => {
 };
 
 const runQueuedProbes = () => {
-  while (activeProbeCount < MAX_CONCURRENT_PROBES && probeTaskQueue.length > 0) {
+  while (activeProbeCount < getMaxConcurrentProbes() && probeTaskQueue.length > 0) {
     const nextTask = probeTaskQueue.shift();
     if (!nextTask) return;
     activeProbeCount += 1;

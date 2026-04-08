@@ -15,6 +15,11 @@ import {
     filterAnimeCollection,
 } from '../../utils/animeFilters';
 import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
+import {
+    getCurrentSeasonInfo,
+    getNextSeasonInfo,
+    seasonToFilterKey,
+} from '../../utils/season';
 
 const ANILIST_SEASON_TO_FILTER_KEY = {
     WINTER: 'winter',
@@ -23,6 +28,10 @@ const ANILIST_SEASON_TO_FILTER_KEY = {
     FALL: 'autumn'
 };
 const BROWSE_ALLOWED_MEDIA_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
+const BROWSE_SPECIAL_PRESET_KEYS = Object.freeze({
+    currentSeason: 'special:currentSeason',
+    nextSeason: 'special:nextSeason'
+});
 const BROWSE_RESULTS_CACHE = new Map();
 const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MESSAGE_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
@@ -477,7 +486,40 @@ function AddAnimeScreen({
         };
     }, [browsePreset]);
 
+    const currentSeasonInfo = React.useMemo(() => getCurrentSeasonInfo(), []);
+    const nextSeasonInfo = React.useMemo(() => getNextSeasonInfo(currentSeasonInfo), [currentSeasonInfo]);
+    const browseSpecialPresetOptions = React.useMemo(() => ([
+        {
+            key: BROWSE_SPECIAL_PRESET_KEYS.currentSeason,
+            year: currentSeasonInfo.year,
+            mediaSeason: currentSeasonInfo.season,
+            seasonKey: seasonToFilterKey(currentSeasonInfo.season),
+            statusIn: ['RELEASING', 'NOT_YET_RELEASED', 'HIATUS'],
+            statusNot: 'CANCELLED',
+            title: '今季放送中',
+            description: '今季に放送中の作品を一覧から確認できます。',
+            locked: false
+        },
+        {
+            key: BROWSE_SPECIAL_PRESET_KEYS.nextSeason,
+            year: nextSeasonInfo.year,
+            mediaSeason: nextSeasonInfo.season,
+            seasonKey: seasonToFilterKey(nextSeasonInfo.season),
+            statusIn: ['NOT_YET_RELEASED', 'RELEASING'],
+            statusNot: 'CANCELLED',
+            title: '来季放送予定',
+            description: '来季に放送予定の作品を一覧から確認できます。',
+            locked: false
+        }
+    ]), [currentSeasonInfo, nextSeasonInfo]);
+    const [selectedBrowseSpecialPresetKey, setSelectedBrowseSpecialPresetKey] = useState('');
+    const selectedBrowseSpecialPreset = React.useMemo(
+        () => browseSpecialPresetOptions.find((option) => option.key === selectedBrowseSpecialPresetKey) || null,
+        [browseSpecialPresetOptions, selectedBrowseSpecialPresetKey]
+    );
+    const activeBrowsePreset = normalizedBrowsePreset || selectedBrowseSpecialPreset;
     const isBrowsePresetLocked = Boolean(normalizedBrowsePreset?.locked);
+    const hasFixedBrowseSeason = Boolean(activeBrowsePreset?.seasonKey);
     const [entryTab, setEntryTab] = useState(() => (
         normalizedBrowsePreset ? 'browse' : (initialEntryTab === 'browse' ? 'browse' : 'search')
     )); // 'search' or 'browse'
@@ -548,9 +590,7 @@ function AddAnimeScreen({
     const [browseGenreFilters, setBrowseGenreFilters] = useState([]);
     const [browseTagFilters, setBrowseTagFilters] = useState([]);
     const [browseMatchMode, setBrowseMatchMode] = useState('and');
-    const [browseSeasonFilters, setBrowseSeasonFilters] = useState(() => (
-        normalizedBrowsePreset?.seasonKey ? [normalizedBrowsePreset.seasonKey] : []
-    ));
+    const [browseSeasonFilters, setBrowseSeasonFilters] = useState([]);
     const [browseResults, setBrowseResults] = useState([]);
     const [browsePageInfo, setBrowsePageInfo] = useState({
         total: 0,
@@ -579,6 +619,7 @@ function AddAnimeScreen({
     const browseResultsTopRef = React.useRef(null);
     const browsePageSwitchTimerRef = React.useRef(null);
     const pendingBrowseScrollPageRef = React.useRef(null);
+    const pendingBrowseSelectionScrollRef = React.useRef(false);
     const browseAutoRetryCountRef = React.useRef(new Map());
     const browseInFlightRef = React.useRef(0);
     const isDevRuntime = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
@@ -622,10 +663,13 @@ function AddAnimeScreen({
         }
         return parsed;
     };
-    const getDefaultBrowseSeasonFilters = React.useCallback(() => (
-        normalizedBrowsePreset?.seasonKey ? [normalizedBrowsePreset.seasonKey] : []
-    ), [normalizedBrowsePreset]);
+    const browseDraftSpecialPreset = React.useMemo(
+        () => browseSpecialPresetOptions.find((option) => option.key === browseYearDraft) || null,
+        [browseSpecialPresetOptions, browseYearDraft]
+    );
     const browseDraftYear = parseBrowseYear(browseYearDraft);
+    const currentBrowseSelectionKey = selectedBrowseSpecialPresetKey || (selectedBrowseYear ? String(selectedBrowseYear) : '');
+    const draftBrowseSelectionKey = browseDraftSpecialPreset?.key || (Number.isFinite(browseDraftYear) ? String(browseDraftYear) : '');
     const browseYearOptions = React.useMemo(
         () => Array.from({ length: currentYear - 1960 + 1 }, (_, idx) => currentYear - idx),
         [currentYear]
@@ -675,17 +719,17 @@ function AddAnimeScreen({
     }, [browseFilterOptions.tags, browseTagFilters]);
     const browseDataKey = React.useMemo(() => {
         if (!Number.isFinite(Number(selectedBrowseYear))) return '';
-        if (!normalizedBrowsePreset) {
+        if (!activeBrowsePreset) {
             return `year:${selectedBrowseYear}`;
         }
-        const statusInKey = Array.isArray(normalizedBrowsePreset.statusIn)
-            ? normalizedBrowsePreset.statusIn.join(',')
+        const statusInKey = Array.isArray(activeBrowsePreset.statusIn)
+            ? activeBrowsePreset.statusIn.join(',')
             : '';
-        const statusNotKey = normalizedBrowsePreset.statusNot
-            ? String(normalizedBrowsePreset.statusNot)
+        const statusNotKey = activeBrowsePreset.statusNot
+            ? String(activeBrowsePreset.statusNot)
             : '';
-        return `preset:${selectedBrowseYear}:${normalizedBrowsePreset.mediaSeason || ''}:${statusInKey}:${statusNotKey}`;
-    }, [selectedBrowseYear, normalizedBrowsePreset]);
+        return `preset:${selectedBrowseYear}:${activeBrowsePreset.mediaSeason || ''}:${statusInKey}:${statusNotKey}`;
+    }, [selectedBrowseYear, activeBrowsePreset]);
     const isSuggestionPanelVisible = entryTab === 'search'
         && mode === 'normal'
         && showSuggestions
@@ -1250,6 +1294,7 @@ function AddAnimeScreen({
 
     useEffect(() => {
         if (normalizedBrowsePreset) {
+            setSelectedBrowseSpecialPresetKey('');
             setEntryTab('browse');
             setSelectedBrowseYear(normalizedBrowsePreset.year);
             setBrowseYearDraft(String(normalizedBrowsePreset.year));
@@ -1257,19 +1302,12 @@ function AddAnimeScreen({
             setBrowseGenreFilters([]);
             setBrowseTagFilters([]);
             setBrowseMatchMode('and');
-            setBrowseSeasonFilters(getDefaultBrowseSeasonFilters());
+            setBrowseSeasonFilters([]);
             return;
         }
 
         setEntryTab(initialEntryTab === 'browse' ? 'browse' : 'search');
-        setSelectedBrowseYear(null);
-        setBrowseYearDraft('');
-        setBrowsePage(1);
-        setBrowseGenreFilters([]);
-        setBrowseTagFilters([]);
-        setBrowseMatchMode('and');
-        setBrowseSeasonFilters([]);
-    }, [normalizedBrowsePreset, initialEntryTab, getDefaultBrowseSeasonFilters]);
+    }, [normalizedBrowsePreset, initialEntryTab]);
 
     useEffect(() => {
         if (!selectedBrowseYear) return;
@@ -1325,7 +1363,7 @@ function AddAnimeScreen({
                         key: browseDataKey,
                         inFlight: inFlightNow,
                         year: selectedBrowseYear,
-                        season: normalizedBrowsePreset?.mediaSeason || null
+                        season: activeBrowsePreset?.mediaSeason || null
                     });
                 }
 
@@ -1341,7 +1379,7 @@ function AddAnimeScreen({
                     setBrowsePage(1);
                     setBrowseError('');
                     setBrowseErrorType('');
-                    if (normalizedBrowsePreset && browseReloadToken === 0) {
+                    if (activeBrowsePreset && browseReloadToken === 0) {
                         if (isDevRuntime) {
                             console.info('[AddAnimeScreen] browse cache hit', {
                                 key: browseDataKey,
@@ -1353,7 +1391,7 @@ function AddAnimeScreen({
                     }
                 }
 
-                const isPresetMode = Boolean(normalizedBrowsePreset);
+                const isPresetMode = Boolean(activeBrowsePreset);
                 const requestOptions = {
                     perPage: 50,
                     maxPages: 140,
@@ -1369,8 +1407,8 @@ function AddAnimeScreen({
                     signal: controller.signal,
                     debugLog: isDevRuntime,
                     uiPerPage: YEAR_PER_PAGE,
-                    debugKey: normalizedBrowsePreset
-                        ? (normalizedBrowsePreset?.title || 'season-preset')
+                    debugKey: activeBrowsePreset
+                        ? (activeBrowsePreset?.title || 'season-preset')
                         : `year-${selectedBrowseYear}`,
                     onRetry: (info) => {
                         collectRequestIssue(requestIssue, info);
@@ -1387,10 +1425,10 @@ function AddAnimeScreen({
                     }
                 };
 
-                if (normalizedBrowsePreset) {
-                    requestOptions.season = normalizedBrowsePreset.mediaSeason;
-                    requestOptions.statusIn = normalizedBrowsePreset.statusIn;
-                    requestOptions.statusNot = normalizedBrowsePreset.statusNot;
+                if (activeBrowsePreset) {
+                    requestOptions.season = activeBrowsePreset.mediaSeason;
+                    requestOptions.statusIn = activeBrowsePreset.statusIn;
+                    requestOptions.statusNot = activeBrowsePreset.statusNot;
                 }
 
                 let items = [];
@@ -1439,7 +1477,7 @@ function AddAnimeScreen({
                 if (error && safeItems.length === 0) {
                     const isAbort = error?.name === 'AbortError';
                     if (isAbort) return;
-                    const sourceLabel = normalizedBrowsePreset ? '作品リスト' : '年代リスト';
+                    const sourceLabel = activeBrowsePreset ? '作品リスト' : '年代リスト';
                     const statusCode = Number(error?.status) || 0;
                     const isRateLimit = statusCode === 429 || hasRateLimitError(error?.message);
                     const retryAfterMs = parsePositiveMs(error?.retryAfterMs) || parsePositiveMs(requestIssue.retryAfterMs);
@@ -1522,7 +1560,7 @@ function AddAnimeScreen({
                 }
 
                 if (isDevRuntime) {
-                    const presetLabel = normalizedBrowsePreset?.title || '年代リスト';
+                    const presetLabel = activeBrowsePreset?.title || '年代リスト';
                     const visibleCount = safeItems.length > 0
                         ? safeItems.length
                         : (Array.isArray(BROWSE_RESULTS_CACHE.get(browseDataKey)?.items)
@@ -1547,9 +1585,9 @@ function AddAnimeScreen({
                     console.info('[AddAnimeScreen] browse summary', {
                         preset: presetLabel,
                         year: selectedBrowseYear,
-                        season: normalizedBrowsePreset?.mediaSeason || null,
-                        statusIn: normalizedBrowsePreset?.statusIn || null,
-                        statusNot: normalizedBrowsePreset?.statusNot || null,
+                        season: activeBrowsePreset?.mediaSeason || null,
+                        statusIn: activeBrowsePreset?.statusIn || null,
+                        statusNot: activeBrowsePreset?.statusNot || null,
                         formatIn: requestOptions.formatIn,
                         itemCount: visibleCount,
                         formatCounts,
@@ -1581,7 +1619,7 @@ function AddAnimeScreen({
         };
     }, [
         selectedBrowseYear,
-        normalizedBrowsePreset,
+        activeBrowsePreset,
         browseReloadToken,
         browseDataKey
     ]);
@@ -1602,6 +1640,17 @@ function AddAnimeScreen({
         }
     }, [entryTab, browseLoading, browsePageInfo.currentPage, browsePage]);
 
+    useEffect(() => {
+        if (entryTab !== 'browse') return;
+        if (!pendingBrowseSelectionScrollRef.current) return;
+        if (browseLoading) return;
+
+        requestAnimationFrame(() => {
+            scrollToBrowseResultsTop((browseResults.length > 0 || browseError) ? 'smooth' : 'auto');
+            pendingBrowseSelectionScrollRef.current = false;
+        });
+    }, [entryTab, browseLoading, browseResults.length, browseError]);
+
     const getSeasonKeyByMonth = (month) => {
         if (month >= 1 && month <= 3) return 'winter';
         if (month >= 4 && month <= 6) return 'spring';
@@ -1621,22 +1670,18 @@ function AddAnimeScreen({
     };
 
     const browseSeasonOptions = React.useMemo(() => {
-        if (isBrowsePresetLocked && normalizedBrowsePreset?.seasonKey) {
-            return SEASON_FILTER_OPTIONS.filter((option) => option.key === normalizedBrowsePreset.seasonKey);
+        if (hasFixedBrowseSeason && activeBrowsePreset?.seasonKey) {
+            return SEASON_FILTER_OPTIONS.filter((option) => option.key === activeBrowsePreset.seasonKey);
         }
         const seasonSet = new Set(['winter', 'spring', 'summer', 'autumn']);
         browseResults.forEach((anime) => seasonSet.add(getSeasonKeyForAnime(anime)));
         browseSeasonFilters.forEach((seasonKey) => seasonSet.add(seasonKey));
         return SEASON_FILTER_OPTIONS.filter((option) => seasonSet.has(option.key));
-    }, [browseResults, browseSeasonFilters, isBrowsePresetLocked, normalizedBrowsePreset]);
+    }, [browseResults, browseSeasonFilters, hasFixedBrowseSeason, activeBrowsePreset]);
 
     useEffect(() => {
         setBrowseGenreFilters((prev) => prev.filter((genre) => browseGenreOptions.includes(genre)));
         setBrowseTagFilters((prev) => prev.filter((tag) => browseTagOptions.includes(tag)));
-        if (isBrowsePresetLocked && normalizedBrowsePreset?.seasonKey) {
-            setBrowseSeasonFilters([normalizedBrowsePreset.seasonKey]);
-            return;
-        }
         setBrowseSeasonFilters((prev) => prev.filter((seasonKey) => (
             browseSeasonOptions.some((season) => season.key === seasonKey)
         )));
@@ -1644,18 +1689,24 @@ function AddAnimeScreen({
         browseGenreOptions,
         browseTagOptions,
         browseSeasonOptions,
-        isBrowsePresetLocked,
-        normalizedBrowsePreset
+        hasFixedBrowseSeason,
+        activeBrowsePreset
     ]);
+
+    const effectiveBrowseSeasonFilters = React.useMemo(() => (
+        hasFixedBrowseSeason && activeBrowsePreset?.seasonKey
+            ? [activeBrowsePreset.seasonKey]
+            : browseSeasonFilters
+    ), [activeBrowsePreset, browseSeasonFilters, hasFixedBrowseSeason]);
 
     const browseVisibleResults = React.useMemo(() => (
         filterAnimeCollection(browseResults, {
             selectedGenres: browseGenreFilters,
             selectedTags: browseTagFilters,
-            selectedSeasons: browseSeasonFilters,
+            selectedSeasons: effectiveBrowseSeasonFilters,
             matchMode: browseMatchMode
         })
-    ), [browseResults, browseGenreFilters, browseTagFilters, browseSeasonFilters, browseMatchMode]);
+    ), [browseResults, browseGenreFilters, browseTagFilters, effectiveBrowseSeasonFilters, browseMatchMode]);
 
     const browsePagedResults = React.useMemo(() => {
         const current = Math.max(1, Number(browsePage) || 1);
@@ -1693,7 +1744,7 @@ function AddAnimeScreen({
     const handleBrowseYearSubmit = () => {
         const resolvedYear = isBrowsePresetLocked
             ? normalizedBrowsePreset?.year
-            : browseDraftYear;
+            : (browseDraftSpecialPreset?.year ?? browseDraftYear);
 
         if (!Number.isFinite(resolvedYear)) {
             setToast({ visible: true, message: '年代を選択してください。', type: 'warning' });
@@ -1703,8 +1754,10 @@ function AddAnimeScreen({
         const hasBrowseRefinements = browseGenreFilters.length > 0
             || browseTagFilters.length > 0
             || browseMatchMode !== 'and'
-            || (!isBrowsePresetLocked && browseSeasonFilters.length > 0);
+            || (!hasFixedBrowseSeason && browseSeasonFilters.length > 0);
+        const nextSelectionKey = browseDraftSpecialPreset?.key || String(resolvedYear);
         const shouldOnlyScroll = selectedBrowseYear === resolvedYear
+            && currentBrowseSelectionKey === nextSelectionKey
             && browseResults.length > 0
             && !browseError
             && !hasBrowseRefinements;
@@ -1717,14 +1770,16 @@ function AddAnimeScreen({
         }
 
         startBrowseUiTransition(140);
-        setBrowseYearDraft(String(resolvedYear));
+        pendingBrowseSelectionScrollRef.current = true;
+        setSelectedBrowseSpecialPresetKey(browseDraftSpecialPreset?.key || '');
+        setBrowseYearDraft(browseDraftSpecialPreset?.key || String(resolvedYear));
         setBrowsePage(1);
         setBrowseGenreFilters([]);
         setBrowseTagFilters([]);
         setBrowseMatchMode('and');
-        setBrowseSeasonFilters(getDefaultBrowseSeasonFilters());
+        setBrowseSeasonFilters([]);
 
-        if (selectedBrowseYear !== resolvedYear) {
+        if (selectedBrowseYear !== resolvedYear || currentBrowseSelectionKey !== nextSelectionKey) {
             setSelectedBrowseYear(resolvedYear);
             return;
         }
@@ -1735,8 +1790,8 @@ function AddAnimeScreen({
     };
 
     const handleApplyBrowseFilters = (nextFilters) => {
-        const resolvedYear = isBrowsePresetLocked
-            ? normalizedBrowsePreset?.year
+        const resolvedYear = hasFixedBrowseSeason
+            ? activeBrowsePreset?.year
             : selectedBrowseYear;
 
         if (!Number.isFinite(resolvedYear)) {
@@ -1748,8 +1803,8 @@ function AddAnimeScreen({
 
         const nextGenres = Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : [];
         const nextTags = Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : [];
-        const nextSeasons = isBrowsePresetLocked
-            ? (normalizedBrowsePreset?.seasonKey ? [normalizedBrowsePreset.seasonKey] : [])
+        const nextSeasons = hasFixedBrowseSeason
+            ? []
             : (Array.isArray(nextFilters?.selectedSeasons) ? nextFilters.selectedSeasons : []);
 
         setBrowseGenreFilters(nextGenres);
@@ -1767,10 +1822,6 @@ function AddAnimeScreen({
         setBrowseTagFilters([]);
         setBrowseMatchMode('and');
         setBrowsePage(1);
-        if (isBrowsePresetLocked) {
-            setBrowseSeasonFilters(getDefaultBrowseSeasonFilters());
-            return;
-        }
         setBrowseSeasonFilters([]);
     };
     const handleBrowseRetry = () => {
@@ -3233,12 +3284,12 @@ function AddAnimeScreen({
     const bulkAlreadyAddedLabel = bulkTarget === 'bookmark'
         ? '登録済み・重複（視聴済み / ブックマーク済み）'
         : '登録済み・重複';
-    const hasBrowseYearDraft = Number.isFinite(browseDraftYear);
+    const hasBrowseYearDraft = Boolean(browseDraftSpecialPreset) || Number.isFinite(browseDraftYear);
     const hasBrowseRefinements = browseGenreFilters.length > 0
         || browseTagFilters.length > 0
         || browseMatchMode !== 'and'
-        || (!isBrowsePresetLocked && browseSeasonFilters.length > 0);
-    const isCurrentBrowseYearSelected = hasBrowseYearDraft && browseDraftYear === selectedBrowseYear;
+        || (!hasFixedBrowseSeason && browseSeasonFilters.length > 0);
+    const isCurrentBrowseYearSelected = hasBrowseYearDraft && draftBrowseSelectionKey === currentBrowseSelectionKey;
     const disableBrowseYearSubmit = browseLoading
         || !hasBrowseYearDraft
         || (
@@ -3259,8 +3310,8 @@ function AddAnimeScreen({
         ? '先に年代を選択してください'
         : (browseLoading ? '一覧の読み込み完了後に利用できます' : '');
     const showBrowseFilterPanel = isBrowsePresetLocked || Boolean(selectedBrowseYear && !browseLoading && browseResults.length > 0);
-    const browseResultsTitle = normalizedBrowsePreset?.title || `${selectedBrowseYear}年の作品`;
-    const browsePaginationLabel = normalizedBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
+    const browseResultsTitle = activeBrowsePreset?.title || `${selectedBrowseYear}年の作品`;
+    const browsePaginationLabel = activeBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
     const isBrowseBusy = browseLoading || browsePageSwitching;
     const browseLoadingLabel = browseLoading ? '作品を取得中です…' : 'ページを切り替えています…';
     const browseErrorMessage = browseErrorType === 'rate_limit' && browseRetryCountdownSec > 0
@@ -3640,8 +3691,9 @@ function AddAnimeScreen({
                                             type="button"
                                             className="suggestions-bottom-close-button"
                                             onClick={handleCommitSuggestionSelection}
+                                            disabled={selectedSuggestionCount <= 0}
                                         >
-                                            {selectedSuggestionCount > 0 ? '選択リストに追加する' : '候補一覧を閉じる'}
+                                            選択リストに追加する
                                         </button>
                                     </div>
                                 </div>
@@ -4115,7 +4167,9 @@ function AddAnimeScreen({
                                         </p>
                                     </div>
                                     {selectedBrowseYear && (
-                                        <div className="browse-current-year">{selectedBrowseYear}年を表示中</div>
+                                        <div className="browse-current-year">
+                                            {activeBrowsePreset?.title || `${selectedBrowseYear}年`}を表示中
+                                        </div>
                                     )}
                                 </div>
                                 <div className="browse-year-controls">
@@ -4127,6 +4181,11 @@ function AddAnimeScreen({
                                         aria-label="年代を選択"
                                     >
                                         <option value="">年代を選択してください</option>
+                                        {browseSpecialPresetOptions.map((preset) => (
+                                            <option key={preset.key} value={preset.key}>
+                                                {preset.title}
+                                            </option>
+                                        ))}
                                         {browseYearOptions.map((year) => (
                                             <option key={year} value={year}>
                                                 {year}年
@@ -4158,20 +4217,20 @@ function AddAnimeScreen({
                                     </div>
                                 </div>
                                 <AnimeFilterDialog
-                                    contextId={selectedBrowseYear ? `browse-${selectedBrowseYear}` : 'browse'}
+                                    contextId={selectedBrowseYear ? `browse-${selectedBrowseSpecialPresetKey || selectedBrowseYear}` : 'browse'}
                                     title="絞り込み条件"
                                     emptySummaryText={selectedBrowseYear
                                         ? 'ジャンル・タグ・放送時期でさらに絞り込めます。'
                                         : '先に年代を選択してください。'}
                                     helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送時期は追加条件として扱います。"
                                     staticNotice={isBrowsePresetLocked
-                                        ? 'このページでは放送年と放送時期が固定されています。'
+                                        ? 'この一覧では放送年と放送時期が固定されています。'
                                         : (selectedBrowseYear ? `${selectedBrowseYear}年の一覧に条件を追加します。` : '')}
                                     applyLabel="条件を適用"
                                     appliedGenres={browseGenreFilters}
                                     appliedTags={browseTagFilters}
                                     appliedYear={selectedBrowseYear || ''}
-                                    appliedSeasons={browseSeasonFilters}
+                                    appliedSeasons={effectiveBrowseSeasonFilters}
                                     appliedMatchMode={browseMatchMode}
                                     availableGenres={browseGenreOptions}
                                     availableTags={browseTagOptions}
@@ -4179,7 +4238,7 @@ function AddAnimeScreen({
                                     showYear={false}
                                     showSeasons
                                     showMinRating={false}
-                                    disableSeasonSelection={browseLoading || isBrowsePresetLocked}
+                                    disableSeasonSelection={browseLoading || hasFixedBrowseSeason}
                                     emptyGenresText={selectedBrowseYear
                                         ? '表示中の作品からジャンルを読み込み中です。'
                                         : '年代を選ぶとジャンル候補が表示されます。'}
@@ -4190,7 +4249,7 @@ function AddAnimeScreen({
                                         ? '表示中の作品から放送時期を読み込み中です。'
                                         : '年代を選ぶと放送時期候補が表示されます。'}
                                     includeYearChip={false}
-                                    includeSeasonChip={!isBrowsePresetLocked}
+                                    includeSeasonChip={!hasFixedBrowseSeason}
                                     triggerDisabled={browseFilterTriggerDisabled}
                                     triggerTitle={browseFilterTriggerTitle}
                                     onApply={handleApplyBrowseFilters}

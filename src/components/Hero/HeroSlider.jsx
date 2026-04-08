@@ -211,6 +211,7 @@ function HeroSlider({
 
     const handleRestartCurrentSlide = () => {
         if (totalSlides === 0) return;
+        resetMobilePreviewAudioForNextSlide();
         if (progressFillRef.current) {
             progressFillRef.current.style.transform = 'scaleX(0)';
         }

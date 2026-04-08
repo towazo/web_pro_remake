@@ -69,6 +69,7 @@ import {
 } from './utils/animeList';
 import { warmAniListTagTranslations } from './services/tagCatalogService';
 import useTagTranslationVersion from './hooks/useTagTranslationVersion';
+import usePageScrollIdle from './hooks/usePageScrollIdle';
 import {
   collectAnimeFilterOptions,
   normalizeAnimeTags,
@@ -311,6 +312,7 @@ function App() {
   const trailerOpenRequestIdRef = useRef(0);
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
+  const isPageScrollIdle = usePageScrollIdle();
   const hasCurrentSeasonFeaturedSlides = currentSeasonFeaturedAnimeList.length > 0;
   const effectiveFeaturedSliderSource = homeFeaturedSliderSource;
   const featuredSourceAnimeList = useMemo(
@@ -1233,6 +1235,13 @@ function App() {
       }
     });
 
+    const shouldDeferDetailEnrichment = !isPageScrollIdle
+      && (view === 'mylist' || view === 'bookmarks');
+    if (shouldDeferDetailEnrichment) {
+      scheduleDetailEnrichmentRetry();
+      return undefined;
+    }
+
     const now = Date.now();
     const pendingIds = prioritizedDetailAnimeIds.filter((id) => {
       const anime = animeById.get(id);
@@ -1352,7 +1361,21 @@ function App() {
 
     run();
     return undefined;
-  }, [animeList, bookmarkList, detailEnrichmentRetryTick, prioritizedDetailAnimeIds, scheduleDetailEnrichmentRetry]);
+  }, [
+    animeList,
+    bookmarkList,
+    detailEnrichmentRetryTick,
+    isPageScrollIdle,
+    prioritizedDetailAnimeIds,
+    scheduleDetailEnrichmentRetry,
+    view,
+  ]);
+
+  useEffect(() => {
+    if (isPageScrollIdle) return;
+    if (view !== 'mylist' && view !== 'bookmarks') return;
+    detailEnrichmentAbortControllerRef.current?.abort?.();
+  }, [isPageScrollIdle, view]);
 
   const isAllVisibleSelected = visibleAnimeIds.length > 0
     && visibleAnimeIds.every((id) => selectedAnimeIdSet.has(id));

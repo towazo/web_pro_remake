@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import usePageScrollIdle from './usePageScrollIdle';
 
 const DEFAULT_ROOT_MARGIN = '260px 0px 360px 0px';
 const DEFAULT_PRIORITY = 160;
@@ -25,16 +26,79 @@ const buildProbePriority = (entry) => {
   return DEFAULT_PRIORITY + centerBonus + visibilityBonus;
 };
 
+const isNearViewportEntry = (entry) => {
+  const viewportHeight = getViewportHeight();
+  const rect = entry?.boundingClientRect;
+  if (!rect) return false;
+
+  return Boolean(entry?.isIntersecting)
+    || (
+      viewportHeight > 0
+      && rect.top <= viewportHeight + 320
+      && rect.bottom >= -220
+    );
+};
+
 function useViewportTrailerPriority(targetRef, options = {}) {
   const enabled = options.enabled !== false;
   const targetNode = targetRef?.current ?? null;
+  const pauseWhileScrolling = options.pauseWhileScrolling !== false;
+  const isPageScrollIdle = usePageScrollIdle();
+  const latestEntryRef = useRef(null);
+  const scrollIdleRef = useRef(isPageScrollIdle);
   const [state, setState] = useState(() => ({
     shouldAutoProbe: typeof window === 'undefined' ? enabled : false,
     probePriority: enabled ? DEFAULT_PRIORITY : 0,
   }));
 
   useEffect(() => {
+    scrollIdleRef.current = isPageScrollIdle;
+
+    if (!enabled) return;
+    const entry = latestEntryRef.current;
+    if (!entry) return;
+
+    const shouldAutoProbe = isNearViewportEntry(entry)
+      && (!pauseWhileScrolling || isPageScrollIdle);
+    const nextState = shouldAutoProbe
+      ? {
+        shouldAutoProbe: true,
+        probePriority: buildProbePriority(entry),
+      }
+      : {
+        shouldAutoProbe: false,
+        probePriority: 0,
+      };
+
+    setState((prev) => (
+      prev.shouldAutoProbe === nextState.shouldAutoProbe
+        && prev.probePriority === nextState.probePriority
+        ? prev
+        : nextState
+    ));
+  }, [enabled, isPageScrollIdle, pauseWhileScrolling]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    if (typeof window === 'undefined') return undefined;
+    if (typeof window.IntersectionObserver === 'function') return undefined;
+
+    const shouldAutoProbe = !pauseWhileScrolling || isPageScrollIdle;
+    setState((prev) => (
+      prev.shouldAutoProbe === shouldAutoProbe
+        && prev.probePriority === (shouldAutoProbe ? DEFAULT_PRIORITY : 0)
+        ? prev
+        : {
+          shouldAutoProbe,
+          probePriority: shouldAutoProbe ? DEFAULT_PRIORITY : 0,
+        }
+    ));
+    return undefined;
+  }, [enabled, isPageScrollIdle, pauseWhileScrolling]);
+
+  useEffect(() => {
     if (!enabled) {
+      latestEntryRef.current = null;
       setState((prev) => (
         prev.shouldAutoProbe === false && prev.probePriority === 0
           ? prev
@@ -44,6 +108,7 @@ function useViewportTrailerPriority(targetRef, options = {}) {
     }
 
     if (typeof window === 'undefined') {
+      latestEntryRef.current = null;
       setState((prev) => (
         prev.shouldAutoProbe === true && prev.probePriority === DEFAULT_PRIORITY
           ? prev
@@ -52,14 +117,13 @@ function useViewportTrailerPriority(targetRef, options = {}) {
       return undefined;
     }
 
-    if (!targetNode) return undefined;
+    if (!targetNode) {
+      latestEntryRef.current = null;
+      return undefined;
+    }
 
     if (typeof window.IntersectionObserver !== 'function') {
-      setState((prev) => (
-        prev.shouldAutoProbe === true && prev.probePriority === DEFAULT_PRIORITY
-          ? prev
-          : { shouldAutoProbe: true, probePriority: DEFAULT_PRIORITY }
-      ));
+      latestEntryRef.current = null;
       return undefined;
     }
 
@@ -70,17 +134,10 @@ function useViewportTrailerPriority(targetRef, options = {}) {
     const observer = new window.IntersectionObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-
-      const viewportHeight = getViewportHeight();
-      const rect = entry.boundingClientRect;
-      const isNearViewport = entry.isIntersecting
-        || (
-          viewportHeight > 0
-          && rect.top <= viewportHeight + 320
-          && rect.bottom >= -220
-        );
-
-      const nextState = isNearViewport
+      latestEntryRef.current = entry;
+      const shouldAutoProbe = isNearViewportEntry(entry)
+        && (!pauseWhileScrolling || scrollIdleRef.current);
+      const nextState = shouldAutoProbe
         ? {
           shouldAutoProbe: true,
           probePriority: buildProbePriority(entry),
@@ -105,7 +162,7 @@ function useViewportTrailerPriority(targetRef, options = {}) {
     return () => {
       observer.disconnect();
     };
-  }, [enabled, options.rootMargin, targetNode]);
+  }, [enabled, options.rootMargin, pauseWhileScrolling, targetNode]);
 
   return state;
 }
