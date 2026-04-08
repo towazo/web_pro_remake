@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Hero from './Hero';
 
 const MAX_DOT_INDICATORS = 8;
-const SLIDE_ADVANCE_FALLBACK_MS = 8200;
 const INITIAL_BUFFER_SIZE = 10;
 const BUFFER_REPLENISH_THRESHOLD = 5;
 
@@ -36,7 +35,6 @@ function RefreshIcon({ spinning = false }) {
 function HeroSlider({
     slides,
     onRefresh,
-    onPlayTrailer,
     onCycleComplete,
     showRefreshButton = false,
     isRefreshing = false,
@@ -59,9 +57,7 @@ function HeroSlider({
         setCurrentIndex(0);
     }, [slideIdentityKey]);
 
-    if (totalSlides === 0) return null;
-
-    const nextSlide = () => {
+    const nextSlide = useCallback(() => {
         if (totalSlides <= 1) return;
         const nextIndex = currentIndex + 1;
         if (nextIndex < totalSlides) {
@@ -75,9 +71,9 @@ function HeroSlider({
         }
 
         setCurrentIndex(0);
-    };
+    }, [currentIndex, onCycleComplete, slides, totalSlides]);
 
-    const prevSlide = () => {
+    const prevSlide = useCallback(() => {
         if (totalSlides <= 1) return;
         if (currentIndex === 0) {
             setCurrentIndex(totalSlides - 1);
@@ -85,7 +81,7 @@ function HeroSlider({
         }
 
         setCurrentIndex((prev) => prev - 1);
-    };
+    }, [currentIndex, totalSlides]);
 
     // the required distance between touchStart and touchEnd to be detected as a swipe
     const minSwipeDistance = 50;
@@ -126,6 +122,8 @@ function HeroSlider({
         setHasUnlockedPreviewAudio(true);
         setPreviewMutedChangeToken((prev) => prev + 1);
     };
+
+    if (totalSlides === 0) return null;
 
     const shouldShowDots = totalSlides <= MAX_DOT_INDICATORS;
     const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
@@ -169,7 +167,6 @@ function HeroSlider({
                         anime={anime}
                         isActive={actualIndex === currentIndex}
                         shouldPreloadTrailer={slideDistance === 1}
-                        noTrailerAdvanceDelayMs={SLIDE_ADVANCE_FALLBACK_MS}
                         previewMuted={isPreviewMuted}
                         allowPersistentPreviewAudio={hasUnlockedPreviewAudio}
                         previewMutedChangeToken={previewMutedChangeToken}

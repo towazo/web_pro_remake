@@ -29,7 +29,6 @@ function Hero({
     anime,
     isActive,
     shouldPreloadTrailer = false,
-    noTrailerAdvanceDelayMs = 8000,
     previewMuted = true,
     allowPersistentPreviewAudio = false,
     previewMutedChangeToken = 0,
@@ -40,6 +39,7 @@ function Hero({
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
     const [actualPreviewMuted, setActualPreviewMuted] = useState(true);
+    const [hasTrailerPlaybackStalled, setHasTrailerPlaybackStalled] = useState(false);
     const isTutorial = Boolean(anime?.isTutorial);
     const {
         trailer,
@@ -100,8 +100,6 @@ function Hero({
 
     const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
 
-    if (!anime) return null;
-
     // Use a different structure if it's a tutorial slide
     if (isTutorial) {
         const tutorialLines = splitTutorialDescriptionLines(anime.description);
@@ -144,7 +142,6 @@ function Hero({
     const posterImageSrc = coverExtraLarge || coverLarge || '';
     const mediaImageSrc = hasBannerImage ? anime.bannerImage : posterImageSrc;
     const rating = normalizeAnimeRating(anime?.rating);
-    const shouldPrepareTrailerPlayer = !isTutorial && (isActive || shouldPreloadTrailer);
     const heroImageSrcSet = !hasBannerImage
         ? [coverLarge ? `${coverLarge} 1x` : '', coverExtraLarge ? `${coverExtraLarge} 2x` : '']
             .filter(Boolean)
@@ -155,17 +152,19 @@ function Hero({
         : hasBannerImage
             ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
             : "(max-width: 768px) 42vw, 220px";
+    const shouldPrepareTrailerPlayer = !isTutorial && isActive;
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && shouldPrepareTrailerPlayer;
     const shouldEagerLoadHeroAssets = isActive || shouldPreloadTrailer;
-    const effectivePreviewMuted = isActive ? previewMuted : true;
 
     useEffect(() => {
         if (!isActive || !shouldRenderTrailerPreview) {
             setActualPreviewMuted(true);
+            setHasTrailerPlaybackStalled(false);
             return;
         }
 
         setActualPreviewMuted(true);
+        setHasTrailerPlaybackStalled(false);
     }, [anime?.id, isActive, shouldRenderTrailerPreview]);
 
     useEffect(() => {
@@ -179,18 +178,18 @@ function Hero({
             return undefined;
         }
 
-        if (shouldRenderTrailerPreview) {
+        if (shouldRenderTrailerPreview && !hasTrailerPlaybackStalled) {
             return undefined;
         }
 
         const timeoutId = window.setTimeout(() => {
             onRequestAdvance();
-        }, Math.max(1000, Number(noTrailerAdvanceDelayMs) || 8000));
+        }, shouldRenderTrailerPreview && hasTrailerPlaybackStalled ? 2400 : 8200);
 
         return () => {
             window.clearTimeout(timeoutId);
         };
-    }, [isActive, isTutorial, noTrailerAdvanceDelayMs, onRequestAdvance, shouldRenderTrailerPreview, anime?.id]);
+    }, [hasTrailerPlaybackStalled, isActive, isTutorial, onRequestAdvance, shouldRenderTrailerPreview, anime?.id]);
 
     const handleAudioTogglePress = () => {
         if (actualPreviewMuted && !previewMuted) {
@@ -200,6 +199,8 @@ function Hero({
 
         onTogglePreviewMuted?.();
     };
+
+    if (!anime) return null;
 
     return (
         <section className={`hero ${isActive ? 'active' : ''}${shouldPreloadTrailer ? ' is-preloading' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
@@ -280,22 +281,22 @@ function Hero({
                                         autoplay={isActive}
                                         loop={false}
                                         controls={false}
-                                        muted={effectivePreviewMuted}
+                                        muted={isActive ? previewMuted : true}
                                         allowPersistentAutoplayUnmute={allowPersistentPreviewAudio}
                                         muteChangeToken={previewMutedChangeToken}
                                         deferVisibilityUntilPlaying
                                         onEnded={isActive ? onRequestAdvance : undefined}
+                                        onPlaybackStart={isActive ? () => setHasTrailerPlaybackStalled(false) : undefined}
+                                        onPlaybackStalled={isActive ? () => setHasTrailerPlaybackStalled(true) : undefined}
                                         onMuteStateChange={isActive ? setActualPreviewMuted : undefined}
                                     />
-                                    {isActive && (
-                                        <AudioToggleButton
-                                            muted={actualPreviewMuted}
-                                            className="hero-media-audio-toggle"
-                                            onClick={handleAudioTogglePress}
-                                            labelOn="トレーラーの音声をオンにする"
-                                            labelOff="トレーラーの音声をオフにする"
-                                        />
-                                    )}
+                                    <AudioToggleButton
+                                        muted={actualPreviewMuted}
+                                        className="hero-media-audio-toggle"
+                                        onClick={handleAudioTogglePress}
+                                        labelOn="トレーラーの音声をオンにする"
+                                        labelOff="トレーラーの音声をオフにする"
+                                    />
                                 </>
                             )}
                         </div>
