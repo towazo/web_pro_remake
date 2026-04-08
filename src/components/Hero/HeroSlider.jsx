@@ -44,6 +44,7 @@ function HeroSlider({
     const totalSlides = Array.isArray(slides) ? slides.length : 0;
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPreviewMuted, setIsPreviewMuted] = useState(true);
+    const [hasUnlockedPreviewAudio, setHasUnlockedPreviewAudio] = useState(false);
     const [previewMutedChangeToken, setPreviewMutedChangeToken] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
@@ -114,11 +115,15 @@ function HeroSlider({
     };
 
     const handleTogglePreviewMuted = () => {
+        if (isPreviewMuted) {
+            setHasUnlockedPreviewAudio(true);
+        }
         setIsPreviewMuted((prev) => !prev);
         setPreviewMutedChangeToken((prev) => prev + 1);
     };
 
     const handleRetryPreviewUnmute = () => {
+        setHasUnlockedPreviewAudio(true);
         setPreviewMutedChangeToken((prev) => prev + 1);
     };
 
@@ -166,6 +171,7 @@ function HeroSlider({
                         shouldPreloadTrailer={slideDistance === 1}
                         noTrailerAdvanceDelayMs={SLIDE_ADVANCE_FALLBACK_MS}
                         previewMuted={isPreviewMuted}
+                        allowPersistentPreviewAudio={hasUnlockedPreviewAudio}
                         previewMutedChangeToken={previewMutedChangeToken}
                         onTogglePreviewMuted={handleTogglePreviewMuted}
                         onRetryPreviewUnmute={handleRetryPreviewUnmute}

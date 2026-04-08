@@ -16,6 +16,7 @@ function YouTubeTrailerPlayer({
   controls = true,
   loop = false,
   muted = true,
+  allowPersistentAutoplayUnmute = false,
   muteChangeToken = 0,
   deferVisibilityUntilPlaying = false,
   className = '',
@@ -30,6 +31,7 @@ function YouTubeTrailerPlayer({
   const unmuteRetryTimeoutIdsRef = useRef([]);
   const autoplayRef = useRef(autoplay);
   const mutedRef = useRef(muted);
+  const allowPersistentAutoplayUnmuteRef = useRef(allowPersistentAutoplayUnmute);
   const onEndedRef = useRef(onEnded);
   const onMuteStateChangeRef = useRef(onMuteStateChange);
   const playbackStateRef = useRef(null);
@@ -45,6 +47,10 @@ function YouTubeTrailerPlayer({
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  useEffect(() => {
+    allowPersistentAutoplayUnmuteRef.current = allowPersistentAutoplayUnmute;
+  }, [allowPersistentAutoplayUnmute]);
 
   useEffect(() => {
     onEndedRef.current = onEnded;
@@ -94,7 +100,15 @@ function YouTubeTrailerPlayer({
       return;
     }
 
-    const allowAutoplayUnmute = options.userInitiated === true || !isLikelyMobileAutoplayEnvironment();
+    const isPlaybackActive = (
+      playbackStateRef.current === YT_PLAYER_STATE_PLAYING
+      || playbackStateRef.current === YT_PLAYER_STATE_BUFFERING
+    );
+    const allowAutoplayUnmute = (
+      options.userInitiated === true
+      || !isLikelyMobileAutoplayEnvironment()
+      || (allowPersistentAutoplayUnmuteRef.current && isPlaybackActive)
+    );
     if (!allowAutoplayUnmute) {
       clearUnmuteRetryTimeouts();
       emitMuteState(player);
