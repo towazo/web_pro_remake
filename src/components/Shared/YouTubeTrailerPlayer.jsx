@@ -261,7 +261,7 @@ function YouTubeTrailerPlayer({
     const isPlaybackActive = hasActivePlayback();
     const allowAutoplayUnmute = (
       options.userInitiated === true
-      || (allowPersistentAutoplayUnmuteRef.current && isPlaybackActive)
+      || (!isMobileAutoplayEnvironment && allowPersistentAutoplayUnmuteRef.current && isPlaybackActive)
     );
     if (!allowAutoplayUnmute) {
       clearUnmuteRetryTimeouts();
@@ -391,7 +391,6 @@ function YouTubeTrailerPlayer({
       && !mutedRef.current
       && isLikelyMobileAutoplayEnvironment()
       && options.userInitiated !== true
-      && !isPlaybackActive
     );
     const shouldKeepMutedForAutoplay = autoplayRef.current && !mutedRef.current && !isPlaybackActive;
 
