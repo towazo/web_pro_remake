@@ -44,6 +44,7 @@ function HeroSlider({
     const totalSlides = Array.isArray(slides) ? slides.length : 0;
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPreviewMuted, setIsPreviewMuted] = useState(true);
+    const [previewMutedChangeToken, setPreviewMutedChangeToken] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
     const slideIdentityKey = Array.isArray(slides)
@@ -112,6 +113,11 @@ function HeroSlider({
         onRefresh();
     };
 
+    const handleTogglePreviewMuted = () => {
+        setIsPreviewMuted((prev) => !prev);
+        setPreviewMutedChangeToken((prev) => prev + 1);
+    };
+
     const shouldShowDots = totalSlides <= MAX_DOT_INDICATORS;
     const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
     const bufferEndIndex = Math.min(totalSlides, bufferStartIndex + INITIAL_BUFFER_SIZE);
@@ -156,7 +162,8 @@ function HeroSlider({
                         shouldPreloadTrailer={slideDistance === 1}
                         noTrailerAdvanceDelayMs={SLIDE_ADVANCE_FALLBACK_MS}
                         previewMuted={isPreviewMuted}
-                        onTogglePreviewMuted={() => setIsPreviewMuted((prev) => !prev)}
+                        previewMutedChangeToken={previewMutedChangeToken}
+                        onTogglePreviewMuted={handleTogglePreviewMuted}
                         onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
                     />
                 );

@@ -31,6 +31,7 @@ function Hero({
     shouldPreloadTrailer = false,
     noTrailerAdvanceDelayMs = 8000,
     previewMuted = true,
+    previewMutedChangeToken = 0,
     onTogglePreviewMuted,
     onRequestAdvance,
 }) {
@@ -253,6 +254,7 @@ function Hero({
                                         loop={false}
                                         controls={false}
                                         muted={effectivePreviewMuted}
+                                        muteChangeToken={previewMutedChangeToken}
                                         deferVisibilityUntilPlaying
                                         onEnded={isActive ? onRequestAdvance : undefined}
                                     />

@@ -16,6 +16,7 @@ function YouTubeTrailerPlayer({
   controls = true,
   loop = false,
   muted = true,
+  muteChangeToken = 0,
   deferVisibilityUntilPlaying = false,
   className = '',
   onError,
@@ -25,10 +26,12 @@ function YouTubeTrailerPlayer({
   const playerRef = useRef(null);
   const readyRef = useRef(false);
   const playbackRetryTimeoutIdsRef = useRef([]);
+  const unmuteRetryTimeoutIdsRef = useRef([]);
   const autoplayRef = useRef(autoplay);
   const mutedRef = useRef(muted);
   const onEndedRef = useRef(onEnded);
   const playbackStateRef = useRef(null);
+  const lastHandledMuteChangeTokenRef = useRef(muteChangeToken);
   const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
   const videoId = normalizedTrailer?.id || '';
@@ -52,6 +55,55 @@ function YouTubeTrailerPlayer({
   const clearPlaybackRetryTimeouts = () => {
     playbackRetryTimeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     playbackRetryTimeoutIdsRef.current = [];
+  };
+
+  const clearUnmuteRetryTimeouts = () => {
+    unmuteRetryTimeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    unmuteRetryTimeoutIdsRef.current = [];
+  };
+
+  const isLikelyMobileAutoplayEnvironment = () => (
+    typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && (
+      window.matchMedia('(pointer: coarse)').matches
+      || window.matchMedia('(max-width: 768px)').matches
+    )
+  );
+
+  const requestDeferredUnmute = (player, options = {}) => {
+    if (!player || mutedRef.current) {
+      clearUnmuteRetryTimeouts();
+      return;
+    }
+
+    const allowAutoplayUnmute = options.userInitiated === true || !isLikelyMobileAutoplayEnvironment();
+    if (!allowAutoplayUnmute) {
+      clearUnmuteRetryTimeouts();
+      return;
+    }
+
+    const attemptUnmute = () => {
+      try {
+        player.unMute();
+      } catch (_) {
+        // Ignore unmute failures.
+      }
+      try {
+        player.playVideo();
+      } catch (_) {
+        // Ignore playback resume failures.
+      }
+    };
+
+    attemptUnmute();
+    clearUnmuteRetryTimeouts();
+    unmuteRetryTimeoutIdsRef.current = [
+      window.setTimeout(attemptUnmute, 120),
+      window.setTimeout(attemptUnmute, 320),
+      window.setTimeout(attemptUnmute, 720),
+      window.setTimeout(attemptUnmute, 1400),
+    ];
   };
 
   const syncIframeAttributes = (player) => {
@@ -94,11 +146,20 @@ function YouTubeTrailerPlayer({
       playbackStateRef.current === YT_PLAYER_STATE_PLAYING
       || playbackStateRef.current === YT_PLAYER_STATE_BUFFERING
     );
-    const shouldKeepMutedForAutoplay = autoplayRef.current && !mutedRef.current && !isPlaybackActive && !options.forceUnmute;
+    const shouldForceMutedForMobileAutoplay = (
+      autoplayRef.current
+      && !mutedRef.current
+      && isLikelyMobileAutoplayEnvironment()
+      && options.userInitiated !== true
+    );
+    const shouldKeepMutedForAutoplay = autoplayRef.current && !mutedRef.current && !isPlaybackActive;
 
     try {
-      if (mutedRef.current || shouldKeepMutedForAutoplay) {
+      if (mutedRef.current || shouldKeepMutedForAutoplay || shouldForceMutedForMobileAutoplay) {
         player.mute();
+        if (mutedRef.current) {
+          clearUnmuteRetryTimeouts();
+        }
       } else {
         player.unMute();
       }
@@ -144,6 +205,7 @@ function YouTubeTrailerPlayer({
               playbackStateRef.current = null;
               syncIframeAttributes(event.target);
               syncDesiredMuteState(event.target);
+              requestDeferredUnmute(event.target);
 
               requestPlaybackResume(event.target);
 
@@ -153,7 +215,8 @@ function YouTubeTrailerPlayer({
               playbackStateRef.current = Number(event?.data);
               if (event?.data === YT.PlayerState.PLAYING) {
                 setIsPlaybackVisible(true);
-                syncDesiredMuteState(event.target, { forceUnmute: true });
+                syncDesiredMuteState(event.target);
+                requestDeferredUnmute(event.target);
               }
 
               if (event?.data === YT.PlayerState.ENDED && typeof onEndedRef.current === 'function') {
@@ -199,6 +262,7 @@ function YouTubeTrailerPlayer({
       readyRef.current = false;
       playbackStateRef.current = null;
       clearPlaybackRetryTimeouts();
+      clearUnmuteRetryTimeouts();
       if (localPlayer) {
         try {
           localPlayer.destroy();
@@ -220,6 +284,7 @@ function YouTubeTrailerPlayer({
     if (autoplay) {
       playbackStateRef.current = null;
       syncDesiredMuteState(player);
+      requestDeferredUnmute(player);
       try {
         player.seekTo(0, true);
       } catch (_) {
@@ -230,6 +295,7 @@ function YouTubeTrailerPlayer({
     }
 
     clearPlaybackRetryTimeouts();
+    clearUnmuteRetryTimeouts();
     try {
       player.pauseVideo();
     } catch (_) {
@@ -246,11 +312,19 @@ function YouTubeTrailerPlayer({
     const player = playerRef.current;
     if (!player || !readyRef.current) return;
 
-    syncDesiredMuteState(player);
+    const userInitiatedMuteChange = muteChangeToken !== lastHandledMuteChangeTokenRef.current;
+    lastHandledMuteChangeTokenRef.current = muteChangeToken;
+
+    syncDesiredMuteState(player, {
+      userInitiated: userInitiatedMuteChange,
+    });
+    requestDeferredUnmute(player, {
+      userInitiated: userInitiatedMuteChange,
+    });
     if (autoplay) {
       requestPlaybackResume(player);
     }
-  }, [autoplay, muted, videoId]);
+  }, [autoplay, muted, videoId, muteChangeToken]);
 
   return (
     <div
