@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react';
+﻿import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
 // Services
 import { buildFeaturedSliderState, fetchAnimeDetailsByIds } from './services/animeService';
@@ -58,7 +58,6 @@ import { warmAniListTagTranslations } from './services/tagCatalogService';
 import useTagTranslationVersion from './hooks/useTagTranslationVersion';
 import {
   collectAnimeFilterOptions,
-  hasAnimeTagMetadata,
   normalizeAnimeTags,
 } from './utils/animeFilters';
 import {
@@ -103,6 +102,23 @@ const ONBOARDING_STEPS = [
     description: '今季の作品をまとめて確認するか、タイトル検索で追加を始められます。',
   },
 ];
+
+const DETAIL_ENRICHMENT_BATCH_SIZE = 12;
+const DETAIL_ENRICHMENT_RETRY_BASE_MS = 4000;
+const DETAIL_ENRICHMENT_RETRY_MAX_MS = 60000;
+
+const hasLoadedAnimeTagDetails = (anime) => Array.isArray(anime?.tags);
+const hasLoadedAnimeDetailPayload = (anime) => (
+  Boolean(anime)
+  && hasLoadedAnimeTagDetails(anime)
+  && anime?.trailerChecked === true
+);
+
+const getDetailEnrichmentRetryDelayMs = (attemptCount) => {
+  const safeAttemptCount = Math.max(1, Number(attemptCount) || 1);
+  const retryDelay = DETAIL_ENRICHMENT_RETRY_BASE_MS * (2 ** Math.max(0, safeAttemptCount - 1));
+  return Math.min(DETAIL_ENRICHMENT_RETRY_MAX_MS, retryDelay);
+};
 
 /**
  * Main App Component
@@ -205,10 +221,16 @@ function App() {
   const [isRefreshingFeatured, setIsRefreshingFeatured] = useState(false);
   const [activeTrailerAnime, setActiveTrailerAnime] = useState(null);
   const [isServerLibraryReady, setIsServerLibraryReady] = useState(false);
+  const [detailEnrichmentRetryTick, setDetailEnrichmentRetryTick] = useState(0);
+  const [myListViewportPriorityMap, setMyListViewportPriorityMap] = useState({});
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
-  const detailEnrichmentAttemptedIdsRef = useRef(new Set());
+  const detailEnrichmentStateRef = useRef(new Map());
+  const detailEnrichmentRequestInFlightRef = useRef(false);
+  const detailEnrichmentAbortControllerRef = useRef(null);
+  const detailEnrichmentRetryTimerRef = useRef(null);
+  const detailEnrichmentMountedRef = useRef(true);
   const trailerOpenRequestIdRef = useRef(0);
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
@@ -216,6 +238,57 @@ function App() {
     () => animeList.map((anime) => String(anime?.id ?? '')).join('|'),
     [animeList]
   );
+
+  const scheduleDetailEnrichmentRetry = useCallback(() => {
+    if (!detailEnrichmentMountedRef.current) return;
+
+    if (detailEnrichmentRetryTimerRef.current) {
+      clearTimeout(detailEnrichmentRetryTimerRef.current);
+      detailEnrichmentRetryTimerRef.current = null;
+    }
+
+    const now = Date.now();
+    let nextRetryAt = Infinity;
+    detailEnrichmentStateRef.current.forEach((entry) => {
+      if (!entry || entry.inFlight) return;
+
+      const retryAt = Number(entry.retryAt) || 0;
+      if (retryAt > now && retryAt < nextRetryAt) {
+        nextRetryAt = retryAt;
+      }
+    });
+
+    if (!Number.isFinite(nextRetryAt)) return;
+
+    detailEnrichmentRetryTimerRef.current = setTimeout(() => {
+      if (!detailEnrichmentMountedRef.current) return;
+      detailEnrichmentRetryTimerRef.current = null;
+      setDetailEnrichmentRetryTick((prev) => prev + 1);
+    }, Math.max(0, nextRetryAt - now));
+  }, []);
+
+  const handleMyListViewportPriorityChange = useCallback((animeId, priority) => {
+    const numericId = Number(animeId);
+    if (!Number.isFinite(numericId)) return;
+
+    const normalizedPriority = Math.max(0, Math.round(Number(priority) || 0));
+    setMyListViewportPriorityMap((prev) => {
+      const currentPriority = Number(prev[numericId] || 0);
+      if (currentPriority === normalizedPriority) return prev;
+
+      if (normalizedPriority <= 0) {
+        if (!Object.prototype.hasOwnProperty.call(prev, numericId)) return prev;
+        const next = { ...prev };
+        delete next[numericId];
+        return next;
+      }
+
+      return {
+        ...prev,
+        [numericId]: normalizedPriority,
+      };
+    });
+  }, []);
 
   const navigateTo = (nextView, options = {}) => {
     if (!APP_VIEW_SET.has(nextView)) return;
@@ -281,7 +354,14 @@ function App() {
         const hasLocalData = animeList.length > 0 || bookmarkList.length > 0;
 
         if (hasRemoteData) {
-          detailEnrichmentAttemptedIdsRef.current.clear();
+          detailEnrichmentAbortControllerRef.current?.abort();
+          detailEnrichmentAbortControllerRef.current = null;
+          detailEnrichmentRequestInFlightRef.current = false;
+          detailEnrichmentStateRef.current.clear();
+          if (detailEnrichmentRetryTimerRef.current) {
+            clearTimeout(detailEnrichmentRetryTimerRef.current);
+            detailEnrichmentRetryTimerRef.current = null;
+          }
           setAnimeList(remoteAnimeList);
           setBookmarkList(remoteBookmarkList);
         } else if (hasLocalData) {
@@ -355,6 +435,16 @@ function App() {
 
     const timeoutId = window.setTimeout(warmYouTubeApi, 900);
     return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => () => {
+    detailEnrichmentMountedRef.current = false;
+    detailEnrichmentAbortControllerRef.current?.abort();
+    detailEnrichmentAbortControllerRef.current = null;
+    if (detailEnrichmentRetryTimerRef.current) {
+      clearTimeout(detailEnrichmentRetryTimerRef.current);
+      detailEnrichmentRetryTimerRef.current = null;
+    }
   }, []);
 
   // 1. Storage Persistence
@@ -834,6 +924,17 @@ function App() {
   }, [animeList, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
   const selectedAnimeIdSet = useMemo(() => new Set(selectedAnimeIds), [selectedAnimeIds]);
   const visibleAnimeIds = useMemo(() => filteredList.map((anime) => anime.id), [filteredList]);
+  const visibleAnimeIdSet = useMemo(() => new Set(visibleAnimeIds), [visibleAnimeIds]);
+  const myListViewportAnimeIds = useMemo(() => (
+    Object.entries(myListViewportPriorityMap)
+      .map(([id, priority]) => ({
+        id: Number(id),
+        priority: Number(priority) || 0,
+      }))
+      .filter((entry) => Number.isFinite(entry.id) && entry.priority > 0 && visibleAnimeIdSet.has(entry.id))
+      .sort((left, right) => right.priority - left.priority)
+      .map((entry) => entry.id)
+  ), [myListViewportPriorityMap, visibleAnimeIdSet]);
   const prioritizedDetailAnimeIds = useMemo(() => {
     const orderedIds = [];
     const seenIds = new Set();
@@ -847,6 +948,7 @@ function App() {
     };
 
     if (view === 'mylist') {
+      pushIds(myListViewportAnimeIds);
       pushIds(visibleAnimeIds);
     }
     if (view === 'bookmarks') {
@@ -856,7 +958,7 @@ function App() {
     pushIds(animeList.map((anime) => anime?.id));
     pushIds(bookmarkList.map((anime) => anime?.id));
     return orderedIds;
-  }, [view, visibleAnimeIds, bookmarkVisibleAnimeIds, animeList, bookmarkList]);
+  }, [view, myListViewportAnimeIds, visibleAnimeIds, bookmarkVisibleAnimeIds, animeList, bookmarkList]);
 
   useEffect(() => {
     const animeById = new Map();
@@ -866,19 +968,47 @@ function App() {
       animeById.set(animeId, anime);
     });
 
-    const pendingIds = prioritizedDetailAnimeIds.filter((id) => {
-      if (detailEnrichmentAttemptedIdsRef.current.has(id)) return false;
+    let trackingChanged = false;
+    detailEnrichmentStateRef.current.forEach((entry, id) => {
       const anime = animeById.get(id);
-      if (!anime) return false;
-      return !hasAnimeTagMetadata(anime) || anime?.trailerChecked !== true;
+      if (!anime || hasLoadedAnimeDetailPayload(anime)) {
+        detailEnrichmentStateRef.current.delete(id);
+        trackingChanged = true;
+      }
     });
 
-    if (pendingIds.length === 0) return undefined;
+    const now = Date.now();
+    const pendingIds = prioritizedDetailAnimeIds.filter((id) => {
+      const anime = animeById.get(id);
+      if (!anime) return false;
+      if (hasLoadedAnimeDetailPayload(anime)) return false;
 
-    const batchIds = pendingIds.slice(0, 12);
-    batchIds.forEach((id) => detailEnrichmentAttemptedIdsRef.current.add(id));
+      const tracking = detailEnrichmentStateRef.current.get(id);
+      if (tracking?.inFlight) return false;
+      return (Number(tracking?.retryAt) || 0) <= now;
+    });
 
-    let cancelled = false;
+    if (pendingIds.length === 0) {
+      scheduleDetailEnrichmentRetry();
+      return undefined;
+    }
+
+    if (detailEnrichmentRequestInFlightRef.current) {
+      scheduleDetailEnrichmentRetry();
+      return undefined;
+    }
+
+    const batchIds = pendingIds.slice(0, DETAIL_ENRICHMENT_BATCH_SIZE);
+    batchIds.forEach((id) => {
+      const current = detailEnrichmentStateRef.current.get(id);
+      detailEnrichmentStateRef.current.set(id, {
+        attempts: Number(current?.attempts) || 0,
+        retryAt: 0,
+        inFlight: true,
+      });
+    });
+    detailEnrichmentRequestInFlightRef.current = true;
+    scheduleDetailEnrichmentRetry();
     const applyEnrichedDetails = (list, enrichedMap) => {
       let changed = false;
       const nextList = list.map((anime) => {
@@ -888,7 +1018,7 @@ function App() {
         const nextAnime = { ...anime };
         let hasChanges = false;
 
-        if (!hasAnimeTagMetadata(anime) && Array.isArray(enriched.tags)) {
+        if (!hasLoadedAnimeTagDetails(anime) && Array.isArray(enriched.tags)) {
           nextAnime.tags = normalizeAnimeTags(enriched.tags);
           hasChanges = true;
         }
@@ -908,30 +1038,63 @@ function App() {
     };
 
     const run = async () => {
-      const results = await fetchAnimeDetailsByIds(batchIds, {
-        timeoutMs: 12000,
-        maxAttempts: 3,
-        baseDelayMs: 400,
-        maxRetryDelayMs: 1200,
-      });
-      if (cancelled) return;
+      const abortController = new AbortController();
+      detailEnrichmentAbortControllerRef.current = abortController;
 
-      const enrichedMap = new Map(
-        results
-          .filter((anime) => anime && (Array.isArray(anime.tags) || Object.prototype.hasOwnProperty.call(anime, 'trailer')))
-          .map((anime) => [anime.id, anime])
-      );
-      if (enrichedMap.size === 0) return;
+      try {
+        const results = await fetchAnimeDetailsByIds(batchIds, {
+          timeoutMs: 12000,
+          maxAttempts: 3,
+          baseDelayMs: 400,
+          maxRetryDelayMs: 1200,
+          signal: abortController.signal,
+        });
+        if (!detailEnrichmentMountedRef.current || abortController.signal.aborted) return;
 
-      setAnimeList((prev) => applyEnrichedDetails(prev, enrichedMap));
-      setBookmarkList((prev) => applyEnrichedDetails(prev, enrichedMap));
+        const enrichedMap = new Map(
+          results
+            .filter((anime) => anime && Number.isFinite(Number(anime.id)))
+            .map((anime) => [anime.id, anime])
+        );
+        const completedAt = Date.now();
+
+        batchIds.forEach((id) => {
+          const tracking = detailEnrichmentStateRef.current.get(id);
+          if (enrichedMap.has(id)) {
+            if (detailEnrichmentStateRef.current.delete(id)) {
+              trackingChanged = true;
+            }
+            return;
+          }
+
+          const nextAttemptCount = (Number(tracking?.attempts) || 0) + 1;
+          detailEnrichmentStateRef.current.set(id, {
+            attempts: nextAttemptCount,
+            inFlight: false,
+            retryAt: completedAt + getDetailEnrichmentRetryDelayMs(nextAttemptCount),
+          });
+          trackingChanged = true;
+        });
+
+        if (enrichedMap.size > 0) {
+          setAnimeList((prev) => applyEnrichedDetails(prev, enrichedMap));
+          setBookmarkList((prev) => applyEnrichedDetails(prev, enrichedMap));
+        }
+      } finally {
+        if (detailEnrichmentAbortControllerRef.current === abortController) {
+          detailEnrichmentAbortControllerRef.current = null;
+        }
+        detailEnrichmentRequestInFlightRef.current = false;
+        if (detailEnrichmentMountedRef.current) {
+          scheduleDetailEnrichmentRetry();
+          setDetailEnrichmentRetryTick((prev) => prev + 1);
+        }
+      }
     };
 
     run();
-    return () => {
-      cancelled = true;
-    };
-  }, [animeList, bookmarkList, prioritizedDetailAnimeIds]);
+    return undefined;
+  }, [animeList, bookmarkList, detailEnrichmentRetryTick, prioritizedDetailAnimeIds, scheduleDetailEnrichmentRetry]);
 
   const isAllVisibleSelected = visibleAnimeIds.length > 0
     && visibleAnimeIds.every((id) => selectedAnimeIdSet.has(id));
@@ -1238,6 +1401,7 @@ function App() {
                   onUpdateRating={handleUpdateAnimeRating}
                   onUpdateWatchCount={handleUpdateAnimeWatchCount}
                   onPlayTrailer={handleOpenTrailer}
+                  onViewportPriorityChange={handleMyListViewportPriorityChange}
                 />
               ))}
             </div>

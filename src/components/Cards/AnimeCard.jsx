@@ -28,6 +28,7 @@ function AnimeCard({
   allowRatingEditInSelectionMode = false,
   allowWatchCountEditInSelectionMode = false,
   onPlayTrailer,
+  onViewportPriorityChange,
 }) {
   const cardRef = useRef(null);
   const longPressTimerRef = useRef(null);
@@ -38,15 +39,16 @@ function AnimeCard({
   const rating = normalizeRating(anime?.rating);
   const watchCount = normalizeAnimeWatchCount(anime?.watchCount, { minimum: 1, defaultValue: 1 });
   const supportsTrailerControl = !isSelectionMode && typeof onPlayTrailer === 'function';
+  const shouldTrackViewportPriority = typeof onViewportPriorityChange === 'function';
   const { shouldAutoProbe, probePriority } = useViewportTrailerPriority(cardRef, {
-    enabled: supportsTrailerControl,
+    enabled: supportsTrailerControl || shouldTrackViewportPriority,
   });
   const canEditRating = typeof onUpdateRating === 'function'
     && (!isSelectionMode || allowRatingEditInSelectionMode);
   const canEditWatchCount = typeof onUpdateWatchCount === 'function'
     && (!isSelectionMode || allowWatchCountEditInSelectionMode);
   const { hasTrailer, isTrailerPlayable, status } = useTrailerPlaybackStatus(anime, {
-    autoProbe: shouldAutoProbe,
+    autoProbe: supportsTrailerControl && shouldAutoProbe,
     timeoutMs: 5200,
     probePriority,
   });
@@ -82,6 +84,18 @@ function AnimeCard({
   useEffect(() => {
     setIsTrailerLoading(false);
   }, [anime?.id]);
+
+  useEffect(() => {
+    if (!shouldTrackViewportPriority) return undefined;
+
+    const animeId = Number(anime?.id);
+    if (!Number.isFinite(animeId)) return undefined;
+
+    onViewportPriorityChange(animeId, shouldAutoProbe ? probePriority : 0);
+    return () => {
+      onViewportPriorityChange(animeId, 0);
+    };
+  }, [anime?.id, onViewportPriorityChange, probePriority, shouldAutoProbe, shouldTrackViewportPriority]);
 
   useEffect(() => {
     if (!canEditWatchCount) {
