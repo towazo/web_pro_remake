@@ -73,6 +73,8 @@ function HeroSlider({
     isLoading = false,
 }) {
     const totalSlides = Array.isArray(slides) ? slides.length : 0;
+    const shouldLoopTutorialSlides = totalSlides > 0
+        && slides.every((slide) => Boolean(slide?.isTutorial));
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPreviewMuted, setIsPreviewMuted] = useState(true);
     const [hasUnlockedPreviewAudio, setHasUnlockedPreviewAudio] = useState(false);
@@ -196,13 +198,13 @@ function HeroSlider({
             return;
         }
 
-        if (typeof onCycleComplete === 'function') {
+        if (!shouldLoopTutorialSlides && typeof onCycleComplete === 'function') {
             onCycleComplete(slides[currentIndex]);
             return;
         }
 
         setCurrentIndex(0);
-    }, [currentIndex, onCycleComplete, resetMobilePreviewAudioForNextSlide, slides, totalSlides]);
+    }, [currentIndex, onCycleComplete, resetMobilePreviewAudioForNextSlide, shouldLoopTutorialSlides, slides, totalSlides]);
 
     const prevSlide = useCallback(() => {
         if (totalSlides <= 1) return;

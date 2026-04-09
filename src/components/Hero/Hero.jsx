@@ -129,6 +129,13 @@ const Hero = React.forwardRef(function Hero({
 
     const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
     const tutorialLines = splitTutorialDescriptionLines(anime?.description);
+    const tutorialTitle = typeof anime?.title === 'string'
+        ? anime.title
+        : anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '使い方ガイド';
+    const tutorialBadge = typeof anime?.badge === 'string' && anime.badge.trim().length > 0
+        ? anime.badge
+        : 'GUIDE';
+    const hasTutorialImage = Boolean(anime?.image);
 
     // Determine final description to display
     const description = translatedDesc || anime?.description || '詳細情報がありません。';
@@ -158,8 +165,7 @@ const Hero = React.forwardRef(function Hero({
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && shouldPrepareTrailerPlayer;
     const shouldEagerLoadHeroAssets = isActive || shouldPreloadTrailer;
     const shouldUseFallbackTimeline = isActive
-        && !isTutorial
-        && (!shouldRenderTrailerPreview || hasTrailerPlaybackStalled);
+        && (isTutorial || !shouldRenderTrailerPreview || hasTrailerPlaybackStalled);
     const shouldUseTrailerStartupTimeout = isActive
         && !isTutorial
         && shouldRenderTrailerPreview
@@ -231,7 +237,7 @@ const Hero = React.forwardRef(function Hero({
     useImperativeHandle(ref, () => ({
         seekToProgress(progressRatio) {
             const safeProgress = normalizeProgressRatio(progressRatio);
-            if (!isActive || isTutorial) return false;
+            if (!isActive) return false;
 
             if (shouldRenderTrailerPreview) {
                 return trailerPlayerRef.current?.seekToProgress?.(safeProgress, {
@@ -371,26 +377,40 @@ const Hero = React.forwardRef(function Hero({
     if (isTutorial) {
         return (
             <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero`}>
-                <div className="hero-content tutorial-content">
-                    <span className="badge tutorial-badge">{anime.badge}</span>
-                    <h1 className="tutorial-title">{anime.title}</h1>
-                    <div className="hero-desc tutorial-desc">
-                        {tutorialLines.length > 0 ? (
-                            tutorialLines.map((line, index) => (
-                                <span key={`${anime.uniqueId || anime.id || 'tutorial'}-line-${index}`}>
-                                    {line}
-                                    {index < tutorialLines.length - 1 && <br />}
-                                </span>
-                            ))
-                        ) : (
-                            anime.description
+                <div className="tutorial-shell">
+                    <div className={`tutorial-content ${hasTutorialImage ? 'has-media' : 'is-text-only'}`}>
+                        <div className="tutorial-copy">
+                            <span className="badge tutorial-badge">{tutorialBadge}</span>
+                            <h1 className="tutorial-title">{tutorialTitle}</h1>
+                            <div className="hero-desc tutorial-desc">
+                                {tutorialLines.length > 0 ? (
+                                    tutorialLines.map((line, index) => (
+                                        <span
+                                            key={`${anime.uniqueId || anime.id || 'tutorial'}-line-${index}`}
+                                            className="tutorial-desc-line"
+                                        >
+                                            {line}
+                                        </span>
+                                    ))
+                                ) : (
+                                    <span className="tutorial-desc-line">{anime.description}</span>
+                                )}
+                            </div>
+                        </div>
+                        {hasTutorialImage && (
+                            <div className="tutorial-media-panel">
+                                <div className="tutorial-image-frame">
+                                    <div className="tutorial-image-wrapper">
+                                        <img
+                                            src={anime.image}
+                                            alt={`${tutorialTitle} の説明画像`}
+                                            className="tutorial-image"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         )}
                     </div>
-                    {anime.image && (
-                        <div className="tutorial-image-wrapper">
-                            <img src={anime.image} alt="Tutorial" className="tutorial-image" />
-                        </div>
-                    )}
                 </div>
             </section>
         );

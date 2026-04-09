@@ -88,33 +88,64 @@ import {
 const ONBOARDING_STEPS = [
   {
     key: 'intro',
+    eyebrow: 'WELCOME',
     title: 'AniTriggerへようこそ',
     description: 'このサイトでは、視聴したアニメをマイリストに登録し、記録・振り返り・共有をすることができます。',
+    features: [
+      '視聴した作品をマイリストで整理できます。',
+      '気になる作品はブックマークに分けて残せます。',
+      'あとから共有用の画像やテキストも作成できます。',
+    ],
   },
   {
     key: 'mylist',
+    eyebrow: 'MY LIST',
     title: 'マイリスト機能',
     description: '視聴した作品を登録して、評価や履歴を管理できます。',
+    features: [
+      '評価や視聴回数を作品ごとに記録できます。',
+      '検索や絞り込みで見返したい作品を探せます。',
+    ],
   },
   {
     key: 'bookmark',
+    eyebrow: 'BOOKMARK',
     title: 'ブックマーク機能',
     description: '気になる作品や今期・来季のアニメをまとめて確認できます。',
+    features: [
+      '今すぐ見ない作品も候補として残せます。',
+      'あとからマイリストへ移す導線も用意されています。',
+    ],
   },
   {
     key: 'add',
+    eyebrow: 'ADD',
     title: '作品追加機能',
     description: '検索・年代リストなどから作品を追加できます。',
+    features: [
+      'タイトル検索で見たい作品をすばやく探せます。',
+      '年代や季節、ジャンルから一覧で追加することもできます。',
+    ],
   },
   {
     key: 'share',
+    eyebrow: 'SHARE',
     title: '共有機能',
     description: '登録した作品を画像やテキストでSNSなどへ共有できます。',
+    features: [
+      '共有したい作品だけを選んで出力できます。',
+      '画像共有とテキスト共有を使い分けられます。',
+    ],
   },
   {
     key: 'start',
+    eyebrow: 'START',
     title: '作品を追加してみよう',
     description: '今季の作品をまとめて確認するか、タイトル検索で追加を始められます。',
+    features: [
+      '今季放送中の一覧からまとめて追加できます。',
+      '見たい作品が決まっているなら検索追加が便利です。',
+    ],
   },
 ];
 
@@ -433,6 +464,8 @@ function App() {
   const trailerOpenRequestIdRef = useRef(0);
   const myListResultsRef = useRef(null);
   const pendingMyListPageScrollRef = useRef(false);
+  const onboardingStepListRef = useRef(null);
+  const onboardingStepItemRefs = useRef([]);
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
   const isPageScrollIdle = usePageScrollIdle();
@@ -1226,6 +1259,12 @@ function App() {
     setOnboardingStep((prev) => Math.min(ONBOARDING_STEPS.length - 1, prev + 1));
   };
 
+  const handleOnboardingStepSelect = (nextStepIndex) => {
+    const numericIndex = Number(nextStepIndex);
+    if (!Number.isFinite(numericIndex)) return;
+    setOnboardingStep(Math.min(ONBOARDING_STEPS.length - 1, Math.max(0, numericIndex)));
+  };
+
   const handleOnboardingAddCurrent = () => {
     setIsOnboardingDismissed(true);
     setIsOnboardingCurrentSeasonFlow(true);
@@ -1611,6 +1650,10 @@ function App() {
   const isOnboardingNavigationLocked = shouldShowHomeOnboarding;
   const isLastOnboardingStep = onboardingStep >= ONBOARDING_STEPS.length - 1;
   const activeOnboardingStep = ONBOARDING_STEPS[Math.min(onboardingStep, ONBOARDING_STEPS.length - 1)];
+  const nextOnboardingStep = isLastOnboardingStep
+    ? null
+    : ONBOARDING_STEPS[Math.min(onboardingStep + 1, ONBOARDING_STEPS.length - 1)];
+  const onboardingProgressPercent = ((Math.min(onboardingStep, ONBOARDING_STEPS.length - 1) + 1) / ONBOARDING_STEPS.length) * 100;
   const activeBrowsePreset = view === 'addCurrent'
     ? currentSeasonAddPreset
     : view === 'addNext'
@@ -1650,6 +1693,41 @@ function App() {
     if (!shouldShowHomeOnboarding) return;
     setOnboardingStep(0);
   }, [view, shouldShowHomeOnboarding]);
+
+  useEffect(() => {
+    if (!shouldShowHomeOnboarding || typeof window === 'undefined') return undefined;
+
+    const stepList = onboardingStepListRef.current;
+    const activeStepItem = onboardingStepItemRefs.current[onboardingStep];
+    if (!stepList || !activeStepItem) return undefined;
+
+    const prefersReducedMotion = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const behavior = prefersReducedMotion ? 'auto' : 'smooth';
+    const rafId = window.requestAnimationFrame(() => {
+      const maxScrollLeft = Math.max(0, stepList.scrollWidth - stepList.clientWidth);
+      if (maxScrollLeft > 0) {
+        const itemLeft = activeStepItem.offsetLeft;
+        const itemWidth = activeStepItem.offsetWidth;
+        const targetLeft = Math.min(
+          maxScrollLeft,
+          Math.max(0, itemLeft - ((stepList.clientWidth - itemWidth) / 2))
+        );
+        stepList.scrollTo({ left: targetLeft, behavior });
+        return;
+      }
+
+      activeStepItem.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest',
+        behavior,
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [onboardingStep, shouldShowHomeOnboarding]);
 
   // 6. UI Render
   return (
@@ -1926,48 +2004,113 @@ function App() {
       ) : shouldShowHomeOnboarding ? (
         <main className="main-content onboarding-main page-shell">
           <section className="onboarding-panel">
-            <p className="onboarding-step-badge">
-              初回ガイド {onboardingStep + 1}/{ONBOARDING_STEPS.length}
-            </p>
-            <h3 className="onboarding-title">{activeOnboardingStep.title}</h3>
-            {activeOnboardingStep.description && (
-              <p className="onboarding-description">{activeOnboardingStep.description}</p>
-            )}
-            {Array.isArray(activeOnboardingStep.features) && activeOnboardingStep.features.length > 0 && (
-              <ul className="onboarding-feature-list">
-                {activeOnboardingStep.features.map((feature) => (
-                  <li key={feature}>{feature}</li>
-                ))}
-              </ul>
-            )}
+            <div className="onboarding-layout">
+              <div className="onboarding-primary">
+                <div className="onboarding-panel-header">
+                  <div className="onboarding-panel-meta">
+                    <p className="onboarding-step-badge">
+                      {activeOnboardingStep.eyebrow || 'GUIDE'}
+                    </p>
+                    <p className="onboarding-step-counter">
+                      初回ガイド {onboardingStep + 1}/{ONBOARDING_STEPS.length}
+                    </p>
+                  </div>
+                  <div className="onboarding-progress" aria-hidden="true">
+                    <span
+                      className="onboarding-progress-bar"
+                      style={{ width: `${onboardingProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
 
-            {isLastOnboardingStep ? (
-              <div className="onboarding-actions final-step">
-                <button type="button" className="onboarding-action-primary" onClick={handleOnboardingAddCurrent}>
-                  今季のアニメを追加
-                </button>
-                <button type="button" className="onboarding-action-secondary" onClick={handleOnboardingSearchAdd}>
-                  検索して追加
-                </button>
-                <button type="button" className="onboarding-action-cancel" onClick={handleOnboardingCancel}>
-                  キャンセル
-                </button>
+                <div className="onboarding-copy-surface">
+                  <h3 className="onboarding-title">{activeOnboardingStep.title}</h3>
+                  {activeOnboardingStep.description && (
+                    <p className="onboarding-description">{activeOnboardingStep.description}</p>
+                  )}
+                  {Array.isArray(activeOnboardingStep.features) && activeOnboardingStep.features.length > 0 && (
+                    <ul className="onboarding-feature-list">
+                      {activeOnboardingStep.features.map((feature) => (
+                        <li key={feature}>{feature}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {nextOnboardingStep && (
+                    <p className="onboarding-next-hint">
+                      次のステップ: {nextOnboardingStep.title}
+                    </p>
+                  )}
+                </div>
+
+                {isLastOnboardingStep ? (
+                  <div className="onboarding-actions final-step">
+                    <button type="button" className="onboarding-action-primary" onClick={handleOnboardingAddCurrent}>
+                      今季のアニメを追加
+                    </button>
+                    <button type="button" className="onboarding-action-secondary" onClick={handleOnboardingSearchAdd}>
+                      検索して追加
+                    </button>
+                    <button type="button" className="onboarding-action-secondary onboarding-action-back" onClick={handleOnboardingPrev}>
+                      戻る
+                    </button>
+                  </div>
+                ) : (
+                  <div className="onboarding-actions">
+                    <button
+                      type="button"
+                      className="onboarding-action-secondary"
+                      onClick={handleOnboardingPrev}
+                      disabled={onboardingStep === 0}
+                    >
+                      戻る
+                    </button>
+                    <button type="button" className="onboarding-action-primary" onClick={handleOnboardingNext}>
+                      次へ
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="onboarding-actions">
-                <button
-                  type="button"
-                  className="onboarding-action-secondary"
-                  onClick={handleOnboardingPrev}
-                  disabled={onboardingStep === 0}
-                >
-                  戻る
-                </button>
-                <button type="button" className="onboarding-action-primary" onClick={handleOnboardingNext}>
-                  次へ
-                </button>
-              </div>
-            )}
+
+              <aside className="onboarding-sidebar" aria-label="ガイドの流れ">
+                <div className="onboarding-sidebar-card">
+                  <p className="onboarding-sidebar-title">ガイドの流れ</p>
+                  <ol className="onboarding-step-list" ref={onboardingStepListRef}>
+                    {ONBOARDING_STEPS.map((step, index) => {
+                      const isActiveStep = index === onboardingStep;
+                      const isCompletedStep = index < onboardingStep;
+                      return (
+                        <li
+                          key={step.key}
+                          ref={(element) => {
+                            onboardingStepItemRefs.current[index] = element;
+                          }}
+                          className={`onboarding-step-item${isActiveStep ? ' active' : ''}${isCompletedStep ? ' completed' : ''}`}
+                        >
+                          <button
+                            type="button"
+                            className="onboarding-step-link"
+                            onClick={() => handleOnboardingStepSelect(index)}
+                            aria-current={isActiveStep ? 'step' : undefined}
+                          >
+                            <span className="onboarding-step-index">{String(index + 1).padStart(2, '0')}</span>
+                            <span className="onboarding-step-link-copy">
+                              {isActiveStep && (
+                                <span className="onboarding-step-link-state">現在</span>
+                              )}
+                              <span className="onboarding-step-link-title">{step.title}</span>
+                              <span className="onboarding-step-link-description">{step.description}</span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  <p className="onboarding-sidebar-note">
+                    気になる機能から先に見ても大丈夫です。最後の画面からすぐ追加を始められます。
+                  </p>
+                </div>
+              </aside>
+            </div>
           </section>
         </main>
       ) : (
