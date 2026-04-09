@@ -1801,7 +1801,16 @@ function App() {
 
       {/* Content Rendering Loop */}
       <div key={view} className={`app-view-stage view-transition-${pageTransitionDirection}`}>
-      {isAddView ? (
+        <div className="app-view-transition-overlay" aria-hidden="true">
+          <div className="app-view-transition-illustration-shell">
+            <img
+              className="app-view-transition-illustration"
+              src="/images/page-transition-illustration-v2.png"
+              alt=""
+            />
+          </div>
+        </div>
+        {isAddView ? (
         <main className="main-content">
           <AddAnimeScreen
             key={`${view}:${addScreenResetNonce}`}
@@ -1883,85 +1892,129 @@ function App() {
           onSelectMode={(mode) => navigateTo(mode === 'image' ? 'shareImage' : 'shareText')}
         />
       ) : view === 'mylist' ? (
+        <>
           <main className={`main-content mylist-page-main page-shell${isSelectionMode ? ' has-selection-dock' : ' has-bottom-home-nav'}`}>
-            <div className="mylist-section-header bookmark-screen-header">
-              <div>
-                <h3 className="page-main-title">マイリスト</h3>
-                <p className="bookmark-screen-desc page-main-subtitle">{myListSubtitle}</p>
-              </div>
-              <div className="bookmark-screen-actions mylist-screen-actions">
-                <button
-                  className="bookmark-screen-add page-action-button page-action-primary page-action-strong"
-                  onClick={handleOpenAddView}
-                >
-                  <span className="bookmark-screen-add-icon">＋</span>
-                  <span>作品を追加</span>
-                </button>
-                <button
-                  type="button"
-                  className="mylist-share-button page-action-button page-action-secondary"
-                  onClick={() => handleOpenShareMethod()}
-                  disabled={animeList.length === 0}
-                >
-                  作品を共有
-                </button>
-              </div>
-            </div>
-
-            {hasMyListEntries ? (
-              <>
-                <div className="controls">
-                  <div className="search-box">
-                    <i className="search-icon" aria-hidden="true" />
-                    <input
-                      type="text"
-                      placeholder="登録された作品からタイトルを検索"
-                      value={searchQuery}
-                      onChange={handleMyListSearchChange}
-                    />
-                  </div>
+              <div className="mylist-section-header bookmark-screen-header">
+                <div>
+                  <h3 className="page-main-title">マイリスト</h3>
+                  <p className="bookmark-screen-desc page-main-subtitle">{myListSubtitle}</p>
                 </div>
+                <div className="bookmark-screen-actions mylist-screen-actions">
+                  <button
+                    className="bookmark-screen-add page-action-button page-action-primary page-action-strong"
+                    onClick={handleOpenAddView}
+                  >
+                    <span className="bookmark-screen-add-icon">＋</span>
+                    <span>作品を追加</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="mylist-share-button page-action-button page-action-secondary"
+                    onClick={() => handleOpenShareMethod()}
+                    disabled={animeList.length === 0}
+                  >
+                    作品を共有
+                  </button>
+                </div>
+              </div>
 
-                <AnimeFilterDialog
-                  contextId="mylist"
-                  title="絞り込み条件"
-                  emptySummaryText="ジャンル・タグ・放送年・評価を設定できます。"
-                  helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
-                  appliedGenres={selectedGenres}
-                  appliedTags={selectedTags}
-                  appliedYear={selectedYear}
-                  appliedMinRating={minRating}
-                  appliedMatchMode={filterMatchMode}
-                  availableGenres={uniqueGenres}
-                  availableTags={uniqueTags}
-                  availableYears={uniqueYears}
-                  isLoadingTags={isMyListTagInfoLoading}
-                  loadingTagsText="タグ候補を取得中です…"
-                  showSeasons={false}
-                  showMinRating
-                  toolbarSupplement={(
-                    <AnimeSortControl
-                      sortKey={sortKey}
-                      sortOrder={sortOrder}
-                      options={ANIME_SORT_OPTIONS}
-                      onSortKeyChange={handleMyListSortKeyChange}
-                      onSortOrderChange={handleMyListSortOrderChange}
-                      selectAriaLabel="マイリストの並び替え"
-                    />
-                  )}
-                  onApply={handleApplyMyListFilters}
-                  onClear={handleClearMyListFilters}
-                />
-
-                <div ref={myListResultsRef}>
-                  <div className="results-count">
-                    {filteredList.length} 作品が見つかりました
+              {hasMyListEntries ? (
+                <>
+                  <div className="controls">
+                    <div className="search-box">
+                      <i className="search-icon" aria-hidden="true" />
+                      <input
+                        type="text"
+                        placeholder="登録された作品からタイトルを検索"
+                        value={searchQuery}
+                        onChange={handleMyListSearchChange}
+                      />
+                    </div>
                   </div>
+
+                  <AnimeFilterDialog
+                    contextId="mylist"
+                    title="絞り込み条件"
+                    emptySummaryText="ジャンル・タグ・放送年・評価を設定できます。"
+                    helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
+                    appliedGenres={selectedGenres}
+                    appliedTags={selectedTags}
+                    appliedYear={selectedYear}
+                    appliedMinRating={minRating}
+                    appliedMatchMode={filterMatchMode}
+                    availableGenres={uniqueGenres}
+                    availableTags={uniqueTags}
+                    availableYears={uniqueYears}
+                    isLoadingTags={isMyListTagInfoLoading}
+                    loadingTagsText="タグ候補を取得中です…"
+                    showSeasons={false}
+                    showMinRating
+                    toolbarSupplement={(
+                      <AnimeSortControl
+                        sortKey={sortKey}
+                        sortOrder={sortOrder}
+                        options={ANIME_SORT_OPTIONS}
+                        onSortKeyChange={handleMyListSortKeyChange}
+                        onSortOrderChange={handleMyListSortOrderChange}
+                        selectAriaLabel="マイリストの並び替え"
+                      />
+                    )}
+                    onApply={handleApplyMyListFilters}
+                    onClear={handleClearMyListFilters}
+                  />
+
+                  <div ref={myListResultsRef}>
+                    <div className="results-count">
+                      {filteredList.length} 作品が見つかりました
+                    </div>
+                    <CollectionPagination
+                      currentPage={safeMyListPage}
+                      totalPages={myListPageCount}
+                      totalItems={filteredList.length}
+                      itemsPerPage={COLLECTION_PAGE_SIZE}
+                      onPageChange={(nextPage) => {
+                        startTransition(() => {
+                          setMyListPage(nextPage);
+                        });
+                        queueMyListResultsScroll();
+                      }}
+                    />
+                  </div>
+
+                  {isSelectionMode && (
+                    <div className="selection-toolbar" role="region" aria-label="選択モード">
+                      <div className="selection-toolbar-info">
+                        <p className="selection-toolbar-title">選択モード</p>
+                        <p className="selection-toolbar-count">{selectedAnimeIds.length} 件を選択中</p>
+                        <p className="selection-toolbar-sub">カードをタップして選択/解除できます</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="anime-grid">
+                    {pagedFilteredList.map(anime => (
+                      <AnimeCard
+                        key={anime.id}
+                        anime={anime}
+                        onRemove={handleRemoveAnime}
+                        isSelectionMode={isSelectionMode}
+                        isSelected={selectedAnimeIdSet.has(anime.id)}
+                        onToggleSelect={handleToggleAnimeSelection}
+                        onLongPress={handleLongPressAnime}
+                        onUpdateRating={handleUpdateAnimeRating}
+                        onUpdateWatchCount={handleUpdateAnimeWatchCount}
+                        onPlayTrailer={handleOpenTrailer}
+                        onViewportPriorityChange={handleMyListViewportPriorityChange}
+                      />
+                    ))}
+                  </div>
+
                   <CollectionPagination
                     currentPage={safeMyListPage}
                     totalPages={myListPageCount}
                     totalItems={filteredList.length}
                     itemsPerPage={COLLECTION_PAGE_SIZE}
+                    className="browse-pagination-bottom"
                     onPageChange={(nextPage) => {
                       startTransition(() => {
                         setMyListPage(nextPage);
@@ -1969,60 +2022,90 @@ function App() {
                       queueMyListResultsScroll();
                     }}
                   />
+
+                  {filteredList.length === 0 && (
+                    <div className="empty-state">該当する作品がありません</div>
+                  )}
+                </>
+              ) : (
+                <div className="bookmark-empty mylist-empty-state">
+                  マイリストはまだありません。視聴した作品を追加してください。
                 </div>
+              )}
+            </main>
 
-                {isSelectionMode && (
-                  <div className="selection-toolbar" role="region" aria-label="選択モード">
-                    <div className="selection-toolbar-info">
-                      <p className="selection-toolbar-title">選択モード</p>
-                      <p className="selection-toolbar-count">{selectedAnimeIds.length} 件を選択中</p>
-                      <p className="selection-toolbar-sub">カードをタップして選択/解除できます</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="anime-grid">
-                  {pagedFilteredList.map(anime => (
-                    <AnimeCard
-                      key={anime.id}
-                      anime={anime}
-                      onRemove={handleRemoveAnime}
-                      isSelectionMode={isSelectionMode}
-                      isSelected={selectedAnimeIdSet.has(anime.id)}
-                      onToggleSelect={handleToggleAnimeSelection}
-                      onLongPress={handleLongPressAnime}
-                      onUpdateRating={handleUpdateAnimeRating}
-                      onUpdateWatchCount={handleUpdateAnimeWatchCount}
-                      onPlayTrailer={handleOpenTrailer}
-                      onViewportPriorityChange={handleMyListViewportPriorityChange}
-                    />
-                  ))}
-                </div>
-
-                <CollectionPagination
-                  currentPage={safeMyListPage}
-                  totalPages={myListPageCount}
-                  totalItems={filteredList.length}
-                  itemsPerPage={COLLECTION_PAGE_SIZE}
-                  className="browse-pagination-bottom"
-                  onPageChange={(nextPage) => {
-                    startTransition(() => {
-                      setMyListPage(nextPage);
-                    });
-                    queueMyListResultsScroll();
-                  }}
-                />
-
-                {filteredList.length === 0 && (
-                  <div className="empty-state">該当する作品がありません</div>
-                )}
-              </>
-            ) : (
-              <div className="bookmark-empty mylist-empty-state">
-                マイリストはまだありません。視聴した作品を追加してください。
+          {isSelectionMode ? (
+            <div className="selection-action-dock" role="region" aria-label="選択モード操作">
+              <p className="selection-action-dock-count">{selectedAnimeIds.length} 件を選択中</p>
+              <div className="selection-action-dock-buttons">
+                <button
+                  type="button"
+                  className="selection-toolbar-select-all"
+                  onClick={handleSelectAllVisibleAnime}
+                  disabled={filteredAnimeIds.length === 0 || isAllFilteredSelected}
+                >
+                  すべて選択
+                </button>
+                <button
+                  type="button"
+                  className="selection-toolbar-share"
+                  onClick={() => handleOpenShareMethod(selectedAnimeIds)}
+                  disabled={selectedAnimeIds.length === 0}
+                >
+                  選択した作品を共有
+                </button>
+                <button
+                  type="button"
+                  className="selection-toolbar-delete"
+                  onClick={handleBulkRemoveSelected}
+                  disabled={selectedAnimeIds.length === 0}
+                >
+                  選択した作品を削除
+                </button>
+                <button
+                  type="button"
+                  className="selection-toolbar-cancel"
+                  onClick={handleCancelSelectionMode}
+                >
+                  キャンセル
+                </button>
               </div>
-            )}
-          </main>
+            </div>
+          ) : (
+            <>
+              <nav className="screen-bottom-home-nav" aria-label="画面移動">
+                <button type="button" className="screen-bottom-home-button" onClick={() => navigateTo('home')}>
+                  ← ホームへ戻る
+                </button>
+              </nav>
+
+              {quickNavState.visible && (
+                <aside className={`quick-nav-rail mylist-quick-nav ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
+                  <button
+                    type="button"
+                    className="quick-nav-button"
+                    onClick={handleScrollToTop}
+                    disabled={quickNavState.nearTop}
+                    aria-label="ページ最上部へ移動"
+                    title="最上部へ"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-nav-button"
+                    onClick={handleScrollToBottom}
+                    disabled={quickNavState.nearBottom}
+                    aria-label="ページ最下部へ移動"
+                    title="最下部へ"
+                  >
+                    ↓
+                  </button>
+                </aside>
+              )}
+            </>
+          )}
+        </>
       ) : shouldShowHomeOnboarding ? (
         <main className="main-content onboarding-main page-shell">
           <section className="onboarding-panel">
@@ -2190,78 +2273,6 @@ function App() {
       </footer>
 
       <TrailerModal anime={activeTrailerAnime} onClose={handleCloseTrailer} />
-
-      {view === 'mylist' && isSelectionMode && (
-        <div className="selection-action-dock" role="region" aria-label="選択モード操作">
-          <p className="selection-action-dock-count">{selectedAnimeIds.length} 件を選択中</p>
-          <div className="selection-action-dock-buttons">
-            <button
-              type="button"
-              className="selection-toolbar-select-all"
-              onClick={handleSelectAllVisibleAnime}
-              disabled={filteredAnimeIds.length === 0 || isAllFilteredSelected}
-            >
-              すべて選択
-            </button>
-            <button
-              type="button"
-              className="selection-toolbar-share"
-              onClick={() => handleOpenShareMethod(selectedAnimeIds)}
-              disabled={selectedAnimeIds.length === 0}
-            >
-              選択した作品を共有
-            </button>
-            <button
-              type="button"
-              className="selection-toolbar-delete"
-              onClick={handleBulkRemoveSelected}
-              disabled={selectedAnimeIds.length === 0}
-            >
-              選択した作品を削除
-            </button>
-            <button
-              type="button"
-              className="selection-toolbar-cancel"
-              onClick={handleCancelSelectionMode}
-            >
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
-
-      {view === 'mylist' && !isSelectionMode && (
-        <nav className="screen-bottom-home-nav" aria-label="画面移動">
-          <button type="button" className="screen-bottom-home-button" onClick={() => navigateTo('home')}>
-            ← ホームへ戻る
-          </button>
-        </nav>
-      )}
-
-      {view === 'mylist' && !isSelectionMode && quickNavState.visible && (
-        <aside className={`quick-nav-rail mylist-quick-nav ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
-          <button
-            type="button"
-            className="quick-nav-button"
-            onClick={handleScrollToTop}
-            disabled={quickNavState.nearTop}
-            aria-label="ページ最上部へ移動"
-            title="最上部へ"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            className="quick-nav-button"
-            onClick={handleScrollToBottom}
-            disabled={quickNavState.nearBottom}
-            aria-label="ページ最下部へ移動"
-            title="最下部へ"
-          >
-            ↓
-          </button>
-        </aside>
-      )}
     </div>
   );
 }

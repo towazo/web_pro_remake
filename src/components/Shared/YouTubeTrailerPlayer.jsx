@@ -587,10 +587,11 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
             },
             onStateChange: (event) => {
               playbackStateRef.current = Number(event?.data);
-              if (
-                event?.data === YT.PlayerState.PLAYING
-                || event?.data === YT.PlayerState.BUFFERING
-              ) {
+              const isPlayingState = event?.data === YT.PlayerState.PLAYING;
+              const isBufferingState = event?.data === YT.PlayerState.BUFFERING;
+              // Keep the iframe hidden during the very first startup buffer on mobile,
+              // otherwise the YouTube reload/loading UI can flash right before slide transitions.
+              if (isPlayingState || (isBufferingState && playbackStartedOnceRef.current)) {
                 setIsPlaybackVisible(true);
                 flushPendingSeekProgress(event.target, {
                   userInitiated: false,
@@ -598,7 +599,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
                 });
               }
 
-              if (event?.data === YT.PlayerState.PLAYING) {
+              if (isPlayingState) {
                 playbackStartedOnceRef.current = true;
                 clearBufferRecoveryTimeouts();
                 startProgressPolling(event.target);
@@ -608,7 +609,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
                 requestDeferredUnmute(event.target);
               }
 
-              if (event?.data === YT.PlayerState.BUFFERING) {
+              if (isBufferingState) {
                 scheduleBufferRecoveryWatch(event.target);
               }
 
