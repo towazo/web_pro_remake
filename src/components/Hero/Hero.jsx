@@ -33,6 +33,7 @@ const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) 
 const Hero = React.forwardRef(function Hero({
     anime,
     isActive,
+    transitionDirection = 'forward',
     shouldPreloadTrailer = false,
     previewMuted = true,
     allowPersistentPreviewAudio = false,
@@ -58,6 +59,7 @@ const Hero = React.forwardRef(function Hero({
     const slideProgressChangeRef = useRef(onSlideProgressChange);
     const requestAdvanceRef = useRef(onRequestAdvance);
     const isTutorial = Boolean(anime?.isTutorial);
+    const slideTransitionClassName = transitionDirection === 'backward' ? 'transition-backward' : 'transition-forward';
     const {
         trailer,
         hasTrailer,
@@ -388,7 +390,7 @@ const Hero = React.forwardRef(function Hero({
 
     if (isTutorial) {
         return (
-            <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero`}>
+            <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero ${slideTransitionClassName}`}>
                 <div className="tutorial-shell">
                     <div className={`tutorial-content ${hasTutorialImage ? 'has-media' : 'is-text-only'}`}>
                         <div className="tutorial-copy">
@@ -448,7 +450,7 @@ const Hero = React.forwardRef(function Hero({
     }
 
     return (
-        <section className={`hero ${isActive ? 'active' : ''}${shouldPreloadTrailer ? ' is-preloading' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
+        <section className={`hero ${isActive ? 'active' : ''}${shouldPreloadTrailer ? ' is-preloading' : ''} hero-slide ${slideTransitionClassName} ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
             {heroImageSrc && (
                 <img
                     className={`hero-bg-image ${hasBannerImage ? 'banner' : 'cover-fallback'}`}

@@ -1749,6 +1749,8 @@ function App() {
   }, [onboardingStep, shouldShowHomeOnboarding]);
 
   // 6. UI Render
+  const pageTransitionDirection = navigationTypeRef.current === 'pop' ? 'backward' : 'forward';
+
   return (
     <div className="app-container">
       {/* Navigation Header */}
@@ -1798,6 +1800,7 @@ function App() {
       </nav>
 
       {/* Content Rendering Loop */}
+      <div key={view} className={`app-view-stage view-transition-${pageTransitionDirection}`}>
       {isAddView ? (
         <main className="main-content">
           <AddAnimeScreen
@@ -2151,7 +2154,7 @@ function App() {
             isLoading={shouldShowFeaturedSliderLoading}
           />
 
-          <main className="main-content">
+        <main className="main-content">
             <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
 
             <HomeQuickActionsSection
@@ -2180,6 +2183,7 @@ function App() {
           </main>
         </>
       )}
+      </div>
 
       <footer className="app-footer">
         <p>AniTrigger &copy; 2025 - Data provided by AniList API</p>

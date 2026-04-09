@@ -85,6 +85,7 @@ function HeroSlider({
     const [activePreviewPlaybackStarted, setActivePreviewPlaybackStarted] = useState(false);
     const [lastViewedAnime, setLastViewedAnime] = useState(null);
     const [currentSlideRestartToken, setCurrentSlideRestartToken] = useState(0);
+    const [slideTransitionDirection, setSlideTransitionDirection] = useState('forward');
     const timelineRef = useRef(null);
     const progressFillRef = useRef(null);
     const progressHandleRef = useRef(null);
@@ -115,6 +116,7 @@ function HeroSlider({
     // Reset index when slides change
     useEffect(() => {
         setCurrentIndex(0);
+        setSlideTransitionDirection('forward');
     }, [slideIdentityKey]);
 
     useEffect(() => {
@@ -190,12 +192,17 @@ function HeroSlider({
         setPreviewMutedChangeToken((prev) => prev + 1);
     }, []);
 
+    const commitSlideChange = useCallback((nextIndex, direction) => {
+        setSlideTransitionDirection(direction === 'backward' ? 'backward' : 'forward');
+        setCurrentIndex(nextIndex);
+    }, []);
+
     const nextSlide = useCallback(() => {
         if (totalSlides <= 1) return;
         resetMobilePreviewAudioForNextSlide();
         const nextIndex = currentIndex + 1;
         if (nextIndex < totalSlides) {
-            setCurrentIndex(nextIndex);
+            commitSlideChange(nextIndex, 'forward');
             return;
         }
 
@@ -204,19 +211,19 @@ function HeroSlider({
             return;
         }
 
-        setCurrentIndex(0);
-    }, [currentIndex, onCycleComplete, resetMobilePreviewAudioForNextSlide, shouldLoopTutorialSlides, slides, totalSlides]);
+        commitSlideChange(0, 'forward');
+    }, [commitSlideChange, currentIndex, onCycleComplete, resetMobilePreviewAudioForNextSlide, shouldLoopTutorialSlides, slides, totalSlides]);
 
     const prevSlide = useCallback(() => {
         if (totalSlides <= 1) return;
         resetMobilePreviewAudioForNextSlide();
         if (currentIndex === 0) {
-            setCurrentIndex(totalSlides - 1);
+            commitSlideChange(totalSlides - 1, 'backward');
             return;
         }
 
-        setCurrentIndex((prev) => prev - 1);
-    }, [currentIndex, resetMobilePreviewAudioForNextSlide, totalSlides]);
+        commitSlideChange(currentIndex - 1, 'backward');
+    }, [commitSlideChange, currentIndex, resetMobilePreviewAudioForNextSlide, totalSlides]);
 
     const clearSwipeGesture = useCallback(() => {
         touchStartRef.current = null;
@@ -349,6 +356,7 @@ function HeroSlider({
     const handleGoToSlide = (index) => {
         if (index === currentIndex) return;
         resetMobilePreviewAudioForNextSlide();
+        setSlideTransitionDirection(index > currentIndex ? 'forward' : 'backward');
         setCurrentIndex(index);
     };
     const handleAddLastViewedAnimeToMyList = () => {
@@ -497,6 +505,7 @@ function HeroSlider({
                             key={getSlideKey(anime, actualIndex)}
                             anime={anime}
                             isActive={actualIndex === currentIndex}
+                            transitionDirection={slideTransitionDirection}
                             shouldPreloadTrailer={slideDistance === 1}
                             previewMuted={isPreviewMuted}
                             allowPersistentPreviewAudio={!isMobileAutoplayEnvironment && hasUnlockedPreviewAudio}

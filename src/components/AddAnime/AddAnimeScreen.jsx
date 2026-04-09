@@ -3365,7 +3365,11 @@ function AddAnimeScreen({
     };
 
     return (
-        <div className="add-screen-container page-shell has-bottom-home-nav">
+        <div
+            className={`add-screen-container page-shell has-bottom-home-nav${
+                showEntrySelectionPage || showSearchModeSelectionPage ? ' add-screen-short-shell' : ''
+            }`}
+        >
             <div className="add-screen-header">
                 <h2 className="page-main-title">{screenTitle}</h2>
                 <p className="page-main-subtitle">{screenSubtitle}</p>
@@ -3374,7 +3378,7 @@ function AddAnimeScreen({
                 )}
 
                 {showEntrySelectionPage && (
-                    <div className="add-step-page">
+                    <div className="add-step-page add-step-page-choice-only">
                         <div className="add-step-page-head">
                             <h3 className="add-step-page-title">作品の探し方を選ぶ</h3>
                         </div>

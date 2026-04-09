@@ -97,6 +97,38 @@ body {
     border-radius: 0;
 }
 
+.app-view-stage {
+    position: relative;
+}
+
+.app-view-stage.view-transition-forward {
+    animation: appViewEnterForward 0.32s ease-out;
+}
+
+.app-view-stage.view-transition-backward {
+    animation: appViewEnterBackward 0.28s ease-out;
+}
+
+@keyframes appViewEnterForward {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes appViewEnterBackward {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
 @media (max-width: 768px) {
     .page-shell {
         padding: 30px 24px;
@@ -2653,10 +2685,13 @@ button.card-watch-summary {
     border-radius: 0;
     margin-bottom: 0;
     background-color: #000;
+    isolation: isolate;
 }
 
 .hero-slider-container .hero-slide {
     display: none !important;
+    clip-path: inset(0);
+    will-change: transform, opacity, filter, clip-path;
 }
 
 .hero-slider-container .hero-slide.is-preloading {
@@ -2671,7 +2706,68 @@ button.card-watch-summary {
 
 .hero-slider-container .hero-slide.active {
     display: grid !important;
-    animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-slider-container .hero-slide.active::before,
+.hero-slider-container .hero-slide.active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 3;
+}
+
+.hero-slider-container .hero-slide.active.transition-forward {
+    animation: heroSlideColorRevealForward 1.04s cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.hero-slider-container .hero-slide.active.transition-forward::before {
+    background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(10, 10, 10, 0.98) 46%, rgba(28, 28, 28, 0.98) 62%, rgba(0, 0, 0, 0) 82%);
+    animation: heroSlideColorBandForward 1.04s cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.hero-slider-container .hero-slide.active.transition-forward::after {
+    background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.82) 50%, rgba(255, 255, 255, 0) 100%);
+    animation: heroSlideEdgeForward 1.04s cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.hero-slider-container .hero-slide.active.transition-backward {
+    animation: heroSlideColorRevealBackward 0.98s cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.hero-slider-container .hero-slide.active.transition-backward::before {
+    background:
+        linear-gradient(270deg, rgba(0, 0, 0, 0) 0%, rgba(10, 10, 10, 0.98) 46%, rgba(28, 28, 28, 0.98) 62%, rgba(0, 0, 0, 0) 82%);
+    animation: heroSlideColorBandBackward 0.98s cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.hero-slider-container .hero-slide.active.transition-backward::after {
+    background:
+        linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.74) 50%, rgba(255, 255, 255, 0) 100%);
+    animation: heroSlideEdgeBackward 0.98s cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.hero-slider-container .hero-slide.active.transition-forward .hero-content,
+.hero-slider-container .hero-slide.active.transition-forward .tutorial-content {
+    animation: heroSlideContentForward 0.62s cubic-bezier(0.16, 1, 0.3, 1) 0.28s both;
+}
+
+.hero-slider-container .hero-slide.active.transition-backward .hero-content,
+.hero-slider-container .hero-slide.active.transition-backward .tutorial-content {
+    animation: heroSlideContentBackward 0.58s cubic-bezier(0.16, 1, 0.3, 1) 0.26s both;
+}
+
+.hero-slider-container .hero-slide.active.transition-forward .hero-media-panel,
+.hero-slider-container .hero-slide.active.transition-forward .tutorial-media-panel {
+    animation: heroSlidePanelForward 0.66s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+}
+
+.hero-slider-container .hero-slide.active.transition-backward .hero-media-panel,
+.hero-slider-container .hero-slide.active.transition-backward .tutorial-media-panel {
+    animation: heroSlidePanelBackward 0.62s cubic-bezier(0.16, 1, 0.3, 1) 0.28s both;
 }
 
 .hero-slider-container .hero-slide.is-preloading.tutorial-hero,
@@ -2679,15 +2775,143 @@ button.card-watch-summary {
     display: grid !important;
 }
 
-@keyframes fadeIn {
+@keyframes heroSlideColorRevealForward {
     from {
-        opacity: 0;
-        transform: scale(1.02);
+        opacity: 1;
+        clip-path: inset(0 100% 0 0);
+        filter: saturate(0.94) brightness(0.96);
     }
 
     to {
         opacity: 1;
-        transform: scale(1);
+        clip-path: inset(0 0 0 0);
+        filter: none;
+    }
+}
+
+@keyframes heroSlideColorRevealBackward {
+    from {
+        opacity: 1;
+        clip-path: inset(0 0 0 100%);
+        filter: saturate(0.94) brightness(0.96);
+    }
+
+    to {
+        opacity: 1;
+        clip-path: inset(0 0 0 0);
+        filter: none;
+    }
+}
+
+@keyframes heroSlideColorBandForward {
+    0% {
+        opacity: 0.98;
+        transform: translateX(-118%);
+    }
+
+    78% {
+        opacity: 0.98;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateX(118%);
+    }
+}
+
+@keyframes heroSlideColorBandBackward {
+    0% {
+        opacity: 0.98;
+        transform: translateX(118%);
+    }
+
+    78% {
+        opacity: 0.98;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateX(-118%);
+    }
+}
+
+@keyframes heroSlideEdgeForward {
+    from {
+        opacity: 0;
+        transform: translateX(-112%);
+    }
+
+    42% {
+        opacity: 0.9;
+    }
+
+    to {
+        opacity: 0;
+        transform: translateX(112%);
+    }
+}
+
+@keyframes heroSlideEdgeBackward {
+    from {
+        opacity: 0;
+        transform: translateX(112%);
+    }
+
+    42% {
+        opacity: 0.82;
+    }
+
+    to {
+        opacity: 0;
+        transform: translateX(-112%);
+    }
+}
+
+@keyframes heroSlideContentForward {
+    from {
+        opacity: 0;
+        transform: translate3d(14px, 0, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes heroSlideContentBackward {
+    from {
+        opacity: 0;
+        transform: translate3d(-14px, 0, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes heroSlidePanelForward {
+    from {
+        opacity: 0;
+        transform: translate3d(20px, 0, 0) scale(0.985);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+@keyframes heroSlidePanelBackward {
+    from {
+        opacity: 0;
+        transform: translate3d(-20px, 0, 0) scale(0.985);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
     }
 }
 
@@ -7553,9 +7777,21 @@ body.trailer-modal-open .add-toast {
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .app-view-stage,
+    .app-view-stage.view-transition-forward,
+    .app-view-stage.view-transition-backward,
+    .hero-slider-container .hero-slide.active,
+    .hero-slider-container .hero-slide.active::after,
+    .hero-slider-container .hero-slide.active .hero-content,
+    .hero-slider-container .hero-slide.active .tutorial-content,
+    .hero-slider-container .hero-slide.active .hero-media-panel,
+    .hero-slider-container .hero-slide.active .tutorial-media-panel,
     .bookmark-screen-add,
     .bookmark-screen-home {
+        animation: none !important;
         transition: none;
+        filter: none !important;
+        transform: none !important;
     }
 }
 
@@ -7569,7 +7805,15 @@ body.trailer-modal-open .add-toast {
     animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+.add-screen-container.add-screen-short-shell.has-bottom-home-nav {
+    padding-bottom: max(112px, calc(86px + env(safe-area-inset-bottom)));
+}
+
 @media (max-width: 768px) {
+    .add-screen-container.add-screen-short-shell.has-bottom-home-nav {
+        padding-bottom: max(104px, calc(82px + env(safe-area-inset-bottom)));
+    }
+
     .add-screen-header {
         margin-bottom: 4px;
     }
@@ -7621,6 +7865,10 @@ body.trailer-modal-open .add-toast {
 }
 
 @media (max-width: 480px) {
+    .add-screen-container.add-screen-short-shell.has-bottom-home-nav {
+        padding-bottom: max(98px, calc(78px + env(safe-area-inset-bottom)));
+    }
+
     .add-screen-header h2 {
         border-bottom-width: 2px;
         padding-bottom: 7px;
@@ -7824,6 +8072,15 @@ body.trailer-modal-open .add-toast {
         min-height: clamp(300px, 46svh, 380px);
     }
 
+    .add-step-page.add-step-page-choice-only {
+        min-height: auto;
+    }
+
+    .add-step-page.add-step-page-choice-only .add-step-choice-card {
+        min-height: 108px;
+        padding: 16px 14px 16px 16px;
+    }
+
     .add-step-page-head {
         gap: 5px;
     }
@@ -7839,11 +8096,13 @@ body.trailer-modal-open .add-toast {
 
     .add-step-choice-grid {
         flex: 1;
-        align-content: start;
+        align-content: stretch;
+        grid-auto-rows: minmax(0, 1fr);
         gap: 10px;
     }
 
     .add-step-choice-card {
+        height: 100%;
         min-height: 92px;
         padding: 14px 14px 14px 16px;
         gap: 6px;
@@ -9023,6 +9282,15 @@ body.trailer-modal-open .add-toast {
         padding: 14px 12px 12px;
         gap: 12px;
         min-height: clamp(288px, 44svh, 356px);
+    }
+
+    .add-step-page.add-step-page-choice-only {
+        min-height: auto;
+    }
+
+    .add-step-page.add-step-page-choice-only .add-step-choice-card {
+        min-height: 102px;
+        padding: 15px 12px 15px 14px;
     }
 
     .add-step-page-head {
