@@ -91,6 +91,7 @@ function HeroSlider({
     const progressHandleRef = useRef(null);
     const activeHeroRef = useRef(null);
     const activeSlideAnimeRef = useRef(null);
+    const pendingCycleCarryoverAnimeRef = useRef(null);
     const slideSessionKeyRef = useRef('');
     const timelineDragCleanupRef = useRef(null);
     const isTimelineScrubbingRef = useRef(false);
@@ -125,12 +126,15 @@ function HeroSlider({
 
     useEffect(() => {
         const sessionKey = `${sourceType}:${slideIdentityKey}`;
+        const sessionStartAnime = Array.isArray(slides) ? (slides[0] || null) : null;
         const currentAnime = Array.isArray(slides) ? (slides[currentIndex] || null) : null;
 
         if (slideSessionKeyRef.current !== sessionKey) {
+            const carryoverAnime = pendingCycleCarryoverAnimeRef.current;
             slideSessionKeyRef.current = sessionKey;
-            activeSlideAnimeRef.current = currentAnime;
-            setLastViewedAnime(null);
+            pendingCycleCarryoverAnimeRef.current = null;
+            activeSlideAnimeRef.current = carryoverAnime || sessionStartAnime;
+            setLastViewedAnime(carryoverAnime || null);
             return;
         }
 
@@ -207,6 +211,7 @@ function HeroSlider({
         }
 
         if (!shouldLoopTutorialSlides && typeof onCycleComplete === 'function') {
+            pendingCycleCarryoverAnimeRef.current = slides[currentIndex] || null;
             onCycleComplete(slides[currentIndex]);
             return;
         }

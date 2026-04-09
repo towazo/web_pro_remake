@@ -151,7 +151,7 @@ body {
     opacity: 0;
     transform: translate3d(0, 22px, 0) scale(0.94);
     isolation: isolate;
-    filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.22));
+    filter: drop-shadow(0 14px 26px rgba(43, 7, 7, 0.22));
 }
 
 .app-view-transition-illustration-shell::before {
