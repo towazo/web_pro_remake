@@ -46,7 +46,7 @@ function StatsSection({ animeList, cardBackgrounds = null, visibleCardKeys = nul
     // Simple favorite genre logic
     const genreCounts = {};
     animeList.forEach(anime => {
-        anime.genres?.forEach(genre => {
+        (Array.isArray(anime?.genres) ? anime.genres : []).forEach(genre => {
             genreCounts[genre] = (genreCounts[genre] || 0) + 1;
         });
     });

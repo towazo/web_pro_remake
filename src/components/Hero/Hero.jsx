@@ -171,6 +171,8 @@ const Hero = React.forwardRef(function Hero({
     const posterImageSrc = coverExtraLarge || coverLarge || '';
     const mediaImageSrc = hasBannerImage ? anime.bannerImage : posterImageSrc;
     const rating = normalizeAnimeRating(anime?.rating);
+    const genreList = Array.isArray(anime?.genres) ? anime.genres : [];
+    const genreText = genreList.slice(0, 3).map(translateGenre).join(' / ');
     const heroImageSrcSet = !hasBannerImage
         ? [coverLarge ? `${coverLarge} 1x` : '', coverExtraLarge ? `${coverExtraLarge} 2x` : '']
             .filter(Boolean)
@@ -424,7 +426,7 @@ const Hero = React.forwardRef(function Hero({
                 <div className="hero-meta">
                     <span>{anime.seasonYear ? `${anime.seasonYear}年` : '不明'}</span>
                     <span className="dot">•</span>
-                    <span>{anime.genres ? anime.genres.slice(0, 3).map(translateGenre).join(' / ') : ''}</span>
+                    <span>{genreText}</span>
                     <span className="dot">•</span>
                     <span>{anime.episodes || '?'} 話</span>
                     {rating !== null && (

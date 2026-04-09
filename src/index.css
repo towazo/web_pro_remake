@@ -2236,6 +2236,44 @@ button.card-watch-summary {
     position: relative;
 }
 
+.app-error-boundary {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.app-error-boundary-panel {
+    width: min(100%, 720px);
+    border: 1px solid var(--border-strong);
+    background: #fff;
+    padding: 32px;
+}
+
+.app-error-boundary-title {
+    font-size: var(--fs-heading-lg);
+    line-height: var(--lh-heading);
+}
+
+.app-error-boundary-message {
+    margin-top: 14px;
+    color: var(--text-sub);
+    word-break: break-word;
+}
+
+.app-error-boundary-reload {
+    margin-top: 22px;
+    min-height: 44px;
+    padding: 0 18px;
+    border: 1px solid var(--border-strong);
+    background: #000;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+}
+
 .hero-slider-loading-container {
     min-height: 480px;
     background:
