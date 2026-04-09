@@ -128,48 +128,19 @@ const Hero = React.forwardRef(function Hero({
     }, [anime, isTutorial, isActive, shouldPreloadTrailer]);
 
     const shouldRenderTrailerPreview = hasTrailer && canRenderTrailer;
-
-    // Use a different structure if it's a tutorial slide
-    if (isTutorial) {
-        const tutorialLines = splitTutorialDescriptionLines(anime.description);
-        return (
-            <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero`}>
-                <div className="hero-content tutorial-content">
-                    <span className="badge tutorial-badge">{anime.badge}</span>
-                    <h1 className="tutorial-title">{anime.title}</h1>
-                    <div className="hero-desc tutorial-desc">
-                        {tutorialLines.length > 0 ? (
-                            tutorialLines.map((line, index) => (
-                                <span key={`${anime.uniqueId || anime.id || 'tutorial'}-line-${index}`}>
-                                    {line}
-                                    {index < tutorialLines.length - 1 && <br />}
-                                </span>
-                            ))
-                        ) : (
-                            anime.description
-                        )}
-                    </div>
-                    {anime.image && (
-                        <div className="tutorial-image-wrapper">
-                            <img src={anime.image} alt="Tutorial" className="tutorial-image" />
-                        </div>
-                    )}
-                </div>
-            </section>
-        );
-    }
+    const tutorialLines = splitTutorialDescriptionLines(anime?.description);
 
     // Determine final description to display
-    const description = translatedDesc || anime.description || '詳細情報がありません。';
-    const showTranslateLink = !translatedDesc && anime.description && !isTranslating;
+    const description = translatedDesc || anime?.description || '詳細情報がありません。';
+    const showTranslateLink = !translatedDesc && anime?.description && !isTranslating;
 
     // Background Image logic (prefer banner image, fallback to cover image with srcSet for high DPI)
-    const hasBannerImage = Boolean(anime.bannerImage);
+    const hasBannerImage = Boolean(anime?.bannerImage);
     const coverLarge = anime?.coverImage?.large || '';
     const coverExtraLarge = anime?.coverImage?.extraLarge || '';
-    const heroImageSrc = anime.bannerImage || coverExtraLarge || coverLarge || '';
+    const heroImageSrc = anime?.bannerImage || coverExtraLarge || coverLarge || '';
     const posterImageSrc = coverExtraLarge || coverLarge || '';
-    const mediaImageSrc = hasBannerImage ? anime.bannerImage : posterImageSrc;
+    const mediaImageSrc = hasBannerImage ? anime?.bannerImage : posterImageSrc;
     const rating = normalizeAnimeRating(anime?.rating);
     const genreList = Array.isArray(anime?.genres) ? anime.genres : [];
     const genreText = genreList.slice(0, 3).map(translateGenre).join(' / ');
@@ -396,6 +367,34 @@ const Hero = React.forwardRef(function Hero({
     }, []);
 
     if (!anime) return null;
+
+    if (isTutorial) {
+        return (
+            <section className={`hero ${isActive ? 'active' : ''} hero-slide tutorial-hero`}>
+                <div className="hero-content tutorial-content">
+                    <span className="badge tutorial-badge">{anime.badge}</span>
+                    <h1 className="tutorial-title">{anime.title}</h1>
+                    <div className="hero-desc tutorial-desc">
+                        {tutorialLines.length > 0 ? (
+                            tutorialLines.map((line, index) => (
+                                <span key={`${anime.uniqueId || anime.id || 'tutorial'}-line-${index}`}>
+                                    {line}
+                                    {index < tutorialLines.length - 1 && <br />}
+                                </span>
+                            ))
+                        ) : (
+                            anime.description
+                        )}
+                    </div>
+                    {anime.image && (
+                        <div className="tutorial-image-wrapper">
+                            <img src={anime.image} alt="Tutorial" className="tutorial-image" />
+                        </div>
+                    )}
+                </div>
+            </section>
+        );
+    }
 
     return (
         <section className={`hero ${isActive ? 'active' : ''}${shouldPreloadTrailer ? ' is-preloading' : ''} hero-slide ${hasBannerImage ? 'has-banner-image' : 'poster-only-slide'}${shouldRenderTrailerPreview ? ' trailer-preview-slide' : ''}`}>
