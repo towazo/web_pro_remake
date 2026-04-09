@@ -1063,7 +1063,7 @@ function AddAnimeScreen({
                 document.documentElement?.scrollHeight || 0
             );
             const maxScroll = Math.max(0, docH - viewportH);
-            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            const isMobile = window.matchMedia('(max-width: 1024px)').matches;
 
             const nearTop = scrollTop <= 24;
             const nearBottom = maxScroll - scrollTop <= 24;

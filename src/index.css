@@ -6848,19 +6848,19 @@ body.trailer-modal-open .add-toast {
 }
 
 .add-step-page {
-    margin-top: 16px;
+    margin-top: 20px;
     border: 1px solid #000;
     background: #fff;
-    padding: 14px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
 }
 
 .add-step-page-head {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
 }
 
 .add-step-page-title {
@@ -6881,21 +6881,21 @@ body.trailer-modal-open .add-toast {
 .add-step-choice-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 12px;
 }
 
 .add-step-choice-card {
     width: 100%;
-    min-height: 110px;
+    min-height: 118px;
     border: 1px solid #000;
     background:
         linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
-    padding: 14px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     text-align: left;
     cursor: pointer;
     transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
@@ -6920,12 +6920,12 @@ body.trailer-modal-open .add-toast {
     font-size: 0.98rem;
     font-weight: 900;
     color: #000;
-    line-height: 1.4;
+    line-height: 1.45;
 }
 
 .add-step-choice-text {
     font-size: 0.78rem;
-    line-height: 1.45;
+    line-height: 1.55;
     color: #555;
     font-weight: 600;
 }
@@ -7001,8 +7001,14 @@ body.trailer-modal-open .add-toast {
 
 @media (max-width: 768px) {
     .add-step-page {
-        padding: 12px;
-        gap: 10px;
+        margin-top: 18px;
+        padding: 16px 14px 14px;
+        gap: 14px;
+        min-height: clamp(300px, 46svh, 380px);
+    }
+
+    .add-step-page-head {
+        gap: 5px;
     }
 
     .add-step-page-title {
@@ -7014,13 +7020,33 @@ body.trailer-modal-open .add-toast {
         grid-template-columns: 1fr;
     }
 
+    .add-step-choice-grid {
+        flex: 1;
+        align-content: start;
+        gap: 10px;
+    }
+
     .add-step-choice-card {
-        min-height: 0;
-        padding: 12px 12px 12px 14px;
-        gap: 4px;
-        border-left: 4px solid #000;
+        min-height: 92px;
+        padding: 14px 14px 14px 16px;
+        gap: 6px;
+        border-left: 5px solid #000;
         background: #fff;
         box-shadow: none;
+    }
+
+    .add-step-choice-title {
+        font-size: 0.95rem;
+        line-height: 1.4;
+    }
+
+    .add-step-choice-text {
+        font-size: 0.76rem;
+        line-height: 1.5;
+    }
+
+    .add-step-page-actions {
+        margin-top: auto;
     }
 
     .add-workspace-toolbar {
@@ -7050,9 +7076,14 @@ body.trailer-modal-open .add-toast {
     }
 
     .add-step-back-button {
-        min-height: 34px;
-        font-size: 0.7rem;
-        padding: 0 10px;
+        min-height: 40px;
+        font-size: 0.74rem;
+        padding: 0 12px;
+    }
+
+    .add-step-page-actions .add-step-back-button {
+        width: 100%;
+        justify-content: center;
     }
 
     .suggestion-title-row {
@@ -8171,8 +8202,14 @@ body.trailer-modal-open .add-toast {
 
 @media (max-width: 480px) {
     .add-step-page {
-        padding: 10px;
-        gap: 8px;
+        margin-top: 16px;
+        padding: 14px 12px 12px;
+        gap: 12px;
+        min-height: clamp(288px, 44svh, 356px);
+    }
+
+    .add-step-page-head {
+        gap: 4px;
     }
 
     .add-step-page-title {
@@ -8180,7 +8217,8 @@ body.trailer-modal-open .add-toast {
     }
 
     .add-step-choice-card {
-        padding: 11px 10px 11px 12px;
+        min-height: 88px;
+        padding: 13px 12px 13px 14px;
     }
 
     .add-step-choice-title {
@@ -10999,5 +11037,668 @@ body.trailer-modal-open .add-toast {
     .bookmark-item-genres,
     .browse-card-genres {
         padding-top: 6px;
+    }
+}
+
+/* Non-home visual unification */
+.mylist-page-main.page-shell,
+.bookmark-screen.page-shell,
+.add-screen-container.page-shell,
+.share-screen-main.page-shell {
+    position: relative;
+    background:
+        radial-gradient(circle at top right, rgba(0, 0, 0, 0.045), transparent 28%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.995) 0%, rgba(245, 245, 245, 0.985) 100%);
+    border: 1px solid rgba(0, 0, 0, 0.96);
+    box-shadow:
+        0 26px 56px rgba(0, 0, 0, 0.09),
+        inset 0 5px 0 rgba(0, 0, 0, 0.96);
+}
+
+.mylist-page-main .mylist-section-header,
+.bookmark-screen .bookmark-screen-header,
+.add-screen-container .add-screen-header,
+.share-screen-main .bookmark-screen-header {
+    margin-bottom: 28px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.14);
+}
+
+.add-screen-container .add-screen-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mylist-page-main .page-main-subtitle,
+.bookmark-screen .page-main-subtitle,
+.add-screen-container .page-main-subtitle,
+.share-screen-main .page-main-subtitle {
+    margin-top: 10px;
+    max-width: 58ch;
+    color: #4f4f4f;
+    font-weight: 700;
+}
+
+.mylist-page-main .controls,
+.bookmark-screen .controls,
+.share-screen-main .controls {
+    margin: 28px 0 22px;
+    padding: 16px;
+    border: 1px solid rgba(0, 0, 0, 0.92);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(246, 246, 246, 0.98) 100%),
+        #fff;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
+}
+
+.mylist-page-main .search-box input,
+.bookmark-screen .search-box input,
+.share-screen-main .search-box input,
+.add-screen-container .search-input,
+.add-screen-container .browse-year-select {
+    border-color: rgba(0, 0, 0, 0.92);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.mylist-page-main .search-box input:focus,
+.bookmark-screen .search-box input:focus,
+.share-screen-main .search-box input:focus,
+.add-screen-container .search-input:focus,
+.add-screen-container .browse-year-select:focus {
+    background: #fff;
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.96),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.mylist-page-main .anime-filter-panel,
+.bookmark-screen .anime-filter-panel,
+.share-screen-main .anime-filter-panel {
+    margin: 0 0 24px;
+    padding: 16px;
+    border: 1px solid rgba(0, 0, 0, 0.92);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(246, 246, 246, 0.98) 100%),
+        #fff;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.06);
+}
+
+.mylist-page-main .anime-filter-toolbar,
+.bookmark-screen .anime-filter-toolbar,
+.share-screen-main .anime-filter-toolbar {
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.mylist-page-main .anime-filter-summary-card,
+.bookmark-screen .anime-filter-summary-card,
+.share-screen-main .anime-filter-summary-card {
+    margin-top: 14px;
+    border-color: rgba(0, 0, 0, 0.16);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(248, 248, 248, 0.98) 100%),
+        #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.mylist-page-main .selection-toolbar,
+.bookmark-screen .bookmark-selection-toolbar,
+.share-screen-main .selection-toolbar,
+.add-screen-container .add-step-page,
+.add-screen-container .add-workspace-toolbar,
+.add-screen-container .add-step-choice-card,
+.add-screen-container .normal-add-surface,
+.add-screen-container .normal-add-suggestions-surface,
+.add-screen-container .normal-selection-review,
+.add-screen-container .bulk-search-progress,
+.add-screen-container .bulk-review-container,
+.add-screen-container .browse-primary-panel,
+.add-screen-container .browse-secondary-panel,
+.add-screen-container .browse-empty-state,
+.add-screen-container .browse-results-area,
+.share-screen-main .share-method-guide,
+.share-screen-main .share-method-card,
+.bookmark-screen .bookmark-empty,
+.mylist-page-main .empty-state,
+.share-screen-main .empty-state {
+    border-color: rgba(0, 0, 0, 0.92);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.995) 0%, rgba(246, 246, 246, 0.985) 100%),
+        #fff;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.07);
+}
+
+.add-screen-container .add-step-page,
+.add-screen-container .add-workspace-toolbar,
+.add-screen-container .normal-add-surface,
+.add-screen-container .normal-add-suggestions-surface,
+.add-screen-container .bulk-search-progress,
+.add-screen-container .bulk-review-container,
+.share-screen-main .share-method-guide,
+.share-screen-main .share-method-card,
+.bookmark-screen .bookmark-empty,
+.mylist-page-main .empty-state,
+.share-screen-main .empty-state {
+    box-shadow:
+        0 14px 30px rgba(0, 0, 0, 0.07),
+        inset 0 4px 0 rgba(0, 0, 0, 0.96);
+}
+
+.bookmark-screen .bookmark-action-notice,
+.share-screen-main .bookmark-action-notice,
+.share-screen-main .share-progress-panel,
+.share-screen-main .share-limit-warning,
+.add-screen-container .bulk-history-restore-note {
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+}
+
+.mylist-page-main .page-action-button,
+.bookmark-screen .page-action-button,
+.share-screen-main .page-action-button,
+.add-screen-container .add-step-back-button,
+.add-screen-container .browse-apply-button,
+.add-screen-container .suggestions-close-button,
+.add-screen-container .suggestions-bottom-close-button,
+.add-screen-container .normal-multi-add-clear,
+.add-screen-container .normal-target-switcher .mode-button,
+.add-screen-container .bulk-target-switcher .mode-button,
+.add-screen-container .entry-tab-button,
+.add-screen-container .browse-page-button {
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.mylist-page-main .page-action-secondary,
+.bookmark-screen .page-action-secondary,
+.share-screen-main .page-action-secondary,
+.add-screen-container .add-step-back-button.subtle,
+.add-screen-container .suggestions-close-button,
+.add-screen-container .normal-multi-add-clear,
+.add-screen-container .browse-page-button {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 240, 240, 0.98) 100%),
+        #fff;
+    color: #111;
+    border-color: rgba(0, 0, 0, 0.92);
+}
+
+.mylist-page-main .page-action-primary,
+.bookmark-screen .page-action-primary,
+.share-screen-main .page-action-primary,
+.add-screen-container .add-step-back-button:not(.subtle),
+.add-screen-container .browse-apply-button,
+.add-screen-container .entry-tab-button.active,
+.add-screen-container .mode-button.active {
+    box-shadow:
+        0 10px 18px rgba(0, 0, 0, 0.12),
+        inset 0 -2px 0 rgba(255, 255, 255, 0.08);
+}
+
+.share-screen-main .share-method-card,
+.add-screen-container .add-step-choice-card {
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease,
+        background 0.18s ease,
+        border-color 0.18s ease;
+}
+
+.selection-action-dock,
+.screen-bottom-home-nav,
+.bookmark-bottom-nav {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(244, 244, 244, 0.975) 100%),
+        rgba(255, 255, 255, 0.98);
+    border-top: 1px solid rgba(0, 0, 0, 0.96);
+    box-shadow: 0 -12px 26px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(10px);
+}
+
+.screen-bottom-home-button,
+.bookmark-bottom-nav-button {
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 768px) {
+    .mylist-page-main.page-shell,
+    .bookmark-screen.page-shell,
+    .add-screen-container.page-shell,
+    .share-screen-main.page-shell {
+        box-shadow:
+            0 18px 36px rgba(0, 0, 0, 0.09),
+            inset 0 4px 0 rgba(0, 0, 0, 0.96);
+    }
+
+    .mylist-page-main .mylist-section-header,
+    .bookmark-screen .bookmark-screen-header,
+    .add-screen-container .add-screen-header,
+    .share-screen-main .bookmark-screen-header {
+        margin-bottom: 22px;
+        padding-bottom: 14px;
+    }
+
+    .mylist-page-main .controls,
+    .bookmark-screen .controls,
+    .share-screen-main .controls,
+    .mylist-page-main .anime-filter-panel,
+    .bookmark-screen .anime-filter-panel,
+    .share-screen-main .anime-filter-panel {
+        padding: 12px;
+    }
+
+    .mylist-page-main .selection-toolbar,
+    .bookmark-screen .bookmark-selection-toolbar,
+    .share-screen-main .selection-toolbar,
+    .add-screen-container .add-step-page,
+    .add-screen-container .add-workspace-toolbar,
+    .add-screen-container .normal-add-surface,
+    .add-screen-container .normal-add-suggestions-surface,
+    .add-screen-container .browse-primary-panel,
+    .add-screen-container .browse-secondary-panel,
+    .add-screen-container .browse-empty-state,
+    .add-screen-container .browse-results-area,
+    .share-screen-main .share-method-guide,
+    .share-screen-main .share-method-card {
+        box-shadow:
+            0 10px 22px rgba(0, 0, 0, 0.07),
+            inset 0 3px 0 rgba(0, 0, 0, 0.96);
+    }
+}
+
+@media (max-width: 480px) {
+    .mylist-page-main .controls,
+    .bookmark-screen .controls,
+    .share-screen-main .controls {
+        padding: 10px;
+    }
+
+    .screen-bottom-home-button,
+    .bookmark-bottom-nav-button {
+        box-shadow: none;
+    }
+}
+
+/* Non-home hierarchy refinement */
+.mylist-page-main .controls,
+.bookmark-screen .controls,
+.share-screen-main .controls,
+.mylist-page-main .anime-filter-panel,
+.bookmark-screen .anime-filter-panel,
+.share-screen-main .anime-filter-panel,
+.mylist-page-main .selection-toolbar,
+.bookmark-screen .bookmark-selection-toolbar,
+.share-screen-main .selection-toolbar,
+.add-screen-container .add-workspace-toolbar,
+.share-screen-main .share-method-guide,
+.mylist-page-main .results-count,
+.bookmark-screen .results-count,
+.share-screen-main .results-count,
+.mylist-page-main .browse-pagination,
+.bookmark-screen .browse-pagination,
+.add-screen-container .browse-pagination {
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    border-left: 4px solid #000;
+    background:
+        linear-gradient(180deg, rgba(252, 252, 252, 0.98) 0%, rgba(246, 246, 246, 0.96) 100%),
+        #fafafa;
+    box-shadow: none;
+}
+
+.mylist-page-main .controls,
+.bookmark-screen .controls,
+.share-screen-main .controls,
+.mylist-page-main .anime-filter-panel,
+.bookmark-screen .anime-filter-panel,
+.share-screen-main .anime-filter-panel,
+.mylist-page-main .selection-toolbar,
+.bookmark-screen .bookmark-selection-toolbar,
+.share-screen-main .selection-toolbar,
+.add-screen-container .add-workspace-toolbar,
+.share-screen-main .share-method-guide {
+    padding-left: 18px;
+}
+
+.mylist-page-main .results-count,
+.bookmark-screen .results-count,
+.share-screen-main .results-count {
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+}
+
+.mylist-page-main .browse-pagination,
+.bookmark-screen .browse-pagination,
+.add-screen-container .browse-pagination {
+    margin-top: 18px;
+    padding: 12px 14px;
+    align-items: center;
+    background:
+        linear-gradient(180deg, rgba(251, 251, 251, 0.98) 0%, rgba(245, 245, 245, 0.96) 100%),
+        #fafafa;
+}
+
+.mylist-page-main .browse-pagination-context,
+.bookmark-screen .browse-pagination-context,
+.add-screen-container .browse-pagination-context {
+    color: #444;
+    font-weight: 700;
+}
+
+.mylist-page-main .browse-page-button,
+.bookmark-screen .browse-page-button,
+.add-screen-container .browse-page-button {
+    box-shadow: none;
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.76);
+}
+
+.mylist-page-main .browse-page-info,
+.bookmark-screen .browse-page-info,
+.add-screen-container .browse-page-info {
+    min-width: 70px;
+    text-align: center;
+    font-weight: 900;
+    color: #111;
+}
+
+.add-screen-container .add-step-page,
+.add-screen-container .normal-add-surface,
+.add-screen-container .bulk-review-container,
+.add-screen-container .browse-primary-panel,
+.add-screen-container .browse-results-area,
+.share-screen-main .share-method-card,
+.bookmark-screen .bookmark-empty,
+.mylist-page-main .empty-state,
+.share-screen-main .empty-state {
+    border-color: rgba(0, 0, 0, 0.78);
+    background: #fff;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.06);
+}
+
+.add-screen-container .add-step-choice-card,
+.add-screen-container .normal-add-suggestions-surface,
+.add-screen-container .normal-selection-review,
+.add-screen-container .bulk-search-progress,
+.add-screen-container .browse-secondary-panel,
+.add-screen-container .browse-empty-state,
+.add-screen-container .browse-results-meta,
+.share-screen-main .share-progress-panel,
+.share-screen-main .share-limit-warning {
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    background:
+        linear-gradient(180deg, rgba(250, 250, 250, 0.98) 0%, rgba(245, 245, 245, 0.96) 100%),
+        #fafafa;
+    box-shadow: none;
+}
+
+.add-screen-container .add-step-choice-card,
+.add-screen-container .browse-secondary-panel,
+.add-screen-container .browse-empty-state,
+.share-screen-main .share-method-guide {
+    border-left: 4px solid #000;
+}
+
+.share-screen-main .share-method-grid {
+    gap: 18px;
+}
+
+.share-screen-main .share-method-card {
+    min-height: 206px;
+}
+
+.add-screen-container .normal-add-suggestions-surface,
+.add-screen-container .normal-selection-review,
+.add-screen-container .browse-results-meta {
+    background: #fafafa;
+}
+
+.mylist-page-main .page-main-subtitle,
+.bookmark-screen .page-main-subtitle,
+.add-screen-container .page-main-subtitle,
+.share-screen-main .page-main-subtitle {
+    color: #5a5a5a;
+}
+
+.selection-action-dock,
+.screen-bottom-home-nav,
+.bookmark-bottom-nav {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(247, 247, 247, 0.975) 100%),
+        rgba(255, 255, 255, 0.98);
+    box-shadow: 0 -10px 22px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 768px) {
+    .mylist-page-main .controls,
+    .bookmark-screen .controls,
+    .share-screen-main .controls,
+    .mylist-page-main .anime-filter-panel,
+    .bookmark-screen .anime-filter-panel,
+    .share-screen-main .anime-filter-panel,
+    .mylist-page-main .selection-toolbar,
+    .bookmark-screen .bookmark-selection-toolbar,
+    .share-screen-main .selection-toolbar,
+    .add-screen-container .add-workspace-toolbar,
+    .share-screen-main .share-method-guide,
+    .mylist-page-main .results-count,
+    .bookmark-screen .results-count,
+    .share-screen-main .results-count,
+    .mylist-page-main .browse-pagination,
+    .bookmark-screen .browse-pagination,
+    .add-screen-container .browse-pagination {
+        border-left-width: 3px;
+    }
+
+    .mylist-page-main .controls,
+    .bookmark-screen .controls,
+    .share-screen-main .controls,
+    .mylist-page-main .anime-filter-panel,
+    .bookmark-screen .anime-filter-panel,
+    .share-screen-main .anime-filter-panel,
+    .mylist-page-main .selection-toolbar,
+    .bookmark-screen .bookmark-selection-toolbar,
+    .share-screen-main .selection-toolbar,
+    .add-screen-container .add-workspace-toolbar,
+    .share-screen-main .share-method-guide {
+        padding-left: 14px;
+    }
+
+    .share-screen-main .share-method-grid {
+        gap: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .mylist-page-main .results-count,
+    .bookmark-screen .results-count,
+    .share-screen-main .results-count,
+    .mylist-page-main .browse-pagination,
+    .bookmark-screen .browse-pagination,
+    .add-screen-container .browse-pagination {
+        padding: 10px 12px;
+    }
+
+    .mylist-page-main .browse-page-info,
+    .bookmark-screen .browse-page-info,
+    .add-screen-container .browse-page-info {
+        min-width: 62px;
+    }
+}
+
+/* Adaptive overflow safety */
+.mylist-page-main .page-action-button,
+.bookmark-screen .page-action-button,
+.add-screen-container .add-step-back-button,
+.add-screen-container .entry-tab-button,
+.add-screen-container .mode-button,
+.add-screen-container .browse-apply-button,
+.add-screen-container .browse-page-button,
+.add-screen-container .browse-add-button,
+.add-screen-container .browse-sub-action-button,
+.add-screen-container .suggestions-close-button,
+.add-screen-container .suggestions-bottom-close-button,
+.share-screen-main .page-action-button,
+.share-screen-main .share-inline-action,
+.screen-bottom-home-button,
+.bookmark-bottom-nav-button {
+    min-width: 0;
+    max-width: 100%;
+}
+
+@media (max-width: 1024px) {
+    .quick-nav-rail.mobile {
+        top: auto;
+        bottom: max(14px, env(safe-area-inset-bottom));
+        right: max(10px, env(safe-area-inset-right));
+        transform: none;
+        flex-direction: row;
+        gap: 8px;
+        border: 1px solid #ddd;
+        background: rgba(255, 255, 255, 0.92);
+        padding: 6px;
+        backdrop-filter: blur(4px);
+    }
+
+    .quick-nav-rail.mobile .quick-nav-button {
+        width: 48px;
+        height: 44px;
+        box-shadow: none;
+    }
+
+    .browse-quick-nav-rail.mobile {
+        top: auto;
+        bottom: max(18px, env(safe-area-inset-bottom));
+        right: max(12px, env(safe-area-inset-right));
+        transform: none;
+        flex-direction: row;
+        gap: 8px;
+        border: 1px solid #ddd;
+        background: rgba(255, 255, 255, 0.92);
+        padding: 8px;
+        backdrop-filter: blur(4px);
+    }
+
+    .browse-quick-nav-rail.mobile .browse-quick-nav-button {
+        width: 52px;
+        height: 48px;
+        box-shadow: none;
+        font-size: 1.1rem;
+    }
+
+    .browse-quick-nav-rail.add-screen-quick-nav.mobile,
+    .browse-quick-nav-rail.bookmark-add-quick-nav.mobile {
+        bottom: calc(108px + env(safe-area-inset-bottom));
+    }
+
+    .mylist-page-main .page-action-button,
+    .bookmark-screen .page-action-button,
+    .add-screen-container .add-step-back-button,
+    .add-screen-container .entry-tab-button,
+    .add-screen-container .mode-button,
+    .add-screen-container .browse-apply-button,
+    .add-screen-container .browse-page-button,
+    .add-screen-container .browse-add-button,
+    .add-screen-container .browse-sub-action-button,
+    .add-screen-container .suggestions-close-button,
+    .add-screen-container .suggestions-bottom-close-button,
+    .share-screen-main .page-action-button,
+    .share-screen-main .share-inline-action,
+    .screen-bottom-home-button,
+    .bookmark-bottom-nav-button {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: keep-all;
+        line-height: 1.35;
+        height: auto;
+    }
+
+    .add-screen-container .browse-card-content > * {
+        min-width: 0;
+    }
+
+    .add-screen-container .browse-card-meta-row {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .add-screen-container .browse-trailer-button {
+        margin-left: 0;
+    }
+
+    .add-screen-container .browse-card-actions {
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .add-screen-container .browse-mini-rating,
+    .add-screen-container .browse-mini-rating .mini-star-rating {
+        width: 100%;
+        max-width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .add-screen-container .browse-mini-rating .mini-star-rating-clear {
+        margin-left: 0;
+    }
+
+    .add-screen-container .browse-add-button,
+    .add-screen-container .browse-sub-action-button {
+        padding: 8px 10px;
+        min-height: 40px;
+    }
+
+    .add-screen-container .browse-card-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .add-screen-container .browse-anime-card {
+        grid-template-columns: minmax(88px, 104px) minmax(0, 1fr);
+        min-height: 154px;
+    }
+
+    .add-screen-container .browse-card-thumb {
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        min-height: 154px;
+    }
+}
+
+@media (max-width: 420px) {
+    .add-screen-container .browse-anime-card {
+        grid-template-columns: 84px minmax(0, 1fr);
+        min-height: 148px;
+    }
+
+    .add-screen-container .browse-card-thumb {
+        min-height: 148px;
+    }
+
+    .add-screen-container .browse-card-content {
+        padding: 8px;
+        gap: 7px;
+    }
+
+    .add-screen-container .browse-card-meta {
+        gap: 6px;
+    }
+
+    .add-screen-container .browse-mini-rating .mini-star-rating-button {
+        width: 22px;
+        height: 22px;
+        font-size: 0.78rem;
+    }
+
+    .add-screen-container .browse-mini-rating .mini-star-rating-clear {
+        min-width: 24px;
+        height: 22px;
+        padding: 0 5px;
+    }
+
+    .add-screen-container .browse-add-button,
+    .add-screen-container .browse-sub-action-button {
+        font-size: 0.71rem;
     }
 }

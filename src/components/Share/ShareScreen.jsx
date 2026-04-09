@@ -901,7 +901,7 @@ function ShareScreen({
         document.documentElement?.scrollHeight || 0
       );
       const maxScroll = Math.max(0, docH - viewportH);
-      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      const isMobile = window.matchMedia('(max-width: 1024px)').matches;
       const listStartTop = listStartRef.current
         ? listStartRef.current.getBoundingClientRect().top + scrollTop
         : Number.POSITIVE_INFINITY;
