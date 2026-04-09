@@ -40,6 +40,7 @@ const Hero = React.forwardRef(function Hero({
     restartToken = 0,
     onPreviewMuteStateChange,
     onPreviewAvailabilityChange,
+    onPreviewPlaybackStartedChange,
     onSlideProgressChange,
     onRequestAdvance,
 }, ref) {
@@ -298,6 +299,27 @@ const Hero = React.forwardRef(function Hero({
         onPreviewAvailabilityChange(Boolean(isActive && shouldRenderTrailerPreview && !hasTrailerPlaybackStalled));
         return undefined;
     }, [hasTrailerPlaybackStalled, isActive, onPreviewAvailabilityChange, shouldRenderTrailerPreview, anime?.id]);
+
+    useEffect(() => {
+        if (typeof onPreviewPlaybackStartedChange !== 'function') {
+            return undefined;
+        }
+
+        onPreviewPlaybackStartedChange(Boolean(
+            isActive
+            && shouldRenderTrailerPreview
+            && !hasTrailerPlaybackStalled
+            && hasTrailerPlaybackStarted
+        ));
+        return undefined;
+    }, [
+        hasTrailerPlaybackStarted,
+        hasTrailerPlaybackStalled,
+        isActive,
+        onPreviewPlaybackStartedChange,
+        shouldRenderTrailerPreview,
+        anime?.id,
+    ]);
 
     useEffect(() => {
         if (typeof onPreviewMuteStateChange !== 'function') {

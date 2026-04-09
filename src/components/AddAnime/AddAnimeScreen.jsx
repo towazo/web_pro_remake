@@ -453,10 +453,6 @@ function AddAnimeScreen({
     const BULK_FAST_MAX_RETRY_ATTEMPTS = 1;
     const BULK_FAST_RETRY_BASE_DELAY_MS = 150;
     const BULK_FAST_RETRY_DELAY_CAP_MS = 450;
-    const SUGGESTION_MIN_HEIGHT = 96;
-    const SUGGESTION_COMFORT_MIN_HEIGHT = 220;
-    const SUGGESTION_MAX_HEIGHT = 420;
-    const SUGGESTION_VIEWPORT_MARGIN = 12;
     const normalizedBrowsePreset = React.useMemo(() => {
         const preset = browsePreset && typeof browsePreset === 'object' ? browsePreset : null;
         const year = Number(preset?.year);
@@ -523,7 +519,11 @@ function AddAnimeScreen({
     const [entryTab, setEntryTab] = useState(() => (
         normalizedBrowsePreset ? 'browse' : (initialEntryTab === 'browse' ? 'browse' : 'search')
     )); // 'search' or 'browse'
-    const [showGuide, setShowGuide] = useState(false);
+    const [addFlowStage, setAddFlowStage] = useState(() => {
+        if (normalizedBrowsePreset) return 'browse-work';
+        if (initialEntryTab === 'browse') return 'browse-work';
+        return 'entry';
+    }); // entry | search-mode | search-work | browse-work
     const [mode, setMode] = useState('normal'); // 'normal' or 'bulk'
     const [query, setQuery] = useState('');
     const [normalTarget, setNormalTarget] = useState('mylist'); // mylist | bookmark
@@ -540,7 +540,6 @@ function AddAnimeScreen({
     const [suggestionRetryUntilTs, setSuggestionRetryUntilTs] = useState(0);
     const [suggestionRetryCountdownSec, setSuggestionRetryCountdownSec] = useState(0);
     const [suggestionReloadToken, setSuggestionReloadToken] = useState(0);
-    const [suggestionsMaxHeight, setSuggestionsMaxHeight] = useState(320);
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
     const [isSearching, setIsSearching] = useState(false);
@@ -553,7 +552,6 @@ function AddAnimeScreen({
     const searchFieldWrapperRef = React.useRef(null);
     const normalMultiAddPanelRef = React.useRef(null);
     const bottomHomeNavRef = React.useRef(null);
-    const suggestionAutoScrollAtRef = React.useRef(0);
 
     // Bulk Add States
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
@@ -731,15 +729,11 @@ function AddAnimeScreen({
         return `preset:${selectedBrowseYear}:${activeBrowsePreset.mediaSeason || ''}:${statusInKey}:${statusNotKey}`;
     }, [selectedBrowseYear, activeBrowsePreset]);
     const isSuggestionPanelVisible = entryTab === 'search'
+        && (isBrowsePresetLocked || addFlowStage === 'search-work')
         && mode === 'normal'
         && showSuggestions
         && !previewData
         && (isSuggesting || suggestions.length > 0 || Boolean(suggestionFeedback.message));
-    const suggestionsDropdownStyle = React.useMemo(() => ({
-        maxHeight: `${suggestionsMaxHeight}px`,
-        top: 'calc(100% + 2px)',
-        bottom: 'auto'
-    }), [suggestionsMaxHeight]);
     const upsertSelectedSuggestionItem = React.useCallback((anime) => {
         const animeId = Number(anime?.id);
         if (!Number.isFinite(animeId)) return;
@@ -756,62 +750,6 @@ function AddAnimeScreen({
             return next;
         });
     }, []);
-    const updateSuggestionsLayout = React.useCallback(() => {
-        const wrapper = searchFieldWrapperRef.current;
-        if (!wrapper) return;
-
-        const rect = wrapper.getBoundingClientRect();
-        const viewportHeight = Number(window.visualViewport?.height)
-            || window.innerHeight
-            || document.documentElement?.clientHeight
-            || 0;
-        const docEl = document.documentElement;
-        const scrollTop = window.scrollY || window.pageYOffset || 0;
-        const scrollableBottom = Math.max(0, (docEl?.scrollHeight || 0) - (scrollTop + viewportHeight));
-
-        let bottomDockOffset = 0;
-        const navRect = bottomHomeNavRef.current?.getBoundingClientRect?.();
-        if (navRect && navRect.height > 0 && navRect.top < viewportHeight) {
-            bottomDockOffset = Math.max(0, viewportHeight - navRect.top);
-        }
-
-        const spaceBelowRaw = Math.max(
-            0,
-            viewportHeight - rect.bottom - SUGGESTION_VIEWPORT_MARGIN - bottomDockOffset
-        );
-        const desiredVisibleHeight = Math.max(SUGGESTION_MIN_HEIGHT, SUGGESTION_COMFORT_MIN_HEIGHT);
-        if (isSuggestionPanelVisible && spaceBelowRaw < desiredVisibleHeight) {
-            const neededScroll = desiredVisibleHeight - spaceBelowRaw;
-            const scrollDelta = Math.min(Math.max(0, neededScroll + 8), scrollableBottom);
-            const now = Date.now();
-            if (scrollDelta > 0 && now - suggestionAutoScrollAtRef.current > 120) {
-                suggestionAutoScrollAtRef.current = now;
-                window.scrollBy({ top: scrollDelta, behavior: 'auto' });
-            }
-        }
-
-        const spaceBelow = Math.max(
-            0,
-            viewportHeight - rect.bottom - SUGGESTION_VIEWPORT_MARGIN - bottomDockOffset
-        );
-        const measuredHeight = Math.floor(spaceBelow);
-        const maxHeight = measuredHeight >= SUGGESTION_MIN_HEIGHT
-            ? Math.min(SUGGESTION_MAX_HEIGHT, measuredHeight)
-            : Math.max(0, measuredHeight);
-
-        setSuggestionsMaxHeight((prev) => {
-            if (Math.abs(prev - maxHeight) <= 1) {
-                return prev;
-            }
-            return maxHeight;
-        });
-    }, [
-        SUGGESTION_COMFORT_MIN_HEIGHT,
-        SUGGESTION_MAX_HEIGHT,
-        SUGGESTION_MIN_HEIGHT,
-        SUGGESTION_VIEWPORT_MARGIN,
-        isSuggestionPanelVisible
-    ]);
 
     useEffect(() => {
         if (isBrowsePresetLocked) {
@@ -837,6 +775,7 @@ function AddAnimeScreen({
 
         setEntryTab('search');
         setMode('bulk');
+        setAddFlowStage('search-work');
         setShowReview(true);
         setIsBulkComplete(false);
         setBulkQuery(restored.bulkQuery);
@@ -1075,33 +1014,6 @@ function AddAnimeScreen({
     useEffect(() => {
         if (!showSuggestions) return;
 
-        let rafId = null;
-        const requestUpdate = () => {
-            if (rafId != null) return;
-            rafId = requestAnimationFrame(() => {
-                rafId = null;
-                updateSuggestionsLayout();
-            });
-        };
-
-        requestUpdate();
-        window.addEventListener('resize', requestUpdate);
-        window.addEventListener('scroll', requestUpdate, true);
-        window.visualViewport?.addEventListener?.('resize', requestUpdate);
-        window.visualViewport?.addEventListener?.('scroll', requestUpdate);
-
-        return () => {
-            if (rafId != null) cancelAnimationFrame(rafId);
-            window.removeEventListener('resize', requestUpdate);
-            window.removeEventListener('scroll', requestUpdate, true);
-            window.visualViewport?.removeEventListener?.('resize', requestUpdate);
-            window.visualViewport?.removeEventListener?.('scroll', requestUpdate);
-        };
-    }, [showSuggestions, suggestions.length, isSuggesting, suggestionFeedback.message, updateSuggestionsLayout]);
-
-    useEffect(() => {
-        if (!showSuggestions) return;
-
         const handlePointerDown = (event) => {
             const wrapper = searchFieldWrapperRef.current;
             if (!wrapper) return;
@@ -1296,6 +1208,7 @@ function AddAnimeScreen({
         if (normalizedBrowsePreset) {
             setSelectedBrowseSpecialPresetKey('');
             setEntryTab('browse');
+            setAddFlowStage('browse-work');
             setSelectedBrowseYear(normalizedBrowsePreset.year);
             setBrowseYearDraft(String(normalizedBrowsePreset.year));
             setBrowsePage(1);
@@ -1306,8 +1219,15 @@ function AddAnimeScreen({
             return;
         }
 
+        if (bulkInterruptedHistoryActive) {
+            setEntryTab('search');
+            setAddFlowStage('search-work');
+            return;
+        }
+
         setEntryTab(initialEntryTab === 'browse' ? 'browse' : 'search');
-    }, [normalizedBrowsePreset, initialEntryTab]);
+        setAddFlowStage(initialEntryTab === 'browse' ? 'browse-work' : 'entry');
+    }, [bulkInterruptedHistoryActive, normalizedBrowsePreset, initialEntryTab]);
 
     useEffect(() => {
         if (!selectedBrowseYear) return;
@@ -1739,6 +1659,49 @@ function AddAnimeScreen({
         if (nextTab === entryTab) return;
         entryScrollPositionsRef.current[entryTab] = window.scrollY || window.pageYOffset || 0;
         setEntryTab(nextTab);
+    };
+
+    const scrollAddScreenToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleSelectEntryRoute = (nextTab) => {
+        if (isBrowsePresetLocked && nextTab !== 'browse') return;
+        if (nextTab !== entryTab) {
+            handleEntryTabChange(nextTab);
+        }
+        setShowSuggestions(false);
+        setAddFlowStage(nextTab === 'search' ? 'search-mode' : 'browse-work');
+        requestAnimationFrame(() => {
+            scrollAddScreenToTop();
+        });
+    };
+
+    const handleSelectSearchMode = (nextMode) => {
+        setMode(nextMode);
+        setShowSuggestions(false);
+        setAddFlowStage('search-work');
+        requestAnimationFrame(() => {
+            scrollAddScreenToTop();
+        });
+    };
+
+    const handleReturnToEntrySelection = () => {
+        if (isBrowsePresetLocked) return;
+        setShowSuggestions(false);
+        setAddFlowStage('entry');
+        requestAnimationFrame(() => {
+            scrollAddScreenToTop();
+        });
+    };
+
+    const handleReturnToSearchModeSelection = () => {
+        if (isBrowsePresetLocked) return;
+        setShowSuggestions(false);
+        setAddFlowStage('search-mode');
+        requestAnimationFrame(() => {
+            scrollAddScreenToTop();
+        });
     };
 
     const handleBrowseYearSubmit = () => {
@@ -3262,13 +3225,6 @@ function AddAnimeScreen({
         }
     };
 
-    const guideSummaryText = isBrowsePresetLocked
-        ? (normalizedBrowsePreset?.description || '対象シーズンの作品を追加できます。')
-        : entryTab === 'search'
-            ? (mode === 'bulk'
-                ? '複数作品をまとめて追加できます。必要時のみ詳細ガイドを確認してください。'
-                : '作品名を直接入力して追加する導線です。')
-            : '年代から一覧で探し、必要に応じて絞り込みを追加できる探索導線です。';
     const browseCurrentPage = Math.max(1, Number(browsePageInfo.currentPage) || browsePage);
     const browseLastPage = Math.max(1, Number(browsePageInfo.lastPage) || browseCurrentPage);
     const browsePerPage = Math.max(1, Number(browsePageInfo.perPage) || YEAR_PER_PAGE);
@@ -3337,6 +3293,16 @@ function AddAnimeScreen({
     const bulkReviewDismissLabel = !isBulkComplete && !hasBulkAddableResults
         ? '追加できる作品がないため次の検索へ'
         : 'キャンセル';
+    const normalSuggestionsCountLabel = suggestions.length > 0 ? `${suggestions.length}件` : '';
+    const showEntrySelectionPage = !isBrowsePresetLocked && addFlowStage === 'entry';
+    const showSearchModeSelectionPage = !isBrowsePresetLocked && addFlowStage === 'search-mode';
+    const showSearchWorkspace = entryTab === 'search' && (isBrowsePresetLocked || addFlowStage === 'search-work');
+    const showBrowseWorkspace = entryTab === 'browse' && (isBrowsePresetLocked || addFlowStage === 'browse-work');
+    const showWorkspaceControls = showSearchWorkspace || showBrowseWorkspace;
+    const workspacePrimaryLabel = showSearchWorkspace ? 'タイトルで探す' : '一覧から探す';
+    const workspaceSecondaryLabel = showSearchWorkspace
+        ? (mode === 'bulk' ? 'まとめて追加' : '1つずつ追加')
+        : (normalizedBrowsePreset?.title || '');
     const disableBulkFailedRetry = isSearching || bulkFetchFailedRetryCount === 0;
     const disableBulkRetryAll = isSearching
         || !bulkQuery.trim()
@@ -3408,141 +3374,149 @@ function AddAnimeScreen({
                     <div className="browse-preset-note">{normalizedBrowsePreset.title}</div>
                 )}
 
-                {!isBrowsePresetLocked && (
-                    <div className="entry-tab-switcher">
-                        <button
-                            className={`entry-tab-button ${entryTab === 'search' ? 'active' : ''}`}
-                            onClick={() => handleEntryTabChange('search')}
-                            disabled={isSearching || browseLoading}
-                        >
-                            検索で追加
-                        </button>
-                        <button
-                            className={`entry-tab-button ${entryTab === 'browse' ? 'active' : ''}`}
-                            onClick={() => handleEntryTabChange('browse')}
-                            disabled={isSearching || browseLoading}
-                        >
-                            年代リストから追加
-                        </button>
-                    </div>
-                )}
-
-                <div className="entry-guide-inline">
-                    <div className="entry-guide-summary-wrap">
-                        <span className="entry-guide-badge">{entryTab === 'search' ? '検索型' : '探索型'}</span>
-                        <p className="entry-guide-summary">{guideSummaryText}</p>
-                    </div>
-                    <button
-                        type="button"
-                        className="entry-guide-toggle"
-                        onClick={() => setShowGuide(prev => !prev)}
-                    >
-                        {showGuide ? '詳細ガイドを隠す' : '詳細ガイドを表示'}
-                    </button>
-                </div>
-
-                {showGuide && (
-                    <div className="add-info-grid compact">
-                        <div className="add-description">
-                            <h3>使い方</h3>
-                            {entryTab === 'search' ? (
-                                <ul>
-                                    <li>追加したい作品名を入力してください</li>
-                                    {mode === 'normal' ? (
-                                        <li>表示される候補から選択するか、検索ボタンを押してください</li>
-                                    ) : (
-                                        <li>{`複数の作品名を改行区切りで入力（貼り付け）してください（最大 ${MAX_BULK_TITLES}件）`}</li>
-                                    )}
-                                    <li>内容を確認して「登録する」を押してください</li>
-                                </ul>
-                            ) : (
-                                <ul>
-                                    {isBrowsePresetLocked ? (
-                                        <>
-                                            <li>対象シーズンの作品が自動表示されます</li>
-                                            <li>各作品カードからブックマーク/マイリストへ追加できます</li>
-                                            <li>登録済み作品はボタン表示で状態を確認できます</li>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <li>まず年代を選択して「一覧を表示」を押してください</li>
-                                            <li>一覧が表示されたあとで必要に応じて「絞り込む」を使ってください</li>
-                                            <li>年代を切り替えると絞り込み条件はリセットされます</li>
-                                            <li>表示された一覧から作品を追加してください</li>
-                                        </>
-                                    )}
-                                </ul>
-                            )}
+                {showEntrySelectionPage && (
+                    <div className="add-step-page">
+                        <div className="add-step-page-head">
+                            <h3 className="add-step-page-title">作品の探し方を選ぶ</h3>
                         </div>
-
-                        <div className="search-spec">
-                            <h3>{entryTab === 'search' ? '検索のコツ' : '探索ガイド'}</h3>
-                            {entryTab === 'search' ? (
-                                <ul>
-                                    <li>正式名称（例: STEINS;GATE）での検索を推奨します</li>
-                                    <li>英語タイトルの方がヒットしやすい可能性があります</li>
-                                    <li>略称よりも正式なタイトルの方がヒットしやすいです</li>
-                                </ul>
-                            ) : (
-                                <ul>
-                                    <li>{isBrowsePresetLocked ? '対象シーズンの作品を一覧から選んで追加してください' : 'ピンポイント検索は「検索で追加」をご利用ください'}</li>
-                                    <li>年代リストは思い出しながら探す用途に適しています</li>
-                                    <li>ページは年全体で切り替わり、季節単位では分割しません</li>
-                                </ul>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Mode Switcher */}
-                {entryTab === 'search' && (
-                    <div className="mode-switcher-block">
-                        <div className="mode-switcher-label">追加モード</div>
-                        <div className="mode-switcher">
+                        <div className="add-step-choice-grid">
                             <button
-                                className={`mode-button ${mode === 'normal' ? 'active' : ''}`}
-                                onClick={() => { setMode('normal'); handleCancel(); }}
-                                disabled={isSearching}
+                                type="button"
+                                className="add-step-choice-card"
+                                onClick={() => handleSelectEntryRoute('search')}
+                                disabled={isSearching || browseLoading}
                             >
-                                通常追加
+                                <strong className="add-step-choice-title">タイトルで探す</strong>
+                                <span className="add-step-choice-text">作品名を入力する</span>
                             </button>
                             <button
-                                className={`mode-button ${mode === 'bulk' ? 'active' : ''}`}
-                                onClick={() => { setMode('bulk'); handleCancel(); }}
-                                disabled={isSearching}
+                                type="button"
+                                className="add-step-choice-card"
+                                onClick={() => handleSelectEntryRoute('browse')}
+                                disabled={isSearching || browseLoading}
                             >
-                                一括追加
+                                <strong className="add-step-choice-title">一覧から探す</strong>
+                                <span className="add-step-choice-text">年代や今季から選ぶ</span>
                             </button>
                         </div>
                     </div>
                 )}
+
+                {showSearchModeSelectionPage && (
+                    <div className="add-step-page">
+                        <div className="add-step-page-head">
+                            <h3 className="add-step-page-title">追加のしかたを選ぶ</h3>
+                        </div>
+                        <div className="add-step-choice-grid mode-choice-grid">
+                            <button
+                                type="button"
+                                className="add-step-choice-card"
+                                onClick={() => handleSelectSearchMode('normal')}
+                                disabled={isSearching}
+                            >
+                                <strong className="add-step-choice-title">1つずつ追加</strong>
+                                <span className="add-step-choice-text">候補を見ながら選ぶ</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="add-step-choice-card"
+                                onClick={() => handleSelectSearchMode('bulk')}
+                                disabled={isSearching}
+                            >
+                                <strong className="add-step-choice-title">まとめて追加</strong>
+                                <span className="add-step-choice-text">複数作品を一度に追加</span>
+                            </button>
+                        </div>
+                        <div className="add-step-page-actions">
+                            <button
+                                type="button"
+                                className="add-step-back-button"
+                                onClick={handleReturnToEntrySelection}
+                            >
+                                戻る
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {showWorkspaceControls && (
+                    <div className="add-workspace-toolbar">
+                        <div className="add-workspace-toolbar-summary">
+                            <span className="entry-guide-badge">{workspacePrimaryLabel}</span>
+                            {workspaceSecondaryLabel && (
+                                <span className="add-workspace-pill">{workspaceSecondaryLabel}</span>
+                            )}
+                        </div>
+                        <div className="add-workspace-toolbar-actions">
+                            {showSearchWorkspace && !isBrowsePresetLocked && (
+                                <button
+                                    type="button"
+                                    className="add-step-back-button subtle"
+                                    onClick={handleReturnToSearchModeSelection}
+                                >
+                                    戻る
+                                </button>
+                            )}
+                            {showBrowseWorkspace && !isBrowsePresetLocked && (
+                                <button
+                                    type="button"
+                                    className="add-step-back-button subtle"
+                                    onClick={handleReturnToEntrySelection}
+                                >
+                                    戻る
+                                </button>
+                            )}
+                            {showSearchWorkspace && !isBrowsePresetLocked && (
+                                <button
+                                    type="button"
+                                    className="add-step-back-button subtle"
+                                    onClick={handleReturnToEntrySelection}
+                                >
+                                    最初に戻る
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
             </div>
 
-            {entryTab === 'search' && (mode === 'normal' ? (
+            {showSearchWorkspace && (mode === 'normal' ? (
                 !previewData && (
-                    <form onSubmit={handleSearch} className="add-form">
-                        <div className="search-field-wrapper" ref={searchFieldWrapperRef}>
-                            <input
-                                type="text"
-                                value={query}
-                                onChange={(e) => {
-                                    setQuery(e.target.value);
-                                    if (previewData) setPreviewData(null); // Reset preview when typing
-                                }}
-                                placeholder="作品タイトルを入力（日本語・英語可）"
-                                disabled={isSearching}
-                                className="search-input"
-                                enterKeyHint="search"
-                                onFocus={() => {
-                                    if (query.trim().length >= 2) setShowSuggestions(true);
-                                }}
-                            />
+                    <form onSubmit={handleSearch} className="add-form normal-add-form">
+                        <div className="normal-add-search-area" ref={searchFieldWrapperRef}>
+                            <section className="normal-add-surface normal-add-search-surface">
+                                <div className="normal-add-surface-head">
+                                    <div className="normal-add-surface-heading">
+                                        <h3 className="normal-add-surface-title">作品名を入力</h3>
+                                        {selectedSuggestionCount > 0 && (
+                                            <span className="normal-add-selection-pill">{selectedSuggestionCount}件選択中</span>
+                                        )}
+                                    </div>
+                                    <p className="normal-add-surface-text">候補から選ぶ</p>
+                                </div>
+
+                                <div className="search-field-wrapper">
+                                    <input
+                                        type="text"
+                                        value={query}
+                                        onChange={(e) => {
+                                            setQuery(e.target.value);
+                                            if (previewData) setPreviewData(null); // Reset preview when typing
+                                        }}
+                                        placeholder="作品名を入力"
+                                        disabled={isSearching}
+                                        className="search-input"
+                                        enterKeyHint="search"
+                                        onFocus={() => {
+                                            if (query.trim().length >= 2) setShowSuggestions(true);
+                                        }}
+                                    />
+                                </div>
+                            </section>
 
                             {showSuggestions && isSuggesting && (
-                                <div
-                                    className="suggestions-loading"
-                                    style={suggestionsDropdownStyle}
-                                >
+                                <section className="normal-add-suggestions-surface suggestions-loading">
                                     <div className="suggestions-panel-toolbar loading">
                                         <span className="suggestions-panel-title">候補を検索中...</span>
                                         <button
@@ -3553,16 +3527,25 @@ function AddAnimeScreen({
                                             閉じる
                                         </button>
                                     </div>
-                                </div>
+                                </section>
                             )}
 
                             {showSuggestions && !isSuggesting && suggestions.length === 0 && suggestionFeedback.message && (
-                                <div
-                                    className={`suggestions-status ${suggestionFeedback.type || 'empty'}`}
-                                    style={suggestionsDropdownStyle}
+                                <section
+                                    className={`normal-add-suggestions-surface suggestions-status ${suggestionFeedback.type || 'empty'}`}
                                     role="status"
                                     aria-live="polite"
                                 >
+                                    <div className="suggestions-panel-toolbar loading">
+                                        <span className="suggestions-panel-title">候補一覧</span>
+                                        <button
+                                            type="button"
+                                            className="suggestions-close-button"
+                                            onClick={handleCloseSuggestions}
+                                        >
+                                            閉じる
+                                        </button>
+                                    </div>
                                     <div className="suggestions-status-text">{suggestionFeedback.message}</div>
                                     {suggestionFeedback.type === 'warning' && (
                                         <div className="suggestions-status-actions">
@@ -3590,17 +3573,18 @@ function AddAnimeScreen({
                                             候補を閉じる
                                         </button>
                                     </div>
-                                </div>
+                                </section>
                             )}
 
-                            {/* Suggestions Dropdown */}
                             {showSuggestions && suggestions.length > 0 && (
-                                <div
-                                    className="suggestions-dropdown"
-                                    style={suggestionsDropdownStyle}
-                                >
+                                <section className="normal-add-suggestions-surface suggestions-dropdown">
                                     <div className="suggestions-panel-toolbar">
-                                        <span className="suggestions-panel-title">候補一覧</span>
+                                        <div className="suggestions-panel-heading">
+                                            <span className="suggestions-panel-title">候補一覧</span>
+                                            {normalSuggestionsCountLabel && (
+                                                <span className="suggestions-panel-count">{normalSuggestionsCountLabel}</span>
+                                            )}
+                                        </div>
                                         <button
                                             type="button"
                                             className="suggestions-close-button"
@@ -3667,8 +3651,13 @@ function AddAnimeScreen({
                                                     className="suggestion-thumb"
                                                 />
                                                 <div className="suggestion-info">
-                                                    <div className="suggestion-title">
-                                                        {anime.title.native || anime.title.romaji}
+                                                    <div className="suggestion-title-row">
+                                                        <div className="suggestion-title">
+                                                            {anime.title.native || anime.title.romaji}
+                                                        </div>
+                                                        <span className={`suggestion-state-pill ${isSelected ? 'selected' : ''}`.trim()}>
+                                                            {isSelected ? '選択中' : 'タップで選択'}
+                                                        </span>
                                                     </div>
                                                     <div className="suggestion-meta">
                                                         {anime.seasonYear && <span>{anime.seasonYear}年</span>}
@@ -3696,30 +3685,33 @@ function AddAnimeScreen({
                                             選択リストに追加する
                                         </button>
                                     </div>
-                                </div>
+                                </section>
                             )}
                         </div>
-                        {selectedSuggestionCount === 0 && (
-                            <div className="normal-search-helper" role="note">
-                                <p className="normal-search-helper-title">候補をタップして追加候補に入れられます</p>
-                                <p className="normal-search-helper-text">直接作品を開きたいときは、キーボードの検索 / Enter を使えます。</p>
-                            </div>
+                        {selectedSuggestionCount === 0 && !showSuggestions && (
+                            <p className="normal-add-inline-hint">候補をタップで選択</p>
                         )}
                         {selectedSuggestionCount > 0 && (
-                            <div ref={normalMultiAddPanelRef} className="normal-multi-add-panel">
+                            <section ref={normalMultiAddPanelRef} className="normal-multi-add-panel normal-add-surface">
+                                <div className="normal-add-surface-head normal-selection-surface-head">
+                                    <div className="normal-add-surface-heading">
+                                        <h3 className="normal-add-surface-title">選択した作品</h3>
+                                        <span className="normal-add-selection-pill strong">{selectedSuggestionCount}件</span>
+                                    </div>
+                                    <p className="normal-add-surface-text">追加先を選んで登録</p>
+                                </div>
                                 <div className="normal-multi-add-header">
-                                    <span className="normal-multi-add-count">{selectedSuggestionCount}件選択中</span>
                                     <button
                                         type="button"
                                         className="normal-multi-add-clear"
                                         onClick={handleClearSuggestionSelection}
                                         disabled={selectedSuggestionCount === 0}
                                     >
-                                        選択解除
+                                        すべて解除
                                     </button>
                                 </div>
                                 <div className="mode-switcher-block normal-target-switcher">
-                                    <div className="mode-switcher-label">追加先</div>
+                                    <div className="mode-switcher-label normal-target-switcher-label">追加先</div>
                                     <div className="mode-switcher">
                                         <button
                                             type="button"
@@ -3741,7 +3733,6 @@ function AddAnimeScreen({
                                 </div>
                                 {selectedSuggestionCount > 0 && (
                                     <div className="normal-selection-review" role="region" aria-label="追加前の作品一覧">
-                                        <p className="normal-selection-review-label">追加前の確認一覧</p>
                                         <div className="normal-selection-review-list">
                                             {selectedSuggestions.map((anime) => {
                                                 const title = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品名不明';
@@ -3794,7 +3785,7 @@ function AddAnimeScreen({
                                 >
                                     {`選択した作品を${normalTargetLabel}に追加`}
                                 </button>
-                            </div>
+                            </section>
                         )}
                     </form>
                 )
@@ -4154,7 +4145,7 @@ function AddAnimeScreen({
                 </div>
             ))}
 
-            {entryTab === 'browse' && (
+            {showBrowseWorkspace && (
                 <div className="entry-browse-section">
                     <div className="browse-control-panel">
                         {!isBrowsePresetLocked && (
@@ -4461,7 +4452,7 @@ function AddAnimeScreen({
             )}
 
             {/* Status Message */}
-            {entryTab === 'search'
+            {showSearchWorkspace
                 && status.message
                 && !(mode === 'bulk' && isSearching)
                 && !(mode === 'bulk' && showReview)
@@ -4489,7 +4480,7 @@ function AddAnimeScreen({
                 </div>
             )}
 
-            {entryTab === 'search' && mode === 'normal' && previewData && (
+            {showSearchWorkspace && mode === 'normal' && previewData && (
                 <div className="preview-confirmation-card">
                     <div className="preview-card-header">
                         <h3>この作品で間違いないですか？</h3>
@@ -4547,14 +4538,14 @@ function AddAnimeScreen({
                 </div>
             )}
 
-            {entryTab === 'search' && bulkOverflowInfo && (
+            {showSearchWorkspace && bulkOverflowInfo && (
                 <div className="pending-overflow-container">
                     {renderBulkOverflowNotice()}
                 </div>
             )}
 
             {/* Persistent Pending Checklist */}
-            {entryTab === 'search' && pendingList.length > 0 && (
+            {showSearchWorkspace && pendingList.length > 0 && (
                 <div className="pending-list-container">
                     <div className="pending-list-header">
                         <h3>保留リスト({pendingList.length})</h3>
@@ -4611,7 +4602,7 @@ function AddAnimeScreen({
                 </button>
             </nav>
 
-            {entryTab === 'browse' && selectedBrowseYear && browseQuickNavState.visible && (
+            {showBrowseWorkspace && selectedBrowseYear && browseQuickNavState.visible && (
                 <aside
                     className={`browse-quick-nav-rail add-screen-quick-nav ${browseQuickNavState.mobile ? 'mobile' : ''}`}
                     aria-label="一覧内ページ移動"

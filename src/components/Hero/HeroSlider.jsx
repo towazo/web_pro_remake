@@ -79,6 +79,7 @@ function HeroSlider({
     const [previewMutedChangeToken, setPreviewMutedChangeToken] = useState(0);
     const [activePreviewMuted, setActivePreviewMuted] = useState(true);
     const [activePreviewAudioAvailable, setActivePreviewAudioAvailable] = useState(false);
+    const [activePreviewPlaybackStarted, setActivePreviewPlaybackStarted] = useState(false);
     const [lastViewedAnime, setLastViewedAnime] = useState(null);
     const [currentSlideRestartToken, setCurrentSlideRestartToken] = useState(0);
     const timelineRef = useRef(null);
@@ -149,6 +150,7 @@ function HeroSlider({
     useEffect(() => {
         setActivePreviewMuted(true);
         setActivePreviewAudioAvailable(false);
+        setActivePreviewPlaybackStarted(false);
         currentProgressRef.current = 0;
         if (progressFillRef.current) {
             progressFillRef.current.style.transform = 'translateY(-50%) scaleX(0)';
@@ -332,6 +334,7 @@ function HeroSlider({
     const sliderAudioStatusText = isPreviewMuted
         ? '音声設定はオフです'
         : '音声設定はオンです';
+    const isSliderAudioToggleDisabled = activePreviewAudioAvailable && !activePreviewPlaybackStarted;
     const previousSlideStatusText = !lastViewedAnime
         ? 'まだありません'
         : isLastViewedAnimeInMyList
@@ -498,6 +501,7 @@ function HeroSlider({
                             restartToken={actualIndex === currentIndex ? currentSlideRestartToken : 0}
                             onPreviewMuteStateChange={actualIndex === currentIndex ? setActivePreviewMuted : undefined}
                             onPreviewAvailabilityChange={actualIndex === currentIndex ? setActivePreviewAudioAvailable : undefined}
+                            onPreviewPlaybackStartedChange={actualIndex === currentIndex ? setActivePreviewPlaybackStarted : undefined}
                             onSlideProgressChange={actualIndex === currentIndex ? handleSlideProgressChange : undefined}
                             onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
                         />
@@ -615,8 +619,10 @@ function HeroSlider({
                             muted={isPreviewMuted}
                             className="slider-audio-toggle"
                             onClick={handleSliderAudioToggle}
+                            disabled={isSliderAudioToggleDisabled}
                             labelOn="スライダーのトレーラー音声をオンにする"
                             labelOff="スライダーのトレーラー音声をオフにする"
+                            labelDisabled="トレーラーの再生開始後に音声を切り替えられます"
                         />
                         <div className="slider-audio-copy">
                             <span className="slider-audio-label">トレーラー音声</span>

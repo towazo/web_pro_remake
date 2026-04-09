@@ -300,6 +300,7 @@ function App() {
   const [isServerLibraryReady, setIsServerLibraryReady] = useState(false);
   const [detailEnrichmentRetryTick, setDetailEnrichmentRetryTick] = useState(0);
   const [myListViewportPriorityMap, setMyListViewportPriorityMap] = useState({});
+  const [addScreenResetNonce, setAddScreenResetNonce] = useState(0);
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
@@ -1089,6 +1090,14 @@ function App() {
     navigateTo(targetView, options);
   };
 
+  const handleOpenAddView = () => {
+    if (view === 'add') {
+      setAddScreenResetNonce((prev) => prev + 1);
+      return;
+    }
+    navigateTo('add');
+  };
+
   const handleOnboardingPrev = () => {
     setOnboardingStep((prev) => Math.max(0, prev - 1));
   };
@@ -1493,7 +1502,7 @@ function App() {
         <button
           type="button"
           className={`global-view-nav-button ${isAddView ? 'active' : ''}`}
-          onClick={() => navigateTo('add')}
+          onClick={handleOpenAddView}
           disabled={isOnboardingNavigationLocked}
         >
           作品の追加
@@ -1504,7 +1513,7 @@ function App() {
       {isAddView ? (
         <main className="main-content">
           <AddAnimeScreen
-            key={view}
+            key={`${view}:${addScreenResetNonce}`}
             onAdd={handleAddAnime}
             onRemove={handleRemoveAnime}
             onToggleBookmark={handleToggleBookmark}
@@ -1592,7 +1601,7 @@ function App() {
               <div className="bookmark-screen-actions mylist-screen-actions">
                 <button
                   className="bookmark-screen-add page-action-button page-action-primary page-action-strong"
-                  onClick={() => navigateTo('add')}
+                  onClick={handleOpenAddView}
                 >
                   <span className="bookmark-screen-add-icon">＋</span>
                   <span>作品を追加</span>
