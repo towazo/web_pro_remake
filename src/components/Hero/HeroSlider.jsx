@@ -68,6 +68,7 @@ function HeroSlider({
     onToggleBookmark,
     onRefresh,
     onCycleComplete,
+    onTutorialAction,
     showRefreshButton = false,
     isRefreshing = false,
     isLoading = false,
@@ -506,6 +507,7 @@ function HeroSlider({
                             onPreviewPlaybackStartedChange={actualIndex === currentIndex ? setActivePreviewPlaybackStarted : undefined}
                             onSlideProgressChange={actualIndex === currentIndex ? handleSlideProgressChange : undefined}
                             onRequestAdvance={actualIndex === currentIndex ? nextSlide : undefined}
+                            onTutorialAction={actualIndex === currentIndex ? onTutorialAction : undefined}
                         />
                     );
                 })}

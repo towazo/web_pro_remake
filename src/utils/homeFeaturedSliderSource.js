@@ -13,9 +13,9 @@ const HOME_FEATURED_SLIDER_SOURCE_LABELS = Object.freeze({
 });
 
 export const sanitizeHomeFeaturedSliderSource = (value) => (
-  value === HOME_FEATURED_SLIDER_SOURCES.myList
-    ? HOME_FEATURED_SLIDER_SOURCES.myList
-    : HOME_FEATURED_SLIDER_SOURCES.currentSeason
+  value === HOME_FEATURED_SLIDER_SOURCES.currentSeason
+    ? HOME_FEATURED_SLIDER_SOURCES.currentSeason
+    : HOME_FEATURED_SLIDER_SOURCES.myList
 );
 
 export const getHomeFeaturedSliderSourceLabel = (value) => (
@@ -25,14 +25,14 @@ export const getHomeFeaturedSliderSourceLabel = (value) => (
 export const readHomeFeaturedSliderSourceFromStorage = () => {
   const storage = getSafeLocalStorage();
   if (!storage) {
-    return HOME_FEATURED_SLIDER_SOURCES.currentSeason;
+    return HOME_FEATURED_SLIDER_SOURCES.myList;
   }
 
   try {
     const raw = storage.getItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY);
     return sanitizeHomeFeaturedSliderSource(raw);
   } catch (_) {
-    return HOME_FEATURED_SLIDER_SOURCES.currentSeason;
+    return HOME_FEATURED_SLIDER_SOURCES.myList;
   }
 };
 
@@ -43,7 +43,7 @@ export const writeHomeFeaturedSliderSourceToStorage = (value) => {
   const normalized = sanitizeHomeFeaturedSliderSource(value);
 
   try {
-    if (normalized === HOME_FEATURED_SLIDER_SOURCES.currentSeason) {
+    if (normalized === HOME_FEATURED_SLIDER_SOURCES.myList) {
       storage.removeItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY);
       return;
     }

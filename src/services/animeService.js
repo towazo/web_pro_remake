@@ -2148,6 +2148,13 @@ const createTutorialFeaturedSlides = () => ([
     badge: "Welcome",
     title: "AniTriggerへようこそ",
     description: "視聴済みアニメを記録・整理し、思い出すきっかけを作るWebアプリです。\n自分だけのアーカイブを作りましょう。",
+    actionHint: "まずは記録を見返せるマイリストページをのぞけます。",
+    actions: [
+      {
+        id: "open-mylist",
+        label: "マイリストを見る",
+      }
+    ],
     image: "/images/logo.png",
     uniqueId: "tut-1"
   },
@@ -2156,6 +2163,13 @@ const createTutorialFeaturedSlides = () => ([
     badge: "How to use",
     title: "作品を追加しよう",
     description: "画面上部の「作品の追加」から、視聴したアニメ作品を検索して追加できます。\nタイトル検索やジャンル・年別の一覧からも簡単に見つけられます。",
+    actionHint: "検索や一覧から作品を探したいときは追加ページから始められます。",
+    actions: [
+      {
+        id: "open-add",
+        label: "作品の追加を開く",
+      }
+    ],
     image: "/images/logo.png",
     uniqueId: "tut-2"
   },
@@ -2164,8 +2178,34 @@ const createTutorialFeaturedSlides = () => ([
     badge: "Features",
     title: "見た作品も、見たい作品も",
     description: "視聴済みは「マイリスト」、気になる作品は「ブックマーク」で分けて管理。\n評価や並び替えで、あなたのアーカイブをもっと便利に。",
+    actionHint: "使い分けたい内容に合わせて、それぞれのページへ移動できます。",
+    actions: [
+      {
+        id: "open-mylist",
+        label: "マイリストへ",
+      },
+      {
+        id: "open-bookmarks",
+        label: "ブックマークへ",
+      }
+    ],
     image: "/images/logo.png",
     uniqueId: "tut-3"
+  },
+  {
+    isTutorial: true,
+    badge: "Customize",
+    title: "スライドを自分好みにカスタマイズ",
+    description: "設定からホーム上部のスライド内容を切り替えられます。\nマイリスト表示と今季放送中表示を、使い方に合わせて選べます。",
+    actionHint: "ホームの見え方を調整したいときは、ここからすぐ変更できます。",
+    actions: [
+      {
+        id: "open-home-featured-slider-settings",
+        label: "スライド設定を開く",
+      }
+    ],
+    image: "/images/logo.png",
+    uniqueId: "tut-4"
   }
 ]);
 

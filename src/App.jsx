@@ -1052,6 +1052,25 @@ function App() {
     }, 360);
   };
 
+  const handleTutorialSliderAction = useCallback((actionId) => {
+    switch (actionId) {
+      case 'open-mylist':
+        navigateTo('mylist');
+        break;
+      case 'open-bookmarks':
+        navigateTo('bookmarks');
+        break;
+      case 'open-add':
+        navigateTo('add');
+        break;
+      case 'open-home-featured-slider-settings':
+        navigateTo('homeCustomizeSlider');
+        break;
+      default:
+        break;
+    }
+  }, [navigateTo]);
+
   const handleFeaturedSlideCycleComplete = useCallback((completedAnime) => {
     if (featuredSourceAnimeList.length <= 1) return;
 
@@ -2126,6 +2145,7 @@ function App() {
             onRefresh={handleRefreshFeaturedSlides}
             onPlayTrailer={handleOpenTrailer}
             onCycleComplete={handleFeaturedSlideCycleComplete}
+            onTutorialAction={handleTutorialSliderAction}
             showRefreshButton={featuredSliderState.showRefreshButton}
             isRefreshing={isRefreshingFeatured}
             isLoading={shouldShowFeaturedSliderLoading}

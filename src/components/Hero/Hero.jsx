@@ -43,6 +43,7 @@ const Hero = React.forwardRef(function Hero({
     onPreviewPlaybackStartedChange,
     onSlideProgressChange,
     onRequestAdvance,
+    onTutorialAction,
 }, ref) {
     const [translatedDesc, setTranslatedDesc] = useState(null);
     const [isTranslating, setIsTranslating] = useState(false);
@@ -136,6 +137,17 @@ const Hero = React.forwardRef(function Hero({
         ? anime.badge
         : 'GUIDE';
     const hasTutorialImage = Boolean(anime?.image);
+    const tutorialActions = (
+        Array.isArray(anime?.actions)
+            ? anime.actions
+            : [{ id: anime?.actionId, label: anime?.actionLabel }]
+    )
+        .map((action) => ({
+            id: typeof action?.id === 'string' ? action.id.trim() : '',
+            label: typeof action?.label === 'string' ? action.label.trim() : '',
+        }))
+        .filter((action) => action.id.length > 0 && action.label.length > 0);
+    const canOpenTutorialActions = tutorialActions.length > 0 && typeof onTutorialAction === 'function';
 
     // Determine final description to display
     const description = translatedDesc || anime?.description || '詳細情報がありません。';
@@ -396,6 +408,25 @@ const Hero = React.forwardRef(function Hero({
                                     <span className="tutorial-desc-line">{anime.description}</span>
                                 )}
                             </div>
+                            {canOpenTutorialActions && (
+                                <div className="tutorial-action">
+                                    <div className="tutorial-action-buttons">
+                                        {tutorialActions.map((action) => (
+                                            <button
+                                                key={action.id}
+                                                type="button"
+                                                className="tutorial-action-button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    onTutorialAction(action.id);
+                                                }}
+                                            >
+                                                {action.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         {hasTutorialImage && (
                             <div className="tutorial-media-panel">
