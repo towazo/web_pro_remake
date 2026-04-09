@@ -887,6 +887,30 @@ body {
     gap: 10px;
 }
 
+.watch-ranking-empty {
+    margin: 10px;
+    padding: 22px 18px;
+    border: 1px solid rgba(17, 17, 17, 0.14);
+    background: linear-gradient(180deg, #ffffff 0%, #f7f8fa 100%);
+    text-align: center;
+}
+
+.watch-ranking-empty-title {
+    margin: 0;
+    font-size: 0.94rem;
+    font-weight: 900;
+    color: #111;
+    line-height: 1.5;
+}
+
+.watch-ranking-empty-text {
+    margin: 10px 0 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.6;
+    color: #5f6670;
+}
+
 .watch-ranking-item {
     display: grid;
     grid-template-columns: 52px 96px minmax(0, 1fr);
@@ -5454,6 +5478,18 @@ body.trailer-modal-open .add-toast {
         padding: 12px;
     }
 
+    .watch-ranking-empty {
+        padding: 18px 14px;
+    }
+
+    .watch-ranking-empty-title {
+        font-size: 0.86rem;
+    }
+
+    .watch-ranking-empty-text {
+        font-size: 0.72rem;
+    }
+
     .watch-ranking-rank {
         width: 34px;
         height: 34px;
@@ -6113,6 +6149,7 @@ body.trailer-modal-open .add-toast {
     gap: 10px;
 }
 
+.bookmark-selection-add,
 .bookmark-selection-remove,
 .bookmark-selection-cancel {
     min-height: 40px;
@@ -6125,11 +6162,17 @@ body.trailer-modal-open .add-toast {
     color: #000;
 }
 
+.bookmark-selection-add:hover:not(:disabled),
+.bookmark-selection-cancel:hover:not(:disabled) {
+    background: #f5f5f5;
+}
+
 .bookmark-selection-remove {
     background: #000;
     color: #fff;
 }
 
+.bookmark-selection-add:disabled,
 .bookmark-selection-remove:disabled {
     opacity: 0.4;
     cursor: default;
@@ -11161,6 +11204,7 @@ body.trailer-modal-open .add-toast {
 .share-screen-main .share-method-guide,
 .share-screen-main .share-method-card,
 .bookmark-screen .bookmark-empty,
+.mylist-page-main .bookmark-empty,
 .mylist-page-main .empty-state,
 .share-screen-main .empty-state {
     border-color: rgba(0, 0, 0, 0.92);
@@ -11179,6 +11223,7 @@ body.trailer-modal-open .add-toast {
 .share-screen-main .share-method-guide,
 .share-screen-main .share-method-card,
 .bookmark-screen .bookmark-empty,
+.mylist-page-main .bookmark-empty,
 .mylist-page-main .empty-state,
 .share-screen-main .empty-state {
     box-shadow:
@@ -11410,6 +11455,7 @@ body.trailer-modal-open .add-toast {
 .add-screen-container .browse-results-area,
 .share-screen-main .share-method-card,
 .bookmark-screen .bookmark-empty,
+.mylist-page-main .bookmark-empty,
 .mylist-page-main .empty-state,
 .share-screen-main .empty-state {
     border-color: rgba(0, 0, 0, 0.78);

@@ -12,6 +12,7 @@ const ALL_GENRES_OPTION = '__all__';
 
 function WatchRankingSection({ animeList = [] }) {
   const [selectedGenre, setSelectedGenre] = useState(ALL_GENRES_OPTION);
+  const hasRegisteredAnime = Array.isArray(animeList) && animeList.length > 0;
 
   const genreOptions = useMemo(() => {
     const genreSet = new Set();
@@ -102,7 +103,16 @@ function WatchRankingSection({ animeList = [] }) {
     });
   }, [animeList, selectedGenre]);
 
-  if (rankingItems.length === 0) return null;
+  const isEmptyState = rankingItems.length === 0;
+  const rankingSubtitle = hasRegisteredAnime
+    ? 'あなたが最も見たアニメは・・・？'
+    : 'マイリストを追加するとランキングが表示されます。';
+  const emptyMessage = hasRegisteredAnime
+    ? 'このジャンルに登録作品がありません。'
+    : 'マイリストに登録作品がありません。';
+  const emptyHint = hasRegisteredAnime
+    ? '表示ジャンルを切り替えると、他の登録作品を確認できます。'
+    : '作品を追加すると、視聴回数ランキングをここで確認できます。';
 
   return (
     <section className="watch-ranking-section" aria-labelledby="watch-ranking-title">
@@ -110,7 +120,7 @@ function WatchRankingSection({ animeList = [] }) {
         <div className="watch-ranking-heading">
           <p className="watch-ranking-eyebrow">TOP 5</p>
           <h3 id="watch-ranking-title" className="watch-ranking-title">視聴回数ランキング</h3>
-          <p className="watch-ranking-subtitle">あなたが最も見たアニメは・・・？</p>
+          <p className="watch-ranking-subtitle">{rankingSubtitle}</p>
         </div>
         {genreOptions.length > 0 && (
           <label className="watch-ranking-filter">
@@ -132,35 +142,42 @@ function WatchRankingSection({ animeList = [] }) {
         )}
       </div>
 
-      <div className="watch-ranking-list">
-        {rankingItems.map((anime) => (
-          <article key={anime.id} className="watch-ranking-item">
-            <div className={`watch-ranking-rank rank-${anime.displayRank} rank-tone-${anime.rankTone}`}>
-              {anime.displayRank}
-            </div>
-            <img
-              src={anime?.coverImage?.large || anime?.coverImage?.extraLarge || ''}
-              alt=""
-              className="watch-ranking-thumb"
-              loading="lazy"
-            />
-            <div className="watch-ranking-body">
-              <h4 className="watch-ranking-item-title">{resolveAnimeTitle(anime)}</h4>
-              {anime.metaText ? (
-                <p className="watch-ranking-item-subtitle">{anime.metaText}</p>
-              ) : null}
-              <p className="watch-ranking-item-meta" aria-label={`視聴回数 ${anime.watchCount}回`}>
-                <WatchCountBadge
-                  count={anime.watchCount}
-                  className="watch-ranking-count-badge"
-                  iconClassName="watch-ranking-count-icon"
-                  countClassName="watch-ranking-count-number"
-                />
-              </p>
-            </div>
-          </article>
-        ))}
-      </div>
+      {isEmptyState ? (
+        <div className="watch-ranking-empty" role="status" aria-live="polite">
+          <p className="watch-ranking-empty-title">{emptyMessage}</p>
+          <p className="watch-ranking-empty-text">{emptyHint}</p>
+        </div>
+      ) : (
+        <div className="watch-ranking-list">
+          {rankingItems.map((anime) => (
+            <article key={anime.id} className="watch-ranking-item">
+              <div className={`watch-ranking-rank rank-${anime.displayRank} rank-tone-${anime.rankTone}`}>
+                {anime.displayRank}
+              </div>
+              <img
+                src={anime?.coverImage?.large || anime?.coverImage?.extraLarge || ''}
+                alt=""
+                className="watch-ranking-thumb"
+                loading="lazy"
+              />
+              <div className="watch-ranking-body">
+                <h4 className="watch-ranking-item-title">{resolveAnimeTitle(anime)}</h4>
+                {anime.metaText ? (
+                  <p className="watch-ranking-item-subtitle">{anime.metaText}</p>
+                ) : null}
+                <p className="watch-ranking-item-meta" aria-label={`視聴回数 ${anime.watchCount}回`}>
+                  <WatchCountBadge
+                    count={anime.watchCount}
+                    className="watch-ranking-count-badge"
+                    iconClassName="watch-ranking-count-icon"
+                    countClassName="watch-ranking-count-number"
+                  />
+                </p>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

@@ -1264,6 +1264,7 @@ function App() {
 
   const selectedAnimeIdSet = useMemo(() => new Set(selectedAnimeIds), [selectedAnimeIds]);
   const visibleAnimeIds = useMemo(() => pagedFilteredList.map((anime) => anime.id), [pagedFilteredList]);
+  const filteredAnimeIds = useMemo(() => filteredList.map((anime) => anime.id), [filteredList]);
   const visibleAnimeIdSet = useMemo(() => new Set(visibleAnimeIds), [visibleAnimeIds]);
   const myListViewportAnimeIds = useMemo(() => (
     Object.entries(myListViewportPriorityMap)
@@ -1467,14 +1468,18 @@ function App() {
     detailEnrichmentAbortControllerRef.current?.abort?.();
   }, [isPageScrollIdle, view]);
 
-  const isAllVisibleSelected = visibleAnimeIds.length > 0
-    && visibleAnimeIds.every((id) => selectedAnimeIdSet.has(id));
+  const isAllFilteredSelected = filteredAnimeIds.length > 0
+    && filteredAnimeIds.every((id) => selectedAnimeIdSet.has(id));
+  const hasMyListEntries = animeList.length > 0;
+  const myListSubtitle = hasMyListEntries
+    ? '登録済み作品の検索・絞り込み・並び替え'
+    : '視聴した作品を追加して、記録を残せます。';
 
   const handleSelectAllVisibleAnime = () => {
-    if (visibleAnimeIds.length === 0) return;
+    if (filteredAnimeIds.length === 0) return;
     setSelectedAnimeIds((prev) => {
       const nextSet = new Set(prev);
-      visibleAnimeIds.forEach((id) => nextSet.add(id));
+      filteredAnimeIds.forEach((id) => nextSet.add(id));
       return Array.from(nextSet);
     });
   };
@@ -1667,7 +1672,7 @@ function App() {
             <div className="mylist-section-header bookmark-screen-header">
               <div>
                 <h3 className="page-main-title">マイリスト</h3>
-                <p className="bookmark-screen-desc page-main-subtitle">登録済み作品の検索・絞り込み・並び替え</p>
+                <p className="bookmark-screen-desc page-main-subtitle">{myListSubtitle}</p>
               </div>
               <div className="bookmark-screen-actions mylist-screen-actions">
                 <button
@@ -1688,111 +1693,119 @@ function App() {
               </div>
             </div>
 
-            <div className="controls">
-              <div className="search-box">
-                <i className="search-icon" aria-hidden="true" />
-                <input
-                  type="text"
-                  placeholder="登録された作品からタイトルを検索"
-                  value={searchQuery}
-                  onChange={handleMyListSearchChange}
-                />
-              </div>
-            </div>
-
-            <AnimeFilterDialog
-              contextId="mylist"
-              title="絞り込み条件"
-              emptySummaryText="ジャンル・タグ・放送年・評価を設定できます。"
-              helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
-              appliedGenres={selectedGenres}
-              appliedTags={selectedTags}
-              appliedYear={selectedYear}
-              appliedMinRating={minRating}
-              appliedMatchMode={filterMatchMode}
-              availableGenres={uniqueGenres}
-              availableTags={uniqueTags}
-              availableYears={uniqueYears}
-              isLoadingTags={isMyListTagInfoLoading}
-              loadingTagsText="タグ候補を取得中です…"
-              showSeasons={false}
-              showMinRating
-              toolbarSupplement={(
-                <AnimeSortControl
-                  sortKey={sortKey}
-                  sortOrder={sortOrder}
-                  options={ANIME_SORT_OPTIONS}
-                  onSortKeyChange={handleMyListSortKeyChange}
-                  onSortOrderChange={handleMyListSortOrderChange}
-                  selectAriaLabel="マイリストの並び替え"
-                />
-              )}
-              onApply={handleApplyMyListFilters}
-              onClear={handleClearMyListFilters}
-            />
-
-            <div ref={myListResultsRef}>
-              <div className="results-count">
-                {filteredList.length} 作品が見つかりました
-              </div>
-              <CollectionPagination
-                currentPage={safeMyListPage}
-                totalPages={myListPageCount}
-                totalItems={filteredList.length}
-                itemsPerPage={COLLECTION_PAGE_SIZE}
-                onPageChange={(nextPage) => {
-                  startTransition(() => {
-                    setMyListPage(nextPage);
-                  });
-                  queueMyListResultsScroll();
-                }}
-              />
-            </div>
-
-            {isSelectionMode && (
-              <div className="selection-toolbar" role="region" aria-label="選択モード">
-                <div className="selection-toolbar-info">
-                  <p className="selection-toolbar-title">選択モード</p>
-                  <p className="selection-toolbar-count">{selectedAnimeIds.length} 件を選択中</p>
-                  <p className="selection-toolbar-sub">カードをタップして選択/解除できます</p>
+            {hasMyListEntries ? (
+              <>
+                <div className="controls">
+                  <div className="search-box">
+                    <i className="search-icon" aria-hidden="true" />
+                    <input
+                      type="text"
+                      placeholder="登録された作品からタイトルを検索"
+                      value={searchQuery}
+                      onChange={handleMyListSearchChange}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
 
-            <div className="anime-grid">
-              {pagedFilteredList.map(anime => (
-                <AnimeCard
-                  key={anime.id}
-                  anime={anime}
-                  onRemove={handleRemoveAnime}
-                  isSelectionMode={isSelectionMode}
-                  isSelected={selectedAnimeIdSet.has(anime.id)}
-                  onToggleSelect={handleToggleAnimeSelection}
-                  onLongPress={handleLongPressAnime}
-                  onUpdateRating={handleUpdateAnimeRating}
-                  onUpdateWatchCount={handleUpdateAnimeWatchCount}
-                  onPlayTrailer={handleOpenTrailer}
-                  onViewportPriorityChange={handleMyListViewportPriorityChange}
+                <AnimeFilterDialog
+                  contextId="mylist"
+                  title="絞り込み条件"
+                  emptySummaryText="ジャンル・タグ・放送年・評価を設定できます。"
+                  helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送年と評価は追加条件として扱います。"
+                  appliedGenres={selectedGenres}
+                  appliedTags={selectedTags}
+                  appliedYear={selectedYear}
+                  appliedMinRating={minRating}
+                  appliedMatchMode={filterMatchMode}
+                  availableGenres={uniqueGenres}
+                  availableTags={uniqueTags}
+                  availableYears={uniqueYears}
+                  isLoadingTags={isMyListTagInfoLoading}
+                  loadingTagsText="タグ候補を取得中です…"
+                  showSeasons={false}
+                  showMinRating
+                  toolbarSupplement={(
+                    <AnimeSortControl
+                      sortKey={sortKey}
+                      sortOrder={sortOrder}
+                      options={ANIME_SORT_OPTIONS}
+                      onSortKeyChange={handleMyListSortKeyChange}
+                      onSortOrderChange={handleMyListSortOrderChange}
+                      selectAriaLabel="マイリストの並び替え"
+                    />
+                  )}
+                  onApply={handleApplyMyListFilters}
+                  onClear={handleClearMyListFilters}
                 />
-              ))}
-            </div>
 
-            <CollectionPagination
-              currentPage={safeMyListPage}
-              totalPages={myListPageCount}
-              totalItems={filteredList.length}
-              itemsPerPage={COLLECTION_PAGE_SIZE}
-              className="browse-pagination-bottom"
-              onPageChange={(nextPage) => {
-                startTransition(() => {
-                  setMyListPage(nextPage);
-                });
-                queueMyListResultsScroll();
-              }}
-            />
+                <div ref={myListResultsRef}>
+                  <div className="results-count">
+                    {filteredList.length} 作品が見つかりました
+                  </div>
+                  <CollectionPagination
+                    currentPage={safeMyListPage}
+                    totalPages={myListPageCount}
+                    totalItems={filteredList.length}
+                    itemsPerPage={COLLECTION_PAGE_SIZE}
+                    onPageChange={(nextPage) => {
+                      startTransition(() => {
+                        setMyListPage(nextPage);
+                      });
+                      queueMyListResultsScroll();
+                    }}
+                  />
+                </div>
 
-            {filteredList.length === 0 && (
-              <div className="empty-state">該当する作品がありません</div>
+                {isSelectionMode && (
+                  <div className="selection-toolbar" role="region" aria-label="選択モード">
+                    <div className="selection-toolbar-info">
+                      <p className="selection-toolbar-title">選択モード</p>
+                      <p className="selection-toolbar-count">{selectedAnimeIds.length} 件を選択中</p>
+                      <p className="selection-toolbar-sub">カードをタップして選択/解除できます</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="anime-grid">
+                  {pagedFilteredList.map(anime => (
+                    <AnimeCard
+                      key={anime.id}
+                      anime={anime}
+                      onRemove={handleRemoveAnime}
+                      isSelectionMode={isSelectionMode}
+                      isSelected={selectedAnimeIdSet.has(anime.id)}
+                      onToggleSelect={handleToggleAnimeSelection}
+                      onLongPress={handleLongPressAnime}
+                      onUpdateRating={handleUpdateAnimeRating}
+                      onUpdateWatchCount={handleUpdateAnimeWatchCount}
+                      onPlayTrailer={handleOpenTrailer}
+                      onViewportPriorityChange={handleMyListViewportPriorityChange}
+                    />
+                  ))}
+                </div>
+
+                <CollectionPagination
+                  currentPage={safeMyListPage}
+                  totalPages={myListPageCount}
+                  totalItems={filteredList.length}
+                  itemsPerPage={COLLECTION_PAGE_SIZE}
+                  className="browse-pagination-bottom"
+                  onPageChange={(nextPage) => {
+                    startTransition(() => {
+                      setMyListPage(nextPage);
+                    });
+                    queueMyListResultsScroll();
+                  }}
+                />
+
+                {filteredList.length === 0 && (
+                  <div className="empty-state">該当する作品がありません</div>
+                )}
+              </>
+            ) : (
+              <div className="bookmark-empty mylist-empty-state">
+                マイリストはまだありません。視聴した作品を追加してください。
+              </div>
             )}
           </main>
       ) : shouldShowHomeOnboarding ? (
@@ -1904,7 +1917,7 @@ function App() {
               type="button"
               className="selection-toolbar-select-all"
               onClick={handleSelectAllVisibleAnime}
-              disabled={visibleAnimeIds.length === 0 || isAllVisibleSelected}
+              disabled={filteredAnimeIds.length === 0 || isAllFilteredSelected}
             >
               すべて選択
             </button>

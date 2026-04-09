@@ -3265,7 +3265,6 @@ function AddAnimeScreen({
     const browseFilterTriggerTitle = !selectedBrowseYear
         ? '先に年代を選択してください'
         : (browseLoading ? '一覧の読み込み完了後に利用できます' : '');
-    const showBrowseFilterPanel = isBrowsePresetLocked || Boolean(selectedBrowseYear && !browseLoading && browseResults.length > 0);
     const browseResultsTitle = activeBrowsePreset?.title || `${selectedBrowseYear}年の作品`;
     const browsePaginationLabel = activeBrowsePreset?.title || `${selectedBrowseYear}年内のページ`;
     const isBrowseBusy = browseLoading || browsePageSwitching;
@@ -4147,7 +4146,7 @@ function AddAnimeScreen({
 
             {showBrowseWorkspace && (
                 <div className="entry-browse-section">
-                    <div className={`browse-control-panel${showBrowseFilterPanel ? ' has-secondary' : ''}`}>
+                    <div className={`browse-control-panel${!isBrowsePresetLocked ? ' has-secondary' : ''}`}>
                         {!isBrowsePresetLocked && (
                             <div className="browse-primary-panel">
                                 <div className="browse-panel-head">
@@ -4196,60 +4195,58 @@ function AddAnimeScreen({
                             </div>
                         )}
 
-                        {showBrowseFilterPanel && (
-                            <div className="browse-secondary-panel">
-                                <div className="browse-panel-head">
-                                    <div className="browse-panel-copy">
-                                        <div className="browse-panel-kicker">STEP 2</div>
-                                        <div className="browse-panel-title">絞り込み</div>
-                                        <p className="browse-panel-text">
-                                            {selectedBrowseYear
-                                                ? `${selectedBrowseYear}年の一覧に条件を追加できます。`
-                                                : '年代を選ぶと条件を追加できます。'}
-                                        </p>
-                                    </div>
+                        <div className="browse-secondary-panel">
+                            <div className="browse-panel-head">
+                                <div className="browse-panel-copy">
+                                    <div className="browse-panel-kicker">STEP 2</div>
+                                    <div className="browse-panel-title">絞り込み</div>
+                                    <p className="browse-panel-text">
+                                        {selectedBrowseYear
+                                            ? `${selectedBrowseYear}年の一覧に条件を追加できます。`
+                                            : '年代を選ぶと条件を追加できます。'}
+                                    </p>
                                 </div>
-                                <AnimeFilterDialog
-                                    contextId={selectedBrowseYear ? `browse-${selectedBrowseSpecialPresetKey || selectedBrowseYear}` : 'browse'}
-                                    title="絞り込み条件"
-                                    emptySummaryText={selectedBrowseYear
-                                        ? 'ジャンル・タグ・放送時期でさらに絞り込めます。'
-                                        : '先に年代を選択してください。'}
-                                    helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送時期は追加条件として扱います。"
-                                    staticNotice={isBrowsePresetLocked
-                                        ? 'この一覧では放送年と放送時期が固定されています。'
-                                        : (selectedBrowseYear ? `${selectedBrowseYear}年の一覧に条件を追加します。` : '')}
-                                    applyLabel="条件を適用"
-                                    appliedGenres={browseGenreFilters}
-                                    appliedTags={browseTagFilters}
-                                    appliedYear={selectedBrowseYear || ''}
-                                    appliedSeasons={effectiveBrowseSeasonFilters}
-                                    appliedMatchMode={browseMatchMode}
-                                    availableGenres={browseGenreOptions}
-                                    availableTags={browseTagOptions}
-                                    availableSeasons={browseSeasonOptions}
-                                    showYear={false}
-                                    showSeasons
-                                    showMinRating={false}
-                                    disableSeasonSelection={browseLoading || hasFixedBrowseSeason}
-                                    emptyGenresText={selectedBrowseYear
-                                        ? '表示中の作品からジャンルを読み込み中です。'
-                                        : '年代を選ぶとジャンル候補が表示されます。'}
-                                    emptyTagsText={selectedBrowseYear
-                                        ? '表示中の作品からタグを読み込み中です。'
-                                        : '年代を選ぶとタグ候補が表示されます。'}
-                                    emptySeasonsText={selectedBrowseYear
-                                        ? '表示中の作品から放送時期を読み込み中です。'
-                                        : '年代を選ぶと放送時期候補が表示されます。'}
-                                    includeYearChip={false}
-                                    includeSeasonChip={!hasFixedBrowseSeason}
-                                    triggerDisabled={browseFilterTriggerDisabled}
-                                    triggerTitle={browseFilterTriggerTitle}
-                                    onApply={handleApplyBrowseFilters}
-                                    onClear={handleClearBrowseFilters}
-                                />
                             </div>
-                        )}
+                            <AnimeFilterDialog
+                                contextId={selectedBrowseYear ? `browse-${selectedBrowseSpecialPresetKey || selectedBrowseYear}` : 'browse'}
+                                title="絞り込み条件"
+                                emptySummaryText={selectedBrowseYear
+                                    ? 'ジャンル・タグ・放送時期でさらに絞り込めます。'
+                                    : '先に年代を選択してください。'}
+                                helperText="AND / OR はジャンルとタグの組み合わせに適用されます。放送時期は追加条件として扱います。"
+                                staticNotice={isBrowsePresetLocked
+                                    ? 'この一覧では放送年と放送時期が固定されています。'
+                                    : (selectedBrowseYear ? `${selectedBrowseYear}年の一覧に条件を追加します。` : '')}
+                                applyLabel="条件を適用"
+                                appliedGenres={browseGenreFilters}
+                                appliedTags={browseTagFilters}
+                                appliedYear={selectedBrowseYear || ''}
+                                appliedSeasons={effectiveBrowseSeasonFilters}
+                                appliedMatchMode={browseMatchMode}
+                                availableGenres={browseGenreOptions}
+                                availableTags={browseTagOptions}
+                                availableSeasons={browseSeasonOptions}
+                                showYear={false}
+                                showSeasons
+                                showMinRating={false}
+                                disableSeasonSelection={browseLoading || hasFixedBrowseSeason}
+                                emptyGenresText={selectedBrowseYear
+                                    ? '表示中の作品からジャンルを読み込み中です。'
+                                    : '年代を選ぶとジャンル候補が表示されます。'}
+                                emptyTagsText={selectedBrowseYear
+                                    ? '表示中の作品からタグを読み込み中です。'
+                                    : '年代を選ぶとタグ候補が表示されます。'}
+                                emptySeasonsText={selectedBrowseYear
+                                    ? '表示中の作品から放送時期を読み込み中です。'
+                                    : '年代を選ぶと放送時期候補が表示されます。'}
+                                includeYearChip={false}
+                                includeSeasonChip={!hasFixedBrowseSeason}
+                                triggerDisabled={browseFilterTriggerDisabled}
+                                triggerTitle={browseFilterTriggerTitle}
+                                onApply={handleApplyBrowseFilters}
+                                onClear={handleClearBrowseFilters}
+                            />
+                        </div>
                     </div>
 
                     {!selectedBrowseYear ? (

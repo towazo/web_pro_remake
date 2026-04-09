@@ -105,6 +105,26 @@ function BookmarkScreen({
     const startIndex = (safeCurrentPage - 1) * COLLECTION_PAGE_SIZE;
     return filteredBookmarks.slice(startIndex, startIndex + COLLECTION_PAGE_SIZE);
   }, [filteredBookmarks, safeCurrentPage]);
+  const visibleBookmarkIds = useMemo(
+    () => pagedBookmarks.map((anime) => anime.id),
+    [pagedBookmarks]
+  );
+  const filteredBookmarkIds = useMemo(
+    () => filteredBookmarks.map((anime) => anime.id),
+    [filteredBookmarks]
+  );
+  const selectedBookmarkIdSet = useMemo(
+    () => new Set(selectedBookmarkIds),
+    [selectedBookmarkIds]
+  );
+  const selectedBookmarkItems = useMemo(
+    () => sortedBookmarks.filter((anime) => selectedBookmarkIdSet.has(anime.id)),
+    [sortedBookmarks, selectedBookmarkIdSet]
+  );
+  const addableSelectedBookmarkItems = useMemo(
+    () => selectedBookmarkItems.filter((anime) => !watchedIdSet.has(anime.id)),
+    [selectedBookmarkItems, watchedIdSet]
+  );
 
   useEffect(() => {
     setCurrentPage((prev) => Math.min(Math.max(1, prev), totalPages));
@@ -112,8 +132,8 @@ function BookmarkScreen({
 
   useEffect(() => {
     if (typeof onVisibleAnimeIdsChange !== 'function') return;
-    onVisibleAnimeIdsChange(pagedBookmarks.map((anime) => anime.id));
-  }, [pagedBookmarks, onVisibleAnimeIdsChange]);
+    onVisibleAnimeIdsChange(visibleBookmarkIds);
+  }, [visibleBookmarkIds, onVisibleAnimeIdsChange]);
 
   useEffect(() => () => {
     onVisibleAnimeIdsChange?.([]);
@@ -256,12 +276,92 @@ function BookmarkScreen({
     setSelectedBookmarkIds([]);
   };
 
+  const isAllFilteredSelected = filteredBookmarkIds.length > 0
+    && filteredBookmarkIds.every((id) => selectedBookmarkIdSet.has(id));
+
+  const handleSelectAllVisibleBookmarks = () => {
+    if (filteredBookmarkIds.length === 0) return;
+    setSelectedBookmarkIds((prev) => {
+      const nextSet = new Set(prev);
+      filteredBookmarkIds.forEach((id) => nextSet.add(id));
+      return Array.from(nextSet);
+    });
+  };
+
   const handleBulkRemoveSelected = () => {
     if (selectedBookmarkIds.length === 0) return;
     if (!window.confirm(`選択した ${selectedBookmarkIds.length} 件をブックマークから削除しますか？`)) return;
     onBulkRemoveBookmarks?.(selectedBookmarkIds);
     setIsSelectionMode(false);
     setSelectedBookmarkIds([]);
+  };
+
+  const handleBulkMarkWatched = () => {
+    if (selectedBookmarkItems.length === 0) return;
+    if (typeof onMarkWatched !== 'function') {
+      setActionNotice({ type: 'error', message: 'マイリスト登録を実行できませんでした。' });
+      return;
+    }
+
+    let successCount = 0;
+    let skippedCount = 0;
+    let firstFailureMessage = '';
+    const remainingSelectedIds = [];
+
+    selectedBookmarkItems.forEach((anime) => {
+      if (!anime || typeof anime.id !== 'number') {
+        skippedCount += 1;
+        return;
+      }
+
+      if (watchedIdSet.has(anime.id)) {
+        skippedCount += 1;
+        remainingSelectedIds.push(anime.id);
+        if (!firstFailureMessage) {
+          firstFailureMessage = 'すでにマイリストに登録されている作品が含まれています。';
+        }
+        return;
+      }
+
+      const result = onMarkWatched(anime, { rating: null });
+      if (result?.success) {
+        successCount += 1;
+        return;
+      }
+
+      skippedCount += 1;
+      remainingSelectedIds.push(anime.id);
+      if (!firstFailureMessage && result?.message) {
+        firstFailureMessage = result.message;
+      }
+    });
+
+    setRatingTargetId(null);
+
+    if (remainingSelectedIds.length > 0) {
+      setSelectedBookmarkIds(remainingSelectedIds);
+    } else {
+      setIsSelectionMode(false);
+      setSelectedBookmarkIds([]);
+    }
+
+    if (successCount > 0 && skippedCount === 0) {
+      setActionNotice({ type: 'success', message: `選択した ${successCount} 件をマイリストに追加しました。` });
+      return;
+    }
+
+    if (successCount > 0) {
+      setActionNotice({
+        type: 'success',
+        message: `マイリストに ${successCount} 件追加しました。${skippedCount} 件は追加できませんでした。`,
+      });
+      return;
+    }
+
+    setActionNotice({
+      type: 'error',
+      message: firstFailureMessage || '選択した作品をマイリストに追加できませんでした。',
+    });
   };
 
   const handleRemoveSingleBookmark = (anime, event) => {
@@ -679,6 +779,22 @@ function BookmarkScreen({
         <div className="bookmark-selection-dock" role="region" aria-label="選択操作">
           <p className="bookmark-selection-dock-count">{selectedBookmarkIds.length} 件選択中</p>
           <div className="bookmark-selection-dock-actions">
+            <button
+              type="button"
+              className="selection-toolbar-select-all"
+              onClick={handleSelectAllVisibleBookmarks}
+              disabled={filteredBookmarkIds.length === 0 || isAllFilteredSelected}
+            >
+              すべて選択
+            </button>
+            <button
+              type="button"
+              className="bookmark-selection-add"
+              onClick={handleBulkMarkWatched}
+              disabled={selectedBookmarkIds.length === 0 || addableSelectedBookmarkItems.length === 0}
+            >
+              マイリストへ追加
+            </button>
             <button
               type="button"
               className="bookmark-selection-remove"
