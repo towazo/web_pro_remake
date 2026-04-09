@@ -355,22 +355,16 @@ const Hero = React.forwardRef(function Hero({
     }, [isActive, onSlideProgressChange, anime?.id]);
 
     useEffect(() => {
-        if (!shouldUseTrailerStartupTimeout || typeof onRequestAdvance !== 'function') {
+        if (!shouldUseTrailerStartupTimeout) {
             return undefined;
         }
 
-        clearFallbackTimeline();
-        slideProgressChangeRef.current?.(0);
-
-        const timeoutId = window.setTimeout(() => {
-            onRequestAdvance();
-        }, TRAILER_START_TIMEOUT_MS);
+        startFallbackTimeline(TRAILER_START_TIMEOUT_MS, 0);
 
         return () => {
-            window.clearTimeout(timeoutId);
+            clearFallbackTimeline();
         };
     }, [
-        onRequestAdvance,
         restartToken,
         shouldUseTrailerStartupTimeout,
         anime?.id,
