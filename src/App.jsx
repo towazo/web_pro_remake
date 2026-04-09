@@ -160,11 +160,80 @@ const getDetailEnrichmentRetryDelayMs = (attemptCount) => {
  * Responsible for routing, global state management, and data orchestration.
  */
 function App() {
+  const normalizeText = (value) => {
+    if (typeof value !== 'string') return '';
+    return value;
+  };
+  const normalizeFiniteNumber = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const normalizeStringArray = (value) => (
+    Array.isArray(value)
+      ? value
+        .map((item) => normalizeText(item).trim())
+        .filter(Boolean)
+      : []
+  );
+  const normalizeAnimeTitle = (value) => {
+    if (typeof value === 'string') {
+      return {
+        native: value,
+        romaji: value,
+        english: '',
+      };
+    }
+
+    const source = value && typeof value === 'object' ? value : {};
+    return {
+      native: normalizeText(source.native),
+      romaji: normalizeText(source.romaji),
+      english: normalizeText(source.english),
+    };
+  };
+  const normalizeAnimeCoverImage = (value) => {
+    if (typeof value === 'string') {
+      return {
+        large: value,
+        extraLarge: value,
+      };
+    }
+
+    const source = value && typeof value === 'object' ? value : {};
+    return {
+      large: normalizeText(source.large),
+      extraLarge: normalizeText(source.extraLarge),
+    };
+  };
+  const normalizeAnimeStartDate = (value) => {
+    const source = value && typeof value === 'object' ? value : {};
+    return {
+      year: normalizeFiniteNumber(source.year),
+      month: normalizeFiniteNumber(source.month),
+      day: normalizeFiniteNumber(source.day),
+    };
+  };
   const sanitizeAnimeList = (list, options = {}) => filterDisplayEligibleAnimeList(Array.isArray(list) ? list : [], {
     // Keep legacy items that do not include format/country metadata.
     allowUnknownFormat: true,
     allowUnknownCountry: true,
   }).map((anime) => {
+    const normalizedId = normalizeFiniteNumber(anime?.id);
+    const normalizedTitle = normalizeAnimeTitle(anime?.title);
+    const normalizedCoverImage = normalizeAnimeCoverImage(anime?.coverImage);
+    const normalizedStartDate = normalizeAnimeStartDate(anime?.startDate);
+    const normalizedGenres = normalizeStringArray(anime?.genres);
+    const normalizedSeason = normalizeText(anime?.season);
+    const normalizedStatus = normalizeText(anime?.status);
+    const normalizedFormat = normalizeText(anime?.format);
+    const normalizedCountryOfOrigin = normalizeText(anime?.countryOfOrigin);
+    const normalizedBannerImage = normalizeText(anime?.bannerImage);
+    const normalizedDescription = normalizeText(anime?.description);
+    const normalizedAverageScore = normalizeFiniteNumber(anime?.averageScore);
+    const normalizedEpisodes = normalizeFiniteNumber(anime?.episodes);
+    const normalizedSeasonYear = normalizeFiniteNumber(anime?.seasonYear);
+    const normalizedAddedAt = normalizeFiniteNumber(anime?.addedAt);
+    const normalizedBookmarkedAt = normalizeFiniteNumber(anime?.bookmarkedAt);
     const normalizedRating = normalizeAnimeRating(anime?.rating);
     const hasTagList = Array.isArray(anime?.tags);
     const hasTrailerField = Object.prototype.hasOwnProperty.call(anime || {}, 'trailer');
@@ -183,7 +252,30 @@ function App() {
         : null;
 
     if (
-      (anime?.rating ?? null) === normalizedRating
+      anime?.id === normalizedId
+      && anime?.title?.native === normalizedTitle.native
+      && anime?.title?.romaji === normalizedTitle.romaji
+      && anime?.title?.english === normalizedTitle.english
+      && anime?.coverImage?.large === normalizedCoverImage.large
+      && anime?.coverImage?.extraLarge === normalizedCoverImage.extraLarge
+      && anime?.startDate?.year === normalizedStartDate.year
+      && anime?.startDate?.month === normalizedStartDate.month
+      && anime?.startDate?.day === normalizedStartDate.day
+      && anime?.season === normalizedSeason
+      && anime?.seasonYear === normalizedSeasonYear
+      && anime?.status === normalizedStatus
+      && anime?.averageScore === normalizedAverageScore
+      && anime?.episodes === normalizedEpisodes
+      && Array.isArray(anime?.genres)
+      && anime.genres.length === normalizedGenres.length
+      && anime.genres.every((genre, index) => genre === normalizedGenres[index])
+      && anime?.format === normalizedFormat
+      && anime?.countryOfOrigin === normalizedCountryOfOrigin
+      && anime?.bannerImage === normalizedBannerImage
+      && anime?.description === normalizedDescription
+      && anime?.addedAt === normalizedAddedAt
+      && anime?.bookmarkedAt === normalizedBookmarkedAt
+      && (anime?.rating ?? null) === normalizedRating
       && !hasTagList
       && currentWatchCount === normalizedWatchCount
       && (!hasTrailerField || isSameAnimeTrailer(anime?.trailer, normalizedTrailer))
@@ -192,9 +284,38 @@ function App() {
       return anime;
     }
 
-    const nextAnime = { ...anime, rating: normalizedRating };
+    const nextAnime = {
+      ...anime,
+      id: normalizedId,
+      title: normalizedTitle,
+      coverImage: normalizedCoverImage,
+      season: normalizedSeason,
+      seasonYear: normalizedSeasonYear,
+      status: normalizedStatus,
+      startDate: normalizedStartDate,
+      averageScore: normalizedAverageScore,
+      episodes: normalizedEpisodes,
+      genres: normalizedGenres,
+      format: normalizedFormat,
+      countryOfOrigin: normalizedCountryOfOrigin,
+      bannerImage: normalizedBannerImage,
+      description: normalizedDescription,
+      rating: normalizedRating,
+    };
+    if (normalizedAddedAt === null) {
+      delete nextAnime.addedAt;
+    } else {
+      nextAnime.addedAt = normalizedAddedAt;
+    }
+    if (normalizedBookmarkedAt === null) {
+      delete nextAnime.bookmarkedAt;
+    } else {
+      nextAnime.bookmarkedAt = normalizedBookmarkedAt;
+    }
     if (hasTagList) {
       nextAnime.tags = normalizeAnimeTags(anime.tags);
+    } else if (Object.prototype.hasOwnProperty.call(nextAnime, 'tags')) {
+      delete nextAnime.tags;
     }
     if (normalizedWatchCount === null) {
       delete nextAnime.watchCount;
@@ -248,13 +369,7 @@ function App() {
     locked: true,
   }), [nextSeasonInfo, nextSeasonLabel]);
   const cachedCurrentSeasonFeaturedAnimeList = useMemo(() => (
-    filterDisplayEligibleAnimeList(
-      readHomeCurrentSeasonFeaturedAnimeListFromStorage(currentSeasonInfo),
-      {
-        allowUnknownFormat: true,
-        allowUnknownCountry: true,
-      }
-    )
+    sanitizeAnimeList(readHomeCurrentSeasonFeaturedAnimeListFromStorage(currentSeasonInfo))
   ), [currentSeasonInfo]);
   const [homeFeaturedSliderSource, setHomeFeaturedSliderSource] = useState(() =>
     readHomeFeaturedSliderSourceFromStorage()
