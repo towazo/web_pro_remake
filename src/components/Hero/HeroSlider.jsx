@@ -303,14 +303,6 @@ function HeroSlider({
         handleTogglePreviewMuted();
     };
 
-    if (totalSlides === 0) {
-        if (isLoading) {
-            return <HeroSliderLoading />;
-        }
-
-        return null;
-    }
-
     const shouldShowDots = totalSlides <= MAX_DOT_INDICATORS;
     const bufferStartIndex = Math.floor(currentIndex / BUFFER_REPLENISH_THRESHOLD) * BUFFER_REPLENISH_THRESHOLD;
     const bufferEndIndex = Math.min(totalSlides, bufferStartIndex + INITIAL_BUFFER_SIZE);
@@ -462,6 +454,14 @@ function HeroSlider({
             applyTimelineSeek(1);
         }
     }, [applyTimelineSeek]);
+
+    if (totalSlides === 0) {
+        if (isLoading) {
+            return <HeroSliderLoading />;
+        }
+
+        return null;
+    }
 
     return (
         <div className="hero-slider-shell">
