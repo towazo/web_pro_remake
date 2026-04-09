@@ -1,13 +1,15 @@
+import { getSafeLocalStorage } from '../utils/browserStorage';
+
 export const ANIME_DESCRIPTIONS = {};
 
 const DYNAMIC_TAG_TRANSLATIONS_STORAGE_KEY = 'anime_dynamic_tag_translations_v1';
-const hasBrowserStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
 const readDynamicTagTranslations = () => {
-    if (!hasBrowserStorage) return {};
+    const storage = getSafeLocalStorage();
+    if (!storage) return {};
 
     try {
-        const raw = window.localStorage.getItem(DYNAMIC_TAG_TRANSLATIONS_STORAGE_KEY);
+        const raw = storage.getItem(DYNAMIC_TAG_TRANSLATIONS_STORAGE_KEY);
         const parsed = JSON.parse(raw || '{}');
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
             return {};
@@ -42,10 +44,11 @@ const notifyTagTranslationListeners = () => {
 };
 
 const persistDynamicTagTranslations = () => {
-    if (!hasBrowserStorage) return;
+    const storage = getSafeLocalStorage();
+    if (!storage) return;
 
     try {
-        window.localStorage.setItem(
+        storage.setItem(
             DYNAMIC_TAG_TRANSLATIONS_STORAGE_KEY,
             JSON.stringify(dynamicTagTranslations)
         );

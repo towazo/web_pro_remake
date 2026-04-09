@@ -1,3 +1,5 @@
+import { getSafeLocalStorage } from './browserStorage';
+
 export const HOME_STATS_CARD_BACKGROUND_STORAGE_KEY = 'homeStatsCardBackgrounds';
 
 export const HOME_STATS_CARD_KEYS = Object.freeze({
@@ -63,11 +65,12 @@ export const sanitizeHomeStatsCardBackgrounds = (value) => {
 };
 
 export const readHomeStatsCardBackgroundsFromStorage = () => {
-  if (typeof window === 'undefined' || !window.localStorage) {
+  const storage = getSafeLocalStorage();
+  if (!storage) {
     return createEmptyHomeStatsCardBackgrounds();
   }
   try {
-    const raw = window.localStorage.getItem(HOME_STATS_CARD_BACKGROUND_STORAGE_KEY);
+    const raw = storage.getItem(HOME_STATS_CARD_BACKGROUND_STORAGE_KEY);
     if (!raw) return createEmptyHomeStatsCardBackgrounds();
     const parsed = JSON.parse(raw);
     return sanitizeHomeStatsCardBackgrounds(parsed);
@@ -77,15 +80,16 @@ export const readHomeStatsCardBackgroundsFromStorage = () => {
 };
 
 export const writeHomeStatsCardBackgroundsToStorage = (value) => {
-  if (typeof window === 'undefined' || !window.localStorage) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
   const normalized = sanitizeHomeStatsCardBackgrounds(value);
   const hasAnyBackground = HOME_STATS_CARD_KEY_LIST.some((key) => normalized[key].image.trim().length > 0);
 
   try {
     if (hasAnyBackground) {
-      window.localStorage.setItem(HOME_STATS_CARD_BACKGROUND_STORAGE_KEY, JSON.stringify(normalized));
+      storage.setItem(HOME_STATS_CARD_BACKGROUND_STORAGE_KEY, JSON.stringify(normalized));
     } else {
-      window.localStorage.removeItem(HOME_STATS_CARD_BACKGROUND_STORAGE_KEY);
+      storage.removeItem(HOME_STATS_CARD_BACKGROUND_STORAGE_KEY);
     }
   } catch (_) {
     // Ignore storage write failures (quota, private mode).

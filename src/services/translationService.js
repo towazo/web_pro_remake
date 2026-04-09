@@ -1,3 +1,5 @@
+import { getSafeLocalStorage } from '../utils/browserStorage';
+
 // Translation Cache Management (v2: 300 char limit)
 const TRANSLATION_CACHE_KEY = 'anime_translation_cache_v2';
 
@@ -43,8 +45,11 @@ const sanitizeTranslationText = (text, options = {}) => {
 };
 
 export function getCachedTranslation(animeId) {
+    const storage = getSafeLocalStorage();
+    if (!storage) return null;
+
     try {
-        const cache = JSON.parse(localStorage.getItem(TRANSLATION_CACHE_KEY) || '{}');
+        const cache = JSON.parse(storage.getItem(TRANSLATION_CACHE_KEY) || '{}');
         return cache[animeId];
     } catch (e) {
         console.error('Failed to read translation cache:', e);
@@ -53,10 +58,13 @@ export function getCachedTranslation(animeId) {
 }
 
 export function setCachedTranslation(animeId, translation) {
+    const storage = getSafeLocalStorage();
+    if (!storage) return;
+
     try {
-        const cache = JSON.parse(localStorage.getItem(TRANSLATION_CACHE_KEY) || '{}');
+        const cache = JSON.parse(storage.getItem(TRANSLATION_CACHE_KEY) || '{}');
         cache[animeId] = translation;
-        localStorage.setItem(TRANSLATION_CACHE_KEY, JSON.stringify(cache));
+        storage.setItem(TRANSLATION_CACHE_KEY, JSON.stringify(cache));
     } catch (e) {
         console.error('Failed to save translation cache:', e);
     }

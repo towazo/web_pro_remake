@@ -6,11 +6,11 @@ import {
 } from '../constants/animeData';
 import { fetchAniListTagCatalog } from './animeService';
 import { translateTexts } from './translationService';
+import { getSafeLocalStorage } from '../utils/browserStorage';
 
 const TAG_CATALOG_CACHE_KEY = 'anilist_tag_catalog_cache_v1';
 const TAG_CATALOG_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const TAG_TRANSLATION_CHUNK_SIZE = 24;
-const hasBrowserStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
 let warmTagTranslationPromise = null;
 
@@ -31,10 +31,11 @@ const normalizeCatalogNames = (items) => {
 };
 
 const readCachedTagCatalog = () => {
-  if (!hasBrowserStorage) return { savedAt: 0, tags: [] };
+  const storage = getSafeLocalStorage();
+  if (!storage) return { savedAt: 0, tags: [] };
 
   try {
-    const raw = window.localStorage.getItem(TAG_CATALOG_CACHE_KEY);
+    const raw = storage.getItem(TAG_CATALOG_CACHE_KEY);
     const parsed = JSON.parse(raw || '{}');
     return {
       savedAt: Number(parsed?.savedAt) || 0,
@@ -47,10 +48,11 @@ const readCachedTagCatalog = () => {
 };
 
 const writeCachedTagCatalog = (tags) => {
-  if (!hasBrowserStorage) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
 
   try {
-    window.localStorage.setItem(TAG_CATALOG_CACHE_KEY, JSON.stringify({
+    storage.setItem(TAG_CATALOG_CACHE_KEY, JSON.stringify({
       savedAt: Date.now(),
       tags: normalizeCatalogNames(tags),
     }));

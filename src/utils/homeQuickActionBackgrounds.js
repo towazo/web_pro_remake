@@ -1,3 +1,5 @@
+import { getSafeIndexedDb, getSafeLocalStorage } from './browserStorage';
+
 export const HOME_QUICK_ACTION_BACKGROUND_STORAGE_KEY = 'homeQuickActionBackgrounds';
 
 const HOME_QUICK_ACTION_BACKGROUND_DB_NAME = 'AniTriggerClientStorage';
@@ -22,15 +24,9 @@ const HOME_QUICK_ACTION_LIBRARY_KEYS = new Set([
   HOME_QUICK_ACTION_KEYS.bookmarks,
 ]);
 
-const hasLocalStorage = () => (
-  typeof window !== 'undefined'
-  && typeof window.localStorage !== 'undefined'
-);
+const hasLocalStorage = () => Boolean(getSafeLocalStorage());
 
-const hasIndexedDb = () => (
-  typeof window !== 'undefined'
-  && typeof window.indexedDB !== 'undefined'
-);
+const hasIndexedDb = () => Boolean(getSafeIndexedDb());
 
 export const getDefaultHomeQuickActionOverlayTone = (key) => (
   HOME_QUICK_ACTION_LIBRARY_KEYS.has(key)
@@ -137,12 +133,13 @@ const parseBackgroundEnvelope = (raw) => {
 };
 
 const readHomeQuickActionBackgroundEnvelopeFromLocalStorage = () => {
-  if (!hasLocalStorage()) {
+  const storage = getSafeLocalStorage();
+  if (!storage) {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(HOME_QUICK_ACTION_BACKGROUND_STORAGE_KEY);
+    const raw = storage.getItem(HOME_QUICK_ACTION_BACKGROUND_STORAGE_KEY);
     return parseBackgroundEnvelope(raw);
   } catch (_) {
     return null;
@@ -150,10 +147,11 @@ const readHomeQuickActionBackgroundEnvelopeFromLocalStorage = () => {
 };
 
 const writeHomeQuickActionBackgroundEnvelopeToLocalStorage = (envelope) => {
-  if (!hasLocalStorage()) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
 
   try {
-    window.localStorage.setItem(
+    storage.setItem(
       HOME_QUICK_ACTION_BACKGROUND_STORAGE_KEY,
       JSON.stringify(envelope)
     );
@@ -163,13 +161,14 @@ const writeHomeQuickActionBackgroundEnvelopeToLocalStorage = (envelope) => {
 };
 
 const openHomeQuickActionBackgroundDatabase = () => new Promise((resolve, reject) => {
-  if (!hasIndexedDb()) {
+  const indexedDb = getSafeIndexedDb();
+  if (!indexedDb) {
     resolve(null);
     return;
   }
 
   try {
-    const request = window.indexedDB.open(
+    const request = indexedDb.open(
       HOME_QUICK_ACTION_BACKGROUND_DB_NAME,
       HOME_QUICK_ACTION_BACKGROUND_DB_VERSION
     );

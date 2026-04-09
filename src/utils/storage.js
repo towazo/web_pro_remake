@@ -1,4 +1,5 @@
 import { normalizeAnimeTrailer } from './trailer';
+import { getSafeLocalStorage } from './browserStorage';
 
 export const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
 export const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
@@ -6,11 +7,6 @@ export const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
 const STORAGE_SCHEMA_VERSION = 5;
 const MIN_SUPPORTED_STORAGE_SCHEMA_VERSION = 2;
 const STORAGE_WRITE_VARIANTS = ['full', 'compact', 'minimal'];
-
-const hasLocalStorage = () => (
-  typeof window !== 'undefined'
-  && typeof window.localStorage !== 'undefined'
-);
 
 const normalizeString = (value) => {
   if (typeof value !== 'string') return '';
@@ -254,10 +250,11 @@ const shouldUseCompactStoragePayload = (parsed) => (
 );
 
 export const readListFromStorage = (key) => {
-  if (!hasLocalStorage()) return [];
+  const storage = getSafeLocalStorage();
+  if (!storage) return [];
 
   try {
-    const saved = window.localStorage.getItem(key);
+    const saved = storage.getItem(key);
     if (!saved) return [];
     const parsed = JSON.parse(saved);
 
@@ -274,21 +271,22 @@ export const readListFromStorage = (key) => {
 };
 
 export const writeListToStorage = (key, list) => {
-  if (!hasLocalStorage()) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
 
   try {
     if (!Array.isArray(list) || list.length === 0) {
-      window.localStorage.removeItem(key);
+      storage.removeItem(key);
       return;
     }
 
-    const currentValue = window.localStorage.getItem(key);
+    const currentValue = storage.getItem(key);
 
     for (const variant of STORAGE_WRITE_VARIANTS) {
       try {
         const payload = serializeListPayload(list, variant);
         if (currentValue === payload) return;
-        window.localStorage.setItem(key, payload);
+        storage.setItem(key, payload);
         return;
       } catch (error) {
         if (variant === STORAGE_WRITE_VARIANTS[STORAGE_WRITE_VARIANTS.length - 1]) {

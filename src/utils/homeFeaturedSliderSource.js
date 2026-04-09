@@ -1,3 +1,5 @@
+import { getSafeLocalStorage } from './browserStorage';
+
 export const HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY = 'homeFeaturedSliderSource';
 
 export const HOME_FEATURED_SLIDER_SOURCES = Object.freeze({
@@ -21,12 +23,13 @@ export const getHomeFeaturedSliderSourceLabel = (value) => (
 );
 
 export const readHomeFeaturedSliderSourceFromStorage = () => {
-  if (typeof window === 'undefined' || !window.localStorage) {
+  const storage = getSafeLocalStorage();
+  if (!storage) {
     return HOME_FEATURED_SLIDER_SOURCES.currentSeason;
   }
 
   try {
-    const raw = window.localStorage.getItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY);
+    const raw = storage.getItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY);
     return sanitizeHomeFeaturedSliderSource(raw);
   } catch (_) {
     return HOME_FEATURED_SLIDER_SOURCES.currentSeason;
@@ -34,17 +37,18 @@ export const readHomeFeaturedSliderSourceFromStorage = () => {
 };
 
 export const writeHomeFeaturedSliderSourceToStorage = (value) => {
-  if (typeof window === 'undefined' || !window.localStorage) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
 
   const normalized = sanitizeHomeFeaturedSliderSource(value);
 
   try {
     if (normalized === HOME_FEATURED_SLIDER_SOURCES.currentSeason) {
-      window.localStorage.removeItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY);
+      storage.removeItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY);
       return;
     }
 
-    window.localStorage.setItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY, normalized);
+    storage.setItem(HOME_FEATURED_SLIDER_SOURCE_STORAGE_KEY, normalized);
   } catch (_) {
     // Ignore storage write failures (quota, private mode).
   }

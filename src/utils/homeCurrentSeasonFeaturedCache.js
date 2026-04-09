@@ -1,10 +1,7 @@
+import { getSafeLocalStorage } from './browserStorage';
+
 const HOME_CURRENT_SEASON_FEATURED_CACHE_KEY = 'homeCurrentSeasonFeaturedCacheV1';
 const HOME_CURRENT_SEASON_FEATURED_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
-
-const hasLocalStorage = () => (
-  typeof window !== 'undefined'
-  && typeof window.localStorage !== 'undefined'
-);
 
 const buildSeasonCacheKey = (seasonInfo) => {
   const year = Number(seasonInfo?.year);
@@ -14,13 +11,14 @@ const buildSeasonCacheKey = (seasonInfo) => {
 };
 
 export const readHomeCurrentSeasonFeaturedAnimeListFromStorage = (seasonInfo) => {
-  if (!hasLocalStorage()) return [];
+  const storage = getSafeLocalStorage();
+  if (!storage) return [];
 
   const seasonKey = buildSeasonCacheKey(seasonInfo);
   if (!seasonKey) return [];
 
   try {
-    const raw = window.localStorage.getItem(HOME_CURRENT_SEASON_FEATURED_CACHE_KEY);
+    const raw = storage.getItem(HOME_CURRENT_SEASON_FEATURED_CACHE_KEY);
     if (!raw) return [];
 
     const parsed = JSON.parse(raw);
@@ -38,13 +36,14 @@ export const readHomeCurrentSeasonFeaturedAnimeListFromStorage = (seasonInfo) =>
 };
 
 export const writeHomeCurrentSeasonFeaturedAnimeListToStorage = (seasonInfo, animeList) => {
-  if (!hasLocalStorage()) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
 
   const seasonKey = buildSeasonCacheKey(seasonInfo);
   if (!seasonKey) return;
 
   try {
-    window.localStorage.setItem(HOME_CURRENT_SEASON_FEATURED_CACHE_KEY, JSON.stringify({
+    storage.setItem(HOME_CURRENT_SEASON_FEATURED_CACHE_KEY, JSON.stringify({
       version: 1,
       seasonKey,
       updatedAt: Date.now(),

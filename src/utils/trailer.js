@@ -1,3 +1,5 @@
+import { getSafeLocalStorage } from './browserStorage';
+
 const resolveTrailerValue = (animeOrTrailer) => (
   animeOrTrailer
   && typeof animeOrTrailer === 'object'
@@ -27,10 +29,7 @@ const playbackStatusListeners = new Set();
 let playbackCacheLoaded = false;
 let persistPlaybackCacheTimeoutId = 0;
 
-const hasLocalStorage = () => (
-  typeof window !== 'undefined'
-  && typeof window.localStorage !== 'undefined'
-);
+const hasLocalStorage = () => Boolean(getSafeLocalStorage());
 
 export const normalizeAnimeTrailer = (animeOrTrailer) => {
   const trailer = resolveTrailerValue(animeOrTrailer);
@@ -97,10 +96,11 @@ const emitPlaybackStatus = (videoId) => {
 const loadPersistedPlaybackCache = () => {
   if (playbackCacheLoaded) return;
   playbackCacheLoaded = true;
-  if (!hasLocalStorage()) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
 
   try {
-    const raw = window.localStorage.getItem(TRAILER_PLAYBACK_CACHE_KEY);
+    const raw = storage.getItem(TRAILER_PLAYBACK_CACHE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
     const version = Number(parsed?.version) || 1;
@@ -133,7 +133,8 @@ const loadPersistedPlaybackCache = () => {
 };
 
 const persistPlaybackCache = () => {
-  if (!hasLocalStorage()) return;
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
   persistPlaybackCacheTimeoutId = 0;
 
   try {
@@ -147,11 +148,11 @@ const persistPlaybackCache = () => {
     ];
 
     if (items.length === 0) {
-      window.localStorage.removeItem(TRAILER_PLAYBACK_CACHE_KEY);
+      storage.removeItem(TRAILER_PLAYBACK_CACHE_KEY);
       return;
     }
 
-    window.localStorage.setItem(TRAILER_PLAYBACK_CACHE_KEY, JSON.stringify({
+    storage.setItem(TRAILER_PLAYBACK_CACHE_KEY, JSON.stringify({
       version: TRAILER_PLAYBACK_CACHE_VERSION,
       items,
     }));
