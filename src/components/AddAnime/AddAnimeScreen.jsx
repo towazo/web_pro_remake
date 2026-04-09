@@ -3691,7 +3691,7 @@ function AddAnimeScreen({
                         {selectedSuggestionCount === 0 && !showSuggestions && (
                             <p className="normal-add-inline-hint">候補をタップで選択</p>
                         )}
-                        {selectedSuggestionCount > 0 && (
+                        {selectedSuggestionCount > 0 && !showSuggestions && (
                             <section ref={normalMultiAddPanelRef} className="normal-multi-add-panel normal-add-surface">
                                 <div className="normal-add-surface-head normal-selection-surface-head">
                                     <div className="normal-add-surface-heading">
