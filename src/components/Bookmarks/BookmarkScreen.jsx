@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translateGenre } from '../../constants/animeData';
 import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
 import AnimeSortControl from '../Shared/AnimeSortControl';
+import CollectionPagination from '../Shared/CollectionPagination';
 import TrailerPlayButton from '../Shared/TrailerPlayButton';
 import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
 import {
@@ -15,6 +16,7 @@ import {
 
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
+const COLLECTION_PAGE_SIZE = 30;
 
 const normalizeRating = (value) => {
   const parsed = Number(value);
@@ -50,6 +52,7 @@ function BookmarkScreen({
   const [filterMatchMode, setFilterMatchMode] = useState('and');
   const [sortKey, setSortKey] = useState('added');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [currentPage, setCurrentPage] = useState(1);
   const [quickNavState, setQuickNavState] = useState({
     visible: false,
     mobile: false,
@@ -62,6 +65,8 @@ function BookmarkScreen({
   );
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
+  const resultsRef = useRef(null);
+  const pendingPageScrollRef = useRef(false);
   const tagTranslationVersion = useTagTranslationVersion();
 
   const sortedBookmarks = useMemo(() => {
@@ -94,11 +99,21 @@ function BookmarkScreen({
       addedAtFields: ['bookmarkedAt', 'addedAt'],
     });
   }, [sortedBookmarks, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
+  const totalPages = Math.max(1, Math.ceil(filteredBookmarks.length / COLLECTION_PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const pagedBookmarks = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * COLLECTION_PAGE_SIZE;
+    return filteredBookmarks.slice(startIndex, startIndex + COLLECTION_PAGE_SIZE);
+  }, [filteredBookmarks, safeCurrentPage]);
+
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(Math.max(1, prev), totalPages));
+  }, [totalPages]);
 
   useEffect(() => {
     if (typeof onVisibleAnimeIdsChange !== 'function') return;
-    onVisibleAnimeIdsChange(filteredBookmarks.map((anime) => anime.id));
-  }, [filteredBookmarks, onVisibleAnimeIdsChange]);
+    onVisibleAnimeIdsChange(pagedBookmarks.map((anime) => anime.id));
+  }, [pagedBookmarks, onVisibleAnimeIdsChange]);
 
   useEffect(() => () => {
     onVisibleAnimeIdsChange?.([]);
@@ -204,7 +219,7 @@ function BookmarkScreen({
       window.removeEventListener('scroll', requestUpdate);
       window.removeEventListener('resize', requestUpdate);
     };
-  }, [isSelectionMode, filteredBookmarks.length, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
+  }, [isSelectionMode, filteredBookmarks.length, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder, currentPage]);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -309,6 +324,7 @@ function BookmarkScreen({
   };
 
   const handleApplyFilters = (nextFilters) => {
+    setCurrentPage(1);
     setSelectedGenres(Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : []);
     setSelectedTags(Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : []);
     setSelectedYear(String(nextFilters?.selectedYear || '').trim());
@@ -316,10 +332,64 @@ function BookmarkScreen({
   };
 
   const handleClearFilters = () => {
+    setCurrentPage(1);
     setSelectedGenres([]);
     setSelectedTags([]);
     setSelectedYear('');
     setFilterMatchMode('and');
+  };
+
+  useEffect(() => {
+    if (!pendingPageScrollRef.current) return undefined;
+
+    pendingPageScrollRef.current = false;
+    let firstFrameId = 0;
+    let secondFrameId = 0;
+
+    const performScroll = () => {
+      const target = resultsRef.current;
+      if (target?.scrollIntoView) {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        return;
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    firstFrameId = window.requestAnimationFrame(() => {
+      secondFrameId = window.requestAnimationFrame(performScroll);
+    });
+
+    return () => {
+      if (firstFrameId) {
+        window.cancelAnimationFrame(firstFrameId);
+      }
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [filteredBookmarks.length, safeCurrentPage]);
+
+  const queueResultsScroll = () => {
+    pendingPageScrollRef.current = true;
+  };
+
+  const handleSearchChange = (event) => {
+    setCurrentPage(1);
+    setSearchQuery(event.target.value);
+  };
+
+  const handleSortKeyChange = (nextSortKey) => {
+    setCurrentPage(1);
+    setSortKey(nextSortKey);
+  };
+
+  const handleSortOrderChange = (nextSortOrder) => {
+    setCurrentPage(1);
+    setSortOrder(nextSortOrder);
   };
 
   const handleScrollToTop = () => {
@@ -378,7 +448,7 @@ function BookmarkScreen({
                 type="text"
                 placeholder="ブックマークからタイトル検索"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={handleSearchChange}
               />
             </div>
           </div>
@@ -404,8 +474,8 @@ function BookmarkScreen({
                 sortKey={sortKey}
                 sortOrder={sortOrder}
                 options={ANIME_SORT_OPTIONS}
-                onSortKeyChange={setSortKey}
-                onSortOrderChange={setSortOrder}
+                onSortKeyChange={handleSortKeyChange}
+                onSortOrderChange={handleSortOrderChange}
                 selectAriaLabel="ブックマークの並び替え"
               />
             )}
@@ -413,8 +483,20 @@ function BookmarkScreen({
             onClear={handleClearFilters}
           />
 
-          <div className="results-count">
-            {filteredBookmarks.length} 作品が見つかりました
+          <div ref={resultsRef}>
+            <div className="results-count">
+              {filteredBookmarks.length} 作品が見つかりました
+            </div>
+            <CollectionPagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              totalItems={filteredBookmarks.length}
+              itemsPerPage={COLLECTION_PAGE_SIZE}
+              onPageChange={(nextPage) => {
+                setCurrentPage(nextPage);
+                queueResultsScroll();
+              }}
+            />
           </div>
         </>
       )}
@@ -442,7 +524,7 @@ function BookmarkScreen({
         </div>
       ) : (
         <div className="bookmark-list-grid">
-          {filteredBookmarks.map((anime) => {
+          {pagedBookmarks.map((anime) => {
             const isWatched = watchedIdSet.has(anime.id);
             const isSelected = selectedBookmarkIds.includes(anime.id);
             const title = getBookmarkAnimeTitle(anime);
@@ -580,6 +662,18 @@ function BookmarkScreen({
           })}
         </div>
       )}
+
+      <CollectionPagination
+        currentPage={safeCurrentPage}
+        totalPages={totalPages}
+        totalItems={filteredBookmarks.length}
+        itemsPerPage={COLLECTION_PAGE_SIZE}
+        className="browse-pagination-bottom"
+        onPageChange={(nextPage) => {
+          setCurrentPage(nextPage);
+          queueResultsScroll();
+        }}
+      />
 
       {isSelectionMode && (
         <div className="bookmark-selection-dock" role="region" aria-label="選択操作">

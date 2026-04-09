@@ -4147,14 +4147,15 @@ function AddAnimeScreen({
 
             {showBrowseWorkspace && (
                 <div className="entry-browse-section">
-                    <div className="browse-control-panel">
+                    <div className={`browse-control-panel${showBrowseFilterPanel ? ' has-secondary' : ''}`}>
                         {!isBrowsePresetLocked && (
                             <div className="browse-primary-panel">
                                 <div className="browse-panel-head">
-                                    <div>
-                                        <div className="browse-panel-title">年代を選択して一覧を表示</div>
+                                    <div className="browse-panel-copy">
+                                        <div className="browse-panel-kicker">STEP 1</div>
+                                        <div className="browse-panel-title">年代を選ぶ</div>
                                         <p className="browse-panel-text">
-                                            年代を選び、「一覧を表示」で作品一覧を表示します。
+                                            年代や今季・来季から一覧を表示できます。
                                         </p>
                                     </div>
                                     {selectedBrowseYear && (
@@ -4198,12 +4199,13 @@ function AddAnimeScreen({
                         {showBrowseFilterPanel && (
                             <div className="browse-secondary-panel">
                                 <div className="browse-panel-head">
-                                    <div>
-                                        <div className="browse-panel-title">必要に応じて絞り込む</div>
+                                    <div className="browse-panel-copy">
+                                        <div className="browse-panel-kicker">STEP 2</div>
+                                        <div className="browse-panel-title">絞り込み</div>
                                         <p className="browse-panel-text">
                                             {selectedBrowseYear
-                                                ? `${selectedBrowseYear}年の作品から、ジャンル・タグ・放送時期でさらに絞り込めます。`
-                                                : '年代を選択すると、ここからジャンル・タグ・放送時期で絞り込めます。'}
+                                                ? `${selectedBrowseYear}年の一覧に条件を追加できます。`
+                                                : '年代を選ぶと条件を追加できます。'}
                                         </p>
                                     </div>
                                 </div>
@@ -4251,11 +4253,17 @@ function AddAnimeScreen({
                     </div>
 
                     {!selectedBrowseYear ? (
-                        <div className="browse-empty-state">年代を選択すると、作品一覧がここに表示されます。</div>
+                        <div className="browse-empty-state">
+                            <div className="browse-empty-state-title">一覧はここに表示されます</div>
+                            <p className="browse-empty-state-text">年代を選ぶと、作品カードをまとめて確認できます。</p>
+                        </div>
                     ) : (
                         <div className="browse-results-area" ref={browseResultsTopRef}>
                             <div className="browse-results-header">
-                                <div className="browse-results-title">{browseResultsTitle}</div>
+                                <div className="browse-results-heading">
+                                    <div className="browse-results-kicker">一覧結果</div>
+                                    <div className="browse-results-title">{browseResultsTitle}</div>
+                                </div>
                                 <div className="browse-results-meta">
                                     {browseVisibleResults.length > 0 ? (
                                         <>

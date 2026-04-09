@@ -39,6 +39,7 @@ import BookmarkScreen from './components/Bookmarks/BookmarkScreen';
 import ShareScreen from './components/Share/ShareScreen';
 import AnimeFilterDialog from './components/Shared/AnimeFilterDialog';
 import AnimeSortControl from './components/Shared/AnimeSortControl';
+import CollectionPagination from './components/Shared/CollectionPagination';
 import TrailerModal from './components/Shared/TrailerModal';
 import {
   readHomeStatsCardBackgroundsFromStorage,
@@ -120,6 +121,7 @@ const ONBOARDING_STEPS = [
 const DETAIL_ENRICHMENT_BATCH_SIZE = 6;
 const DETAIL_ENRICHMENT_VISIBLE_PRIORITY_LIMIT = 24;
 const DETAIL_ENRICHMENT_BACKGROUND_LIMIT = 24;
+const COLLECTION_PAGE_SIZE = 30;
 const DETAIL_ENRICHMENT_RETRY_BASE_MS = 4000;
 const DETAIL_ENRICHMENT_RETRY_MAX_MS = 60000;
 const FEATURED_SLIDER_CURRENT_SEASON_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
@@ -274,6 +276,7 @@ function App() {
   const [filterMatchMode, setFilterMatchMode] = useState('and');
   const [sortKey, setSortKey] = useState("added"); // 'added', 'title', 'year', 'rating'
   const [sortOrder, setSortOrder] = useState("desc"); // 'desc', 'asc'
+  const [myListPage, setMyListPage] = useState(1);
   const [homeStatsCardBackgrounds, setHomeStatsCardBackgrounds] = useState(() =>
     readHomeStatsCardBackgroundsFromStorage()
   );
@@ -313,6 +316,8 @@ function App() {
   const detailEnrichmentRetryTimerRef = useRef(null);
   const detailEnrichmentMountedRef = useRef(true);
   const trailerOpenRequestIdRef = useRef(0);
+  const myListResultsRef = useRef(null);
+  const pendingMyListPageScrollRef = useRef(false);
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
   const isPageScrollIdle = usePageScrollIdle();
@@ -837,7 +842,7 @@ function App() {
       window.removeEventListener('scroll', requestUpdate);
       window.removeEventListener('resize', requestUpdate);
     };
-  }, [view, animeList.length, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
+  }, [view, animeList.length, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder, myListPage]);
 
   useEffect(() => {
     setSelectedAnimeIds((prev) => prev.filter((id) => animeList.some((anime) => anime.id === id)));
@@ -1141,6 +1146,7 @@ function App() {
   };
 
   const handleApplyMyListFilters = (nextFilters) => {
+    setMyListPage(1);
     setSelectedGenres(Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : []);
     setSelectedTags(Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : []);
     setSelectedYear(String(nextFilters?.selectedYear || '').trim());
@@ -1149,12 +1155,32 @@ function App() {
   };
 
   const handleClearMyListFilters = () => {
+    setMyListPage(1);
     setSelectedGenres([]);
     setSelectedTags([]);
     setSelectedYear('');
     setMinRating('');
     setFilterMatchMode('and');
   };
+
+  const queueMyListResultsScroll = useCallback(() => {
+    pendingMyListPageScrollRef.current = true;
+  }, []);
+
+  const handleMyListSearchChange = useCallback((event) => {
+    setMyListPage(1);
+    setSearchQuery(event.target.value);
+  }, []);
+
+  const handleMyListSortKeyChange = useCallback((nextSortKey) => {
+    setMyListPage(1);
+    setSortKey(nextSortKey);
+  }, []);
+
+  const handleMyListSortOrderChange = useCallback((nextSortOrder) => {
+    setMyListPage(1);
+    setSortOrder(nextSortOrder);
+  }, []);
 
   // 5. Data Derived States (Filters/Computed)
   const myListFilterOptions = useMemo(
@@ -1191,8 +1217,53 @@ function App() {
       sortOrder,
     });
   }, [animeList, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
+  const myListPageCount = Math.max(1, Math.ceil(filteredList.length / COLLECTION_PAGE_SIZE));
+  const safeMyListPage = Math.min(Math.max(1, myListPage), myListPageCount);
+  const pagedFilteredList = useMemo(() => {
+    const startIndex = (safeMyListPage - 1) * COLLECTION_PAGE_SIZE;
+    return filteredList.slice(startIndex, startIndex + COLLECTION_PAGE_SIZE);
+  }, [filteredList, safeMyListPage]);
+
+  useEffect(() => {
+    setMyListPage((prev) => Math.min(Math.max(1, prev), myListPageCount));
+  }, [myListPageCount]);
+
+  useEffect(() => {
+    if (!pendingMyListPageScrollRef.current) return undefined;
+
+    pendingMyListPageScrollRef.current = false;
+    let firstFrameId = 0;
+    let secondFrameId = 0;
+
+    const performScroll = () => {
+      const target = myListResultsRef.current;
+      if (target?.scrollIntoView) {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        return;
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    firstFrameId = window.requestAnimationFrame(() => {
+      secondFrameId = window.requestAnimationFrame(performScroll);
+    });
+
+    return () => {
+      if (firstFrameId) {
+        window.cancelAnimationFrame(firstFrameId);
+      }
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [filteredList.length, safeMyListPage]);
+
   const selectedAnimeIdSet = useMemo(() => new Set(selectedAnimeIds), [selectedAnimeIds]);
-  const visibleAnimeIds = useMemo(() => filteredList.map((anime) => anime.id), [filteredList]);
+  const visibleAnimeIds = useMemo(() => pagedFilteredList.map((anime) => anime.id), [pagedFilteredList]);
   const visibleAnimeIdSet = useMemo(() => new Set(visibleAnimeIds), [visibleAnimeIds]);
   const myListViewportAnimeIds = useMemo(() => (
     Object.entries(myListViewportPriorityMap)
@@ -1624,7 +1695,7 @@ function App() {
                   type="text"
                   placeholder="登録された作品からタイトルを検索"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={handleMyListSearchChange}
                 />
               </div>
             </div>
@@ -1651,8 +1722,8 @@ function App() {
                   sortKey={sortKey}
                   sortOrder={sortOrder}
                   options={ANIME_SORT_OPTIONS}
-                  onSortKeyChange={setSortKey}
-                  onSortOrderChange={setSortOrder}
+                  onSortKeyChange={handleMyListSortKeyChange}
+                  onSortOrderChange={handleMyListSortOrderChange}
                   selectAriaLabel="マイリストの並び替え"
                 />
               )}
@@ -1660,8 +1731,22 @@ function App() {
               onClear={handleClearMyListFilters}
             />
 
-            <div className="results-count">
-              {filteredList.length} 作品が見つかりました
+            <div ref={myListResultsRef}>
+              <div className="results-count">
+                {filteredList.length} 作品が見つかりました
+              </div>
+              <CollectionPagination
+                currentPage={safeMyListPage}
+                totalPages={myListPageCount}
+                totalItems={filteredList.length}
+                itemsPerPage={COLLECTION_PAGE_SIZE}
+                onPageChange={(nextPage) => {
+                  startTransition(() => {
+                    setMyListPage(nextPage);
+                  });
+                  queueMyListResultsScroll();
+                }}
+              />
             </div>
 
             {isSelectionMode && (
@@ -1675,7 +1760,7 @@ function App() {
             )}
 
             <div className="anime-grid">
-              {filteredList.map(anime => (
+              {pagedFilteredList.map(anime => (
                 <AnimeCard
                   key={anime.id}
                   anime={anime}
@@ -1691,6 +1776,20 @@ function App() {
                 />
               ))}
             </div>
+
+            <CollectionPagination
+              currentPage={safeMyListPage}
+              totalPages={myListPageCount}
+              totalItems={filteredList.length}
+              itemsPerPage={COLLECTION_PAGE_SIZE}
+              className="browse-pagination-bottom"
+              onPageChange={(nextPage) => {
+                startTransition(() => {
+                  setMyListPage(nextPage);
+                });
+                queueMyListResultsScroll();
+              }}
+            />
 
             {filteredList.length === 0 && (
               <div className="empty-state">該当する作品がありません</div>
