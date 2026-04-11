@@ -481,6 +481,10 @@ const Hero = React.forwardRef(function Hero({
     ]);
 
     useEffect(() => {
+        if (shouldUseAutoplayBlockedFallbackTimeline) {
+            return undefined;
+        }
+
         if (!shouldUseFallbackTimeline || typeof onSlideProgressChange !== 'function') {
             clearFallbackTimeline();
             return undefined;
@@ -495,6 +499,7 @@ const Hero = React.forwardRef(function Hero({
         hasTrailerPlaybackStalled,
         onSlideProgressChange,
         restartToken,
+        shouldUseAutoplayBlockedFallbackTimeline,
         shouldUseFallbackTimeline,
         anime?.id,
     ]);
