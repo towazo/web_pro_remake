@@ -4418,6 +4418,7 @@ button.card-watch-summary {
 
 .youtube-trailer-player {
     display: block;
+    position: relative;
     overflow: hidden;
     background: #000;
     transition: opacity 0.18s ease;
@@ -4425,34 +4426,46 @@ button.card-watch-summary {
 
 .youtube-trailer-player-slot {
     display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
 }
 
 .youtube-trailer-player.defer-visibility {
-    opacity: 0;
     pointer-events: none;
-    background: transparent;
+    background: #000;
 }
 
 .youtube-trailer-player.defer-visibility.is-playback-visible {
-    opacity: 1;
     pointer-events: auto;
     background: #000;
 }
 
-.youtube-trailer-player.defer-visibility .youtube-trailer-player-slot {
-    opacity: 0;
+.youtube-trailer-player-startup-cover {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: block;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.08), transparent 32%),
+        #000;
+    pointer-events: none;
     transition: opacity 0.18s ease;
 }
 
-.youtube-trailer-player.defer-visibility.is-playback-visible .youtube-trailer-player-slot {
-    opacity: 1;
-}
-
-.youtube-trailer-player-slot iframe {
+.youtube-trailer-player-startup-cover-image {
     width: 100%;
     height: 100%;
-    border: 0;
     display: block;
+    object-fit: cover;
+    opacity: 0.72;
+    filter: brightness(0.62) saturate(0.92);
+    transform: scale(1.025);
+}
+
+.youtube-trailer-player.is-playback-visible .youtube-trailer-player-startup-cover {
+    opacity: 0;
 }
 
 

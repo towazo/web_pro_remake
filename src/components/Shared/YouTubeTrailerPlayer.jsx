@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { loadYouTubeIframeApi } from '../../services/youtubePlayerService';
 import {
   markAnimeTrailerPlayable,
@@ -19,6 +19,7 @@ const PROGRESS_PLAYER_RESAMPLE_MS = 450;
 const USER_PLAYBACK_INTERACTION_GRACE_MS = 2200;
 
 const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) || 0));
+let youtubeTrailerPlayerIdSequence = 0;
 
 const isLikelyMobileAutoplayEnvironment = () => (
   typeof window !== 'undefined'
@@ -67,6 +68,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   const lastHandledRestartTokenRef = useRef(restartToken);
   const autoplayStartupTimeoutIdsRef = useRef([]);
   const autoplayRecoveryRestartCountRef = useRef(0);
+  const autoplayBlockedRetryCountRef = useRef(0);
   const playbackStartedOnceRef = useRef(false);
   const progressAnimationFrameIdRef = useRef(0);
   const progressBaselinePlayerTimeRef = useRef(0);
@@ -77,10 +79,39 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   const pendingSeekProgressRef = useRef(null);
   const userPlaybackInteractionUntilRef = useRef(0);
   const [playerRestartNonce, setPlayerRestartNonce] = useState(0);
+  const [iframeId] = useState(() => {
+    youtubeTrailerPlayerIdSequence += 1;
+    return `youtube-trailer-player-${youtubeTrailerPlayerIdSequence}`;
+  });
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
   const videoId = normalizedTrailer?.id || '';
-  const shouldDeferPlaybackVisibility = deferVisibilityUntilPlaying && !isLikelyMobileAutoplayEnvironment();
-  const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !shouldDeferPlaybackVisibility || !autoplay);
+  const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
+  const iframeEmbedUrl = useMemo(() => {
+    if (!videoId) return '';
+
+    const params = new URLSearchParams({
+      autoplay: autoplay ? '1' : '0',
+      controls: controls ? '1' : '0',
+      disablekb: controls ? '0' : '1',
+      enablejsapi: '1',
+      fs: controls ? '1' : '0',
+      iv_load_policy: '3',
+      loop: loop ? '1' : '0',
+      modestbranding: '1',
+      // A muted iframe src lets the browser evaluate autoplay with the correct state
+      // before the IFrame API attaches.
+      mute: autoplay ? '1' : (muted ? '1' : '0'),
+      playsinline: '1',
+      rel: '0',
+      origin: typeof window !== 'undefined' ? window.location.origin : '',
+    });
+
+    if (loop) {
+      params.set('playlist', videoId);
+    }
+
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
+  }, [autoplay, controls, loop, muted, videoId]);
 
   useEffect(() => {
     autoplayRef.current = autoplay;
@@ -115,11 +146,12 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   }, [onProgressChange]);
 
   useLayoutEffect(() => {
-    setIsPlaybackVisible(!shouldDeferPlaybackVisibility || !autoplay);
-  }, [autoplay, playerRestartNonce, shouldDeferPlaybackVisibility, videoId]);
+    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
+  }, [autoplay, deferVisibilityUntilPlaying, playerRestartNonce, videoId]);
 
   useEffect(() => {
     autoplayRecoveryRestartCountRef.current = 0;
+    autoplayBlockedRetryCountRef.current = 0;
     playbackStartedOnceRef.current = false;
     pendingSeekProgressRef.current = null;
     userPlaybackInteractionUntilRef.current = 0;
@@ -461,12 +493,13 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     }
 
     autoplayRecoveryRestartCountRef.current += 1;
+    autoplayBlockedRetryCountRef.current = 0;
     readyRef.current = false;
     playbackStateRef.current = null;
     clearPlaybackRetryTimeouts();
     clearUnmuteRetryTimeouts();
     clearAutoplayStartupTimeouts();
-    setIsPlaybackVisible(!shouldDeferPlaybackVisibility || !autoplayRef.current);
+    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplayRef.current);
     setPlayerRestartNonce((prev) => prev + 1);
     return true;
   };
@@ -574,30 +607,14 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     let cancelled = false;
     let localPlayer = null;
+    const iframeNode = hostRef.current;
 
     const createPlayer = async () => {
       try {
         const YT = await loadYouTubeIframeApi();
-        if (cancelled || !hostRef.current) return;
+        if (cancelled || !iframeNode || !document.getElementById(iframeId)) return;
 
-        localPlayer = new YT.Player(hostRef.current, {
-          host: 'https://www.youtube-nocookie.com',
-          videoId,
-          playerVars: {
-            autoplay: autoplay ? 1 : 0,
-            controls: controls ? 1 : 0,
-            disablekb: controls ? 0 : 1,
-            fs: controls ? 1 : 0,
-            iv_load_policy: 3,
-            loop: loop ? 1 : 0,
-            modestbranding: 1,
-            // Mobile autoplay is much more reliable if the player starts muted.
-            mute: autoplay ? 1 : (muted ? 1 : 0),
-            playsinline: 1,
-            playlist: loop ? videoId : undefined,
-            rel: 0,
-            origin: window.location.origin,
-          },
+        localPlayer = new YT.Player(iframeId, {
           events: {
             onReady: (event) => {
               if (cancelled) return;
@@ -619,8 +636,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
               playbackStateRef.current = Number(event?.data);
               const isPlayingState = event?.data === YT.PlayerState.PLAYING;
               const isBufferingState = event?.data === YT.PlayerState.BUFFERING;
-              // Keep the iframe hidden during the very first startup buffer on desktop,
-              // but keep it paintable on mobile because some browsers gate autoplay by visibility.
+              // Reveal only after real playback starts so YouTube's startup chrome never flashes.
               if (isPlayingState || (isBufferingState && playbackStartedOnceRef.current)) {
                 setIsPlaybackVisible(true);
                 flushPendingSeekProgress(event.target, {
@@ -630,6 +646,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
               }
 
               if (isPlayingState) {
+                autoplayBlockedRetryCountRef.current = 0;
                 playbackStartedOnceRef.current = true;
                 clearBufferRecoveryTimeouts();
                 startProgressPolling(event.target);
@@ -686,6 +703,18 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
                 onError(errorCode);
               }
             },
+            onAutoplayBlocked: (event) => {
+              if (cancelled || !autoplayRef.current) return;
+              if (autoplayBlockedRetryCountRef.current >= 2) return;
+              autoplayBlockedRetryCountRef.current += 1;
+              const blockedPlayer = event?.target || playerRef.current || localPlayer;
+              preparePlaybackStart(blockedPlayer);
+              window.setTimeout(() => {
+                if (cancelled || !autoplayRef.current || hasStartedPlayback()) return;
+                requestPlaybackResume(blockedPlayer);
+                scheduleAutoplayStartupWatch(blockedPlayer);
+              }, 180);
+            },
           },
         });
       } catch (_) {
@@ -717,11 +746,11 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
         }
       }
       playerRef.current = null;
-      if (hostRef.current) {
-        hostRef.current.innerHTML = '';
+      if (iframeNode && iframeNode === hostRef.current) {
+        iframeNode.removeAttribute('src');
       }
     };
-  }, [controls, loop, playerRestartNonce, videoId]);
+  }, [iframeId, playerRestartNonce, videoId]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -729,6 +758,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     if (autoplay) {
       playbackStateRef.current = null;
+      autoplayBlockedRetryCountRef.current = 0;
       clearBufferRecoveryTimeouts();
       syncDesiredMuteState(player);
       scheduleAutoplayStartupWatch(player);
@@ -793,6 +823,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     playbackStateRef.current = null;
     playbackStartedOnceRef.current = false;
+    autoplayBlockedRetryCountRef.current = 0;
     clearPlaybackRetryTimeouts();
     clearBufferRecoveryTimeouts();
     clearUnmuteRetryTimeouts();
@@ -800,7 +831,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     clearProgressPollInterval();
     resetProgressTracking();
     emitProgress(0, { allowDecrease: true });
-    setIsPlaybackVisible(!shouldDeferPlaybackVisibility || !autoplay);
+    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
 
     try {
       player.pauseVideo?.();
@@ -823,17 +854,38 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     }
 
     emitMuteState(player);
-  }, [autoplay, restartToken, shouldDeferPlaybackVisibility, videoId]);
+  }, [autoplay, deferVisibilityUntilPlaying, restartToken, videoId]);
 
   return (
     <div
-      className={`youtube-trailer-player${shouldDeferPlaybackVisibility ? ' defer-visibility' : ''}${isPlaybackVisible ? ' is-playback-visible' : ''}${className ? ` ${className}` : ''}`.trim()}
+      className={`youtube-trailer-player${deferVisibilityUntilPlaying ? ' defer-visibility' : ''}${isPlaybackVisible ? ' is-playback-visible' : ''}${className ? ` ${className}` : ''}`.trim()}
     >
-      <div
+      <iframe
+        key={`${iframeId}-${videoId}-${playerRestartNonce}`}
+        id={iframeId}
         ref={hostRef}
         className="youtube-trailer-player-slot"
-        aria-label={title}
+        src={iframeEmbedUrl}
+        title={title}
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        allowFullScreen
+        playsinline="1"
+        webkit-playsinline="1"
+        referrerPolicy="strict-origin-when-cross-origin"
       />
+      {deferVisibilityUntilPlaying && !isPlaybackVisible && (
+        <div className="youtube-trailer-player-startup-cover" aria-hidden="true">
+          {normalizedTrailer?.thumbnail ? (
+            <img
+              src={normalizedTrailer.thumbnail}
+              alt=""
+              className="youtube-trailer-player-startup-cover-image"
+              loading="eager"
+              decoding="async"
+            />
+          ) : null}
+        </div>
+      )}
     </div>
   );
 });
