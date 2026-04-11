@@ -327,6 +327,11 @@ function HeroSlider({
     const visibleSlideImage = visibleAnime?.coverImage?.large
         || visibleAnime?.coverImage?.extraLarge
         || '';
+    const visibleSlideHasTrailerPreview = Boolean(
+        visibleAnime?.trailer?.id
+        && String(visibleAnime?.trailer?.site || '').toLowerCase() === 'youtube'
+    );
+    const shouldUseCinematicTrailerChrome = activePreviewAudioAvailable || visibleSlideHasTrailerPreview;
     const myListActionLabel = isVisibleAnimeInMyList ? '取消' : 'マイリスト';
     const bookmarkActionLabel = isVisibleAnimeBookmarked ? '解除' : 'ブックマーク';
     const handleGoToSlide = (index) => {
@@ -453,7 +458,7 @@ function HeroSlider({
     return (
         <div className="hero-slider-shell">
             <div
-                className="hero-slider-container"
+                className={`hero-slider-container${shouldUseCinematicTrailerChrome ? ' is-trailer-preview-active' : ''}`}
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
                 onTouchEnd={onTouchEnd}

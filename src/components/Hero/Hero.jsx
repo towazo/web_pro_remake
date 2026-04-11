@@ -175,7 +175,7 @@ const Hero = React.forwardRef(function Hero({
         : hasBannerImage
             ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
             : "(max-width: 768px) 42vw, 220px";
-    const shouldPrepareTrailerPlayer = !isTutorial && isActive;
+    const shouldPrepareTrailerPlayer = !isTutorial && (isActive || shouldPreloadTrailer);
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && shouldPrepareTrailerPlayer;
     const shouldEagerLoadHeroAssets = isActive || shouldPreloadTrailer;
     const shouldUseFallbackTimeline = isActive

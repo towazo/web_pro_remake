@@ -17,6 +17,7 @@ const BUFFER_STALL_HARD_RETRY_MS = 4200;
 const MAX_AUTOPLAY_PLAYER_RECOVERY_RESTARTS = 1;
 const PROGRESS_PLAYER_RESAMPLE_MS = 450;
 const USER_PLAYBACK_INTERACTION_GRACE_MS = 2200;
+const END_ADVANCE_REMAINING_SECONDS = 0.24;
 
 const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) || 0));
 
@@ -75,6 +76,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   const autoplayRecoveryRestartCountRef = useRef(0);
   const autoplayBlockedRetryCountRef = useRef(0);
   const playbackStartedOnceRef = useRef(false);
+  const preparedWhileIdleRef = useRef(false);
+  const endAdvanceRequestedRef = useRef(false);
+  const pendingTrustedPlaybackGestureRef = useRef(false);
   const progressAnimationFrameIdRef = useRef(0);
   const progressBaselinePlayerTimeRef = useRef(0);
   const progressBaselineTimestampRef = useRef(0);
@@ -122,6 +126,19 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   }, [onProgressChange]);
 
   useLayoutEffect(() => {
+    const player = playerRef.current;
+    const canStartPreparedPlayer = autoplay && readyRef.current && preparedWhileIdleRef.current && player;
+    if (canStartPreparedPlayer) {
+      setIsPlaybackVisible(true);
+      playbackStateRef.current = null;
+      endAdvanceRequestedRef.current = false;
+      const userInitiated = hasRecentUserPlaybackInteraction();
+      syncDesiredMuteState(player);
+      requestPlaybackResume(player, { userInitiated });
+      scheduleAutoplayStartupWatch(player);
+      return;
+    }
+
     setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
   }, [autoplay, deferVisibilityUntilPlaying, playerRestartNonce, videoId]);
 
@@ -129,6 +146,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     autoplayRecoveryRestartCountRef.current = 0;
     autoplayBlockedRetryCountRef.current = 0;
     playbackStartedOnceRef.current = false;
+    preparedWhileIdleRef.current = false;
+    endAdvanceRequestedRef.current = false;
+    pendingTrustedPlaybackGestureRef.current = false;
     pendingSeekProgressRef.current = null;
     userPlaybackInteractionUntilRef.current = 0;
     setPlayerRestartNonce(0);
@@ -214,6 +234,44 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     }
   };
 
+  const requestEndedAdvance = (player) => {
+    if (endAdvanceRequestedRef.current) return true;
+    if (typeof onEndedRef.current !== 'function') return false;
+
+    endAdvanceRequestedRef.current = true;
+    clearPlaybackRetryTimeouts();
+    clearBufferRecoveryTimeouts();
+    clearUnmuteRetryTimeouts();
+    clearAutoplayStartupTimeouts();
+    clearProgressPollInterval();
+    emitProgress(1);
+
+    try {
+      player?.pauseVideo?.();
+    } catch (_) {
+      // Ignore end-pause failures.
+    }
+
+    try {
+      onEndedRef.current();
+    } catch (_) {
+      // Ignore callback failures.
+    }
+
+    return true;
+  };
+
+  const requestEndedAdvanceIfNeeded = (player, progressRatio) => {
+    if (!autoplayRef.current || !playbackStartedOnceRef.current || endAdvanceRequestedRef.current) return;
+    const duration = progressDurationRef.current;
+    if (!(duration > 0)) return;
+
+    const remainingSeconds = duration * Math.max(0, 1 - normalizeProgressRatio(progressRatio));
+    if (remainingSeconds <= END_ADVANCE_REMAINING_SECONDS) {
+      requestEndedAdvance(player);
+    }
+  };
+
   const emitProgress = (value, options = {}) => {
     if (typeof onProgressChangeRef.current !== 'function') return;
     const normalizedValue = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
@@ -261,7 +319,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
         progressBaselinePlayerTimeRef.current = currentTime;
         progressBaselineTimestampRef.current = now;
         progressLastSampleTimestampRef.current = now;
-        emitProgress(currentTime / duration, options);
+        const progressRatio = currentTime / duration;
+        emitProgress(progressRatio, options);
+        requestEndedAdvanceIfNeeded(player, progressRatio);
       }
     } catch (_) {
       // Ignore progress-read failures.
@@ -302,6 +362,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
       const estimatedProgress = getEstimatedProgress(timestamp);
       if (estimatedProgress !== null) {
         emitProgress(estimatedProgress);
+        requestEndedAdvanceIfNeeded(player, estimatedProgress);
       }
 
       progressAnimationFrameIdRef.current = window.requestAnimationFrame(tick);
@@ -615,12 +676,18 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
               playerRef.current = event.target;
               readyRef.current = true;
               playbackStateRef.current = null;
+              preparedWhileIdleRef.current = !autoplayRef.current;
+              endAdvanceRequestedRef.current = false;
               resetProgressTracking();
               emitProgress(0, { allowDecrease: true });
               syncIframeAttributes(event.target);
               syncDesiredMuteState(event.target);
 
-              requestPlaybackResume(event.target);
+              const shouldUsePendingGesture = pendingTrustedPlaybackGestureRef.current || hasRecentUserPlaybackInteraction();
+              pendingTrustedPlaybackGestureRef.current = false;
+              requestPlaybackResume(event.target, {
+                userInitiated: shouldUsePendingGesture,
+              });
               scheduleAutoplayStartupWatch(event.target);
               flushPendingSeekProgress(event.target, { resumePlayback: false });
 
@@ -641,6 +708,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
               if (isPlayingState) {
                 autoplayBlockedRetryCountRef.current = 0;
+                preparedWhileIdleRef.current = false;
                 playbackStartedOnceRef.current = true;
                 clearBufferRecoveryTimeouts();
                 startProgressPolling(event.target);
@@ -655,6 +723,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
               }
 
               if (event?.data === YT.PlayerState.ENDED) {
+                if (requestEndedAdvance(event.target)) return;
                 clearBufferRecoveryTimeouts();
                 clearProgressPollInterval();
                 emitProgress(1);
@@ -664,14 +733,6 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
               if (event?.data === YT.PlayerState.PAUSED || event?.data === YT.PlayerState.CUED) {
                 clearBufferRecoveryTimeouts();
                 clearProgressPollInterval();
-              }
-
-              if (event?.data === YT.PlayerState.ENDED && typeof onEndedRef.current === 'function') {
-                try {
-                  onEndedRef.current();
-                } catch (_) {
-                  // Ignore callback failures.
-                }
               }
 
               if (!loop) return;
@@ -753,6 +814,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     if (autoplay) {
       playbackStateRef.current = null;
       autoplayBlockedRetryCountRef.current = 0;
+      endAdvanceRequestedRef.current = false;
       clearBufferRecoveryTimeouts();
       syncDesiredMuteState(player);
       scheduleAutoplayStartupWatch(player);
@@ -765,6 +827,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
       return;
     }
 
+    preparedWhileIdleRef.current = true;
+    endAdvanceRequestedRef.current = false;
+    pendingTrustedPlaybackGestureRef.current = false;
     clearPlaybackRetryTimeouts();
     clearBufferRecoveryTimeouts();
     clearUnmuteRetryTimeouts();
@@ -814,9 +879,12 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
       if (hasStartedPlayback()) return;
 
       const player = playerRef.current;
-      if (!player || !readyRef.current) return;
-
       markUserPlaybackInteraction();
+      if (!player || !readyRef.current) {
+        pendingTrustedPlaybackGestureRef.current = true;
+        return;
+      }
+
       syncDesiredMuteState(player, { userInitiated: true });
       requestPlaybackResume(player, { userInitiated: true });
       scheduleAutoplayStartupWatch(player);
@@ -845,6 +913,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     playbackStateRef.current = null;
     playbackStartedOnceRef.current = false;
     autoplayBlockedRetryCountRef.current = 0;
+    preparedWhileIdleRef.current = false;
+    endAdvanceRequestedRef.current = false;
+    pendingTrustedPlaybackGestureRef.current = false;
     clearPlaybackRetryTimeouts();
     clearBufferRecoveryTimeouts();
     clearUnmuteRetryTimeouts();
