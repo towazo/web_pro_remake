@@ -516,7 +516,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   };
 
   const requestPlaybackResume = (player, options = {}) => {
-    if (!autoplayRef.current || !player) return;
+    if (!player || (!autoplayRef.current && options.force !== true)) return;
 
     let shouldLoadVideoOnNextAttempt = options.loadVideoOnFirstAttempt === true && Boolean(videoId);
     const startSeconds = Math.max(0, Number(options.startSeconds) || 0);
@@ -620,6 +620,29 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   useImperativeHandle(ref, () => ({
     seekToProgress(progressRatio, options = {}) {
       return seekPlayerToProgress(playerRef.current, progressRatio, options);
+    },
+    resumePlaybackFromGesture() {
+      markUserPlaybackInteraction();
+      autoplayBlockedDetectedRef.current = false;
+      recoverableAutoplayStallEmittedRef.current = false;
+      autoplayPauseRecoveryCountRef.current = 0;
+
+      const player = playerRef.current;
+      if (!player || !readyRef.current) {
+        pendingTrustedPlaybackGestureRef.current = true;
+        return false;
+      }
+
+      syncDesiredMuteState(player, { userInitiated: true });
+      requestPlaybackResume(player, {
+        userInitiated: true,
+        force: true,
+        loadVideoOnFirstAttempt: !playbackStartedOnceRef.current,
+        startSeconds: 0,
+      });
+      requestDeferredUnmute(player, { userInitiated: true });
+      emitMuteState(player);
+      return true;
     },
   }), []);
 
@@ -957,6 +980,18 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     if (!player || !readyRef.current) return;
 
     if (autoplay) {
+      if (hasStartedPlayback()) {
+        playbackStartedOnceRef.current = true;
+        recoverableAutoplayStallEmittedRef.current = false;
+        autoplayPauseRecoveryCountRef.current = 0;
+        schedulePlaybackReveal(player);
+        startProgressPolling(player);
+        emitPlaybackStarted();
+        syncDesiredMuteState(player);
+        requestDeferredUnmute(player);
+        return;
+      }
+
       playbackStateRef.current = null;
       autoplayBlockedRetryCountRef.current = 0;
       autoplayBlockedDetectedRef.current = false;
@@ -1057,12 +1092,18 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     const listenerOptions = { capture: true, passive: true };
     window.addEventListener('pointerdown', handleTrustedPlaybackGesture, listenerOptions);
+    window.addEventListener('pointerup', handleTrustedPlaybackGesture, listenerOptions);
+    window.addEventListener('touchstart', handleTrustedPlaybackGesture, listenerOptions);
     window.addEventListener('touchend', handleTrustedPlaybackGesture, listenerOptions);
+    window.addEventListener('click', handleTrustedPlaybackGesture, listenerOptions);
     window.addEventListener('keydown', handleTrustedPlaybackGesture, true);
 
     return () => {
       window.removeEventListener('pointerdown', handleTrustedPlaybackGesture, listenerOptions);
+      window.removeEventListener('pointerup', handleTrustedPlaybackGesture, listenerOptions);
+      window.removeEventListener('touchstart', handleTrustedPlaybackGesture, listenerOptions);
       window.removeEventListener('touchend', handleTrustedPlaybackGesture, listenerOptions);
+      window.removeEventListener('click', handleTrustedPlaybackGesture, listenerOptions);
       window.removeEventListener('keydown', handleTrustedPlaybackGesture, true);
     };
   }, [autoplay, videoId]);

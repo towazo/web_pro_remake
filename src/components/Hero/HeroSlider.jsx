@@ -89,6 +89,7 @@ function HeroSlider({
     const progressFillRef = useRef(null);
     const progressHandleRef = useRef(null);
     const activeHeroRef = useRef(null);
+    const heroRefsByIndexRef = useRef(new Map());
     const timelineDragCleanupRef = useRef(null);
     const isTimelineScrubbingRef = useRef(false);
     const currentProgressRef = useRef(0);
@@ -100,6 +101,28 @@ function HeroSlider({
         : '';
     const getSlideKey = (anime, index) => String(anime?.uniqueId || anime?.id || index);
     const getSlideDistance = (fromIndex, toIndex) => Math.abs(fromIndex - toIndex);
+    const setHeroInstanceRef = useCallback((index, node) => {
+        const previousNode = heroRefsByIndexRef.current.get(index);
+
+        if (node) {
+            heroRefsByIndexRef.current.set(index, node);
+            if (index === currentIndex) {
+                activeHeroRef.current = node;
+            }
+            return;
+        }
+
+        if (previousNode && activeHeroRef.current === previousNode) {
+            activeHeroRef.current = null;
+        }
+        heroRefsByIndexRef.current.delete(index);
+    }, [currentIndex]);
+    const resumeSlideTrailerFromGesture = useCallback((index) => (
+        heroRefsByIndexRef.current.get(index)?.resumeTrailerPlaybackFromGesture?.() || false
+    ), []);
+    const resumeActiveTrailerFromGesture = useCallback(() => {
+        resumeSlideTrailerFromGesture(currentIndex);
+    }, [currentIndex, resumeSlideTrailerFromGesture]);
     const isLikelyMobileAutoplayEnvironment = () => (
         typeof window !== 'undefined'
         && typeof window.matchMedia === 'function'
@@ -172,11 +195,14 @@ function HeroSlider({
         setCurrentIndex(nextIndex);
     }, []);
 
-    const nextSlide = useCallback(() => {
+    const nextSlide = useCallback((options = {}) => {
         if (totalSlides <= 1) return;
         resetMobilePreviewAudioForNextSlide();
         const nextIndex = currentIndex + 1;
         if (nextIndex < totalSlides) {
+            if (options.userInitiated === true) {
+                resumeSlideTrailerFromGesture(nextIndex);
+            }
             commitSlideChange(nextIndex, 'forward');
             return;
         }
@@ -186,19 +212,43 @@ function HeroSlider({
             return;
         }
 
+        if (options.userInitiated === true) {
+            resumeSlideTrailerFromGesture(0);
+        }
         commitSlideChange(0, 'forward');
-    }, [commitSlideChange, currentIndex, onCycleComplete, resetMobilePreviewAudioForNextSlide, shouldLoopTutorialSlides, slides, totalSlides]);
+    }, [
+        commitSlideChange,
+        currentIndex,
+        onCycleComplete,
+        resetMobilePreviewAudioForNextSlide,
+        resumeSlideTrailerFromGesture,
+        shouldLoopTutorialSlides,
+        slides,
+        totalSlides,
+    ]);
 
-    const prevSlide = useCallback(() => {
+    const prevSlide = useCallback((options = {}) => {
         if (totalSlides <= 1) return;
         resetMobilePreviewAudioForNextSlide();
         if (currentIndex === 0) {
+            if (options.userInitiated === true) {
+                resumeSlideTrailerFromGesture(totalSlides - 1);
+            }
             commitSlideChange(totalSlides - 1, 'backward');
             return;
         }
 
+        if (options.userInitiated === true) {
+            resumeSlideTrailerFromGesture(currentIndex - 1);
+        }
         commitSlideChange(currentIndex - 1, 'backward');
-    }, [commitSlideChange, currentIndex, resetMobilePreviewAudioForNextSlide, totalSlides]);
+    }, [
+        commitSlideChange,
+        currentIndex,
+        resetMobilePreviewAudioForNextSlide,
+        resumeSlideTrailerFromGesture,
+        totalSlides,
+    ]);
 
     const clearSwipeGesture = useCallback(() => {
         touchStartRef.current = null;
@@ -253,15 +303,16 @@ function HeroSlider({
         const isLeftSwipe = distance > minSwipeDistance;
         const isRightSwipe = distance < -minSwipeDistance;
         if (isLeftSwipe) {
-            nextSlide();
+            nextSlide({ userInitiated: true });
         } else if (isRightSwipe) {
-            prevSlide();
+            prevSlide({ userInitiated: true });
         }
     };
 
     const handleRestartCurrentSlide = () => {
         if (totalSlides === 0) return;
         resetMobilePreviewAudioForNextSlide();
+        resumeActiveTrailerFromGesture();
         syncTimelineProgress(0);
         setCurrentSlideRestartToken((prev) => prev + 1);
     };
@@ -337,6 +388,7 @@ function HeroSlider({
     const handleGoToSlide = (index) => {
         if (index === currentIndex) return;
         resetMobilePreviewAudioForNextSlide();
+        resumeSlideTrailerFromGesture(index);
         setSlideTransitionDirection(index > currentIndex ? 'forward' : 'backward');
         setCurrentIndex(index);
     };
@@ -447,6 +499,11 @@ function HeroSlider({
         }
     }, [applyTimelineSeek]);
 
+    const handleSliderPlaybackGestureCapture = useCallback((event) => {
+        if (event.target && timelineRef.current?.contains(event.target)) return;
+        resumeActiveTrailerFromGesture();
+    }, [resumeActiveTrailerFromGesture]);
+
     if (totalSlides === 0) {
         if (isLoading) {
             return <HeroSliderLoading />;
@@ -459,6 +516,8 @@ function HeroSlider({
         <div className="hero-slider-shell">
             <div
                 className={`hero-slider-container${shouldUseCinematicTrailerChrome ? ' is-trailer-preview-active' : ''}`}
+                onPointerDownCapture={handleSliderPlaybackGestureCapture}
+                onTouchStartCapture={handleSliderPlaybackGestureCapture}
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
                 onTouchEnd={onTouchEnd}
@@ -482,7 +541,7 @@ function HeroSlider({
 
                     return (
                         <Hero
-                            ref={actualIndex === currentIndex ? activeHeroRef : undefined}
+                            ref={(node) => setHeroInstanceRef(actualIndex, node)}
                             key={getSlideKey(anime, actualIndex)}
                             anime={anime}
                             isActive={actualIndex === currentIndex}
@@ -504,10 +563,10 @@ function HeroSlider({
 
                 {totalSlides > 1 && (
                     <>
-                        <button type="button" className="slider-nav-button slider-prev" onClick={prevSlide}>
+                        <button type="button" className="slider-nav-button slider-prev" onClick={() => prevSlide({ userInitiated: true })}>
                             &#10094;
                         </button>
-                        <button type="button" className="slider-nav-button slider-next" onClick={nextSlide}>
+                        <button type="button" className="slider-nav-button slider-next" onClick={() => nextSlide({ userInitiated: true })}>
                             &#10095;
                         </button>
                         {shouldShowDots && (

@@ -282,6 +282,10 @@ const Hero = React.forwardRef(function Hero({
             seekFallbackTimeline(safeProgress);
             return true;
         },
+        resumeTrailerPlaybackFromGesture() {
+            if (!shouldRenderTrailerPreview) return false;
+            return trailerPlayerRef.current?.resumePlaybackFromGesture?.() || false;
+        },
     }), [isActive, isTutorial, shouldRenderTrailerPreview, anime?.id]);
 
     useEffect(() => {
