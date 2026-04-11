@@ -10,7 +10,8 @@ const YT_PLAYER_STATE_PLAYING = 1;
 const YT_PLAYER_STATE_BUFFERING = 3;
 const AUTOPLAY_STARTUP_SOFT_RETRY_MS = 2200;
 const AUTOPLAY_STARTUP_RECOVERY_MS = 4200;
-const AUTOPLAY_STARTUP_STALL_MS = 6200;
+const AUTOPLAY_STARTUP_STALL_MS = 7600;
+const AUTOPLAY_STARTUP_BUFFER_STALL_MS = 10000;
 const BUFFER_STALL_SOFT_RETRY_MS = 1800;
 const BUFFER_STALL_HARD_RETRY_MS = 4200;
 const MAX_AUTOPLAY_PLAYER_RECOVERY_RESTARTS = 1;
@@ -18,6 +19,15 @@ const PROGRESS_PLAYER_RESAMPLE_MS = 450;
 const USER_PLAYBACK_INTERACTION_GRACE_MS = 2200;
 
 const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) || 0));
+
+const isLikelyMobileAutoplayEnvironment = () => (
+  typeof window !== 'undefined'
+  && typeof window.matchMedia === 'function'
+  && (
+    window.matchMedia('(pointer: coarse)').matches
+    || window.matchMedia('(max-width: 768px)').matches
+  )
+);
 
 const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   trailer,
@@ -67,9 +77,10 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   const pendingSeekProgressRef = useRef(null);
   const userPlaybackInteractionUntilRef = useRef(0);
   const [playerRestartNonce, setPlayerRestartNonce] = useState(0);
-  const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
   const videoId = normalizedTrailer?.id || '';
+  const shouldDeferPlaybackVisibility = deferVisibilityUntilPlaying && !isLikelyMobileAutoplayEnvironment();
+  const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !shouldDeferPlaybackVisibility || !autoplay);
 
   useEffect(() => {
     autoplayRef.current = autoplay;
@@ -104,8 +115,8 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   }, [onProgressChange]);
 
   useLayoutEffect(() => {
-    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
-  }, [autoplay, deferVisibilityUntilPlaying, playerRestartNonce, videoId]);
+    setIsPlaybackVisible(!shouldDeferPlaybackVisibility || !autoplay);
+  }, [autoplay, playerRestartNonce, shouldDeferPlaybackVisibility, videoId]);
 
   useEffect(() => {
     autoplayRecoveryRestartCountRef.current = 0;
@@ -157,15 +168,6 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
   const hasStartedPlayback = () => playbackStateRef.current === YT_PLAYER_STATE_PLAYING;
 
-  const isLikelyMobileAutoplayEnvironment = () => (
-    typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && (
-      window.matchMedia('(pointer: coarse)').matches
-      || window.matchMedia('(max-width: 768px)').matches
-    )
-  );
-
   const markUserPlaybackInteraction = (durationMs = USER_PLAYBACK_INTERACTION_GRACE_MS) => {
     const now = window.performance?.now?.() ?? Date.now();
     userPlaybackInteractionUntilRef.current = now + durationMs;
@@ -215,6 +217,26 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
       onProgressChangeRef.current(nextValue);
     } catch (_) {
       // Ignore progress callback failures.
+    }
+  };
+
+  const shouldForceMutedForPlaybackStart = (options = {}) => {
+    if (mutedRef.current) return true;
+    if (!autoplayRef.current) return false;
+
+    const hasUserPlaybackIntent = options.userInitiated === true || hasRecentUserPlaybackInteraction();
+    if (hasUserPlaybackIntent) return false;
+
+    return isLikelyMobileAutoplayEnvironment() || !hasActivePlayback();
+  };
+
+  const preparePlaybackStart = (player, options = {}) => {
+    if (!player || !shouldForceMutedForPlaybackStart(options)) return;
+
+    try {
+      player.mute();
+    } catch (_) {
+      // Ignore mute preparation failures.
     }
   };
 
@@ -280,6 +302,10 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   };
 
   const requestDeferredUnmute = (player, options = {}) => {
+    if (options.userInitiated === true) {
+      markUserPlaybackInteraction();
+    }
+
     if (!player || mutedRef.current) {
       clearUnmuteRetryTimeouts();
       emitMuteState(player);
@@ -336,10 +362,11 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     iframe.setAttribute('title', title);
   };
 
-  const requestPlaybackResume = (player) => {
+  const requestPlaybackResume = (player, options = {}) => {
     if (!autoplayRef.current || !player) return;
 
     const attemptPlay = () => {
+      preparePlaybackStart(player, options);
       try {
         player.playVideo();
       } catch (_) {
@@ -405,7 +432,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     });
 
     if (options.resumePlayback !== false) {
-      requestPlaybackResume(player);
+      requestPlaybackResume(player, {
+        userInitiated: options.userInitiated === true,
+      });
       scheduleAutoplayStartupWatch(player);
     }
 
@@ -426,7 +455,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
   const requestAutoplayPlayerRecovery = () => {
     if (!autoplayRef.current) return false;
-    if (hasStartedPlayback()) return false;
+    if (hasActivePlayback()) return false;
     if (autoplayRecoveryRestartCountRef.current >= MAX_AUTOPLAY_PLAYER_RECOVERY_RESTARTS) {
       return false;
     }
@@ -437,7 +466,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     clearPlaybackRetryTimeouts();
     clearUnmuteRetryTimeouts();
     clearAutoplayStartupTimeouts();
-    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplayRef.current);
+    setIsPlaybackVisible(!shouldDeferPlaybackVisibility || !autoplayRef.current);
     setPlayerRestartNonce((prev) => prev + 1);
     return true;
   };
@@ -479,6 +508,10 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     clearAutoplayStartupTimeouts();
     const retryStartup = () => {
       if (hasStartedPlayback()) return;
+      if (playbackStateRef.current === YT_PLAYER_STATE_BUFFERING) {
+        requestPlaybackResume(player);
+        return;
+      }
 
       try {
         player.seekTo(0, true);
@@ -490,12 +523,23 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     const recoverPlayer = () => {
       if (hasStartedPlayback()) return;
+      if (playbackStateRef.current === YT_PLAYER_STATE_BUFFERING) {
+        requestPlaybackResume(player);
+        return;
+      }
       if (requestAutoplayPlayerRecovery()) return;
       emitPlaybackStalled();
     };
 
     const markStalled = () => {
       if (hasStartedPlayback()) return;
+      if (playbackStateRef.current === YT_PLAYER_STATE_BUFFERING) return;
+      emitPlaybackStalled();
+    };
+
+    const markBufferedStartupStalled = () => {
+      if (hasStartedPlayback()) return;
+      if (playbackStateRef.current !== YT_PLAYER_STATE_BUFFERING) return;
       emitPlaybackStalled();
     };
 
@@ -503,29 +547,15 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
       window.setTimeout(retryStartup, AUTOPLAY_STARTUP_SOFT_RETRY_MS),
       window.setTimeout(recoverPlayer, AUTOPLAY_STARTUP_RECOVERY_MS),
       window.setTimeout(markStalled, AUTOPLAY_STARTUP_STALL_MS),
+      window.setTimeout(markBufferedStartupStalled, AUTOPLAY_STARTUP_BUFFER_STALL_MS),
     ];
   };
 
   const syncDesiredMuteState = (player, options = {}) => {
     if (!player) return;
 
-    const isPlaybackActive = hasActivePlayback();
-    const hasUserPlaybackIntent = options.userInitiated === true || hasRecentUserPlaybackInteraction();
-    const shouldForceMutedForMobileAutoplay = (
-      autoplayRef.current
-      && !mutedRef.current
-      && isLikelyMobileAutoplayEnvironment()
-      && !hasUserPlaybackIntent
-    );
-    const shouldKeepMutedForAutoplay = (
-      autoplayRef.current
-      && !mutedRef.current
-      && !isPlaybackActive
-      && !hasUserPlaybackIntent
-    );
-
     try {
-      if (mutedRef.current || shouldKeepMutedForAutoplay || shouldForceMutedForMobileAutoplay) {
+      if (shouldForceMutedForPlaybackStart(options)) {
         player.mute();
         if (mutedRef.current) {
           clearUnmuteRetryTimeouts();
@@ -589,8 +619,8 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
               playbackStateRef.current = Number(event?.data);
               const isPlayingState = event?.data === YT.PlayerState.PLAYING;
               const isBufferingState = event?.data === YT.PlayerState.BUFFERING;
-              // Keep the iframe hidden during the very first startup buffer on mobile,
-              // otherwise the YouTube reload/loading UI can flash right before slide transitions.
+              // Keep the iframe hidden during the very first startup buffer on desktop,
+              // but keep it paintable on mobile because some browsers gate autoplay by visibility.
               if (isPlayingState || (isBufferingState && playbackStartedOnceRef.current)) {
                 setIsPlaybackVisible(true);
                 flushPendingSeekProgress(event.target, {
@@ -735,6 +765,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     const userInitiatedMuteChange = muteChangeToken !== lastHandledMuteChangeTokenRef.current;
     lastHandledMuteChangeTokenRef.current = muteChangeToken;
+    if (userInitiatedMuteChange) {
+      markUserPlaybackInteraction();
+    }
 
     syncDesiredMuteState(player, {
       userInitiated: userInitiatedMuteChange,
@@ -743,7 +776,9 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
       userInitiated: userInitiatedMuteChange,
     });
     if (autoplay) {
-      requestPlaybackResume(player);
+      requestPlaybackResume(player, {
+        userInitiated: userInitiatedMuteChange,
+      });
       scheduleAutoplayStartupWatch(player);
     }
   }, [autoplay, muted, videoId, muteChangeToken]);
@@ -765,7 +800,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     clearProgressPollInterval();
     resetProgressTracking();
     emitProgress(0, { allowDecrease: true });
-    setIsPlaybackVisible(!deferVisibilityUntilPlaying || !autoplay);
+    setIsPlaybackVisible(!shouldDeferPlaybackVisibility || !autoplay);
 
     try {
       player.pauseVideo?.();
@@ -788,11 +823,11 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     }
 
     emitMuteState(player);
-  }, [autoplay, deferVisibilityUntilPlaying, restartToken, videoId]);
+  }, [autoplay, restartToken, shouldDeferPlaybackVisibility, videoId]);
 
   return (
     <div
-      className={`youtube-trailer-player${deferVisibilityUntilPlaying ? ' defer-visibility' : ''}${isPlaybackVisible ? ' is-playback-visible' : ''}${className ? ` ${className}` : ''}`.trim()}
+      className={`youtube-trailer-player${shouldDeferPlaybackVisibility ? ' defer-visibility' : ''}${isPlaybackVisible ? ' is-playback-visible' : ''}${className ? ` ${className}` : ''}`.trim()}
     >
       <div
         ref={hostRef}

@@ -4,9 +4,9 @@ import { getCachedTranslation, setCachedTranslation, translateText } from '../..
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 
-const TRAILER_START_TIMEOUT_MS = 8000;
+const TRAILER_START_TIMEOUT_MS = 12000;
 const NO_TRAILER_ADVANCE_DELAY_MS = 8200;
-const STALLED_TRAILER_ADVANCE_DELAY_MS = 2400;
+const STALLED_TRAILER_ADVANCE_DELAY_MS = 3200;
 
 const normalizeAnimeRating = (value) => {
     const parsed = Number(value);
