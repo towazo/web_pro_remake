@@ -4443,9 +4443,18 @@ button.card-watch-summary {
     background: #000;
 }
 
+.youtube-trailer-player.defer-visibility .youtube-trailer-player-slot {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
 .youtube-trailer-player.defer-visibility.is-playback-visible {
     pointer-events: auto;
     background: #000;
+}
+
+.youtube-trailer-player.defer-visibility.is-playback-visible .youtube-trailer-player-slot {
+    opacity: 1;
 }
 
 .youtube-trailer-player-startup-cover {

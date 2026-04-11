@@ -51,6 +51,7 @@ const Hero = React.forwardRef(function Hero({
     const [actualPreviewMuted, setActualPreviewMuted] = useState(true);
     const [hasTrailerPlaybackStarted, setHasTrailerPlaybackStarted] = useState(false);
     const [hasTrailerPlaybackStalled, setHasTrailerPlaybackStalled] = useState(false);
+    const [hasTrailerAutoplayBlocked, setHasTrailerAutoplayBlocked] = useState(false);
     const trailerPlayerRef = useRef(null);
     const fallbackTimelineFrameRef = useRef(0);
     const fallbackTimelineStartedAtRef = useRef(0);
@@ -184,7 +185,8 @@ const Hero = React.forwardRef(function Hero({
         && !isTutorial
         && shouldRenderTrailerPreview
         && !hasTrailerPlaybackStarted
-        && !hasTrailerPlaybackStalled;
+        && !hasTrailerPlaybackStalled
+        && !hasTrailerAutoplayBlocked;
     const getFallbackTimelineDuration = () => (
         shouldRenderTrailerPreview && hasTrailerPlaybackStalled
             ? STALLED_TRAILER_ADVANCE_DELAY_MS
@@ -248,6 +250,23 @@ const Hero = React.forwardRef(function Hero({
         }
     };
 
+    const handleTrailerPlaybackStarted = () => {
+        setHasTrailerPlaybackStarted(true);
+        setHasTrailerPlaybackStalled(false);
+        setHasTrailerAutoplayBlocked(false);
+    };
+
+    const handleTrailerPlaybackStalled = (details = {}) => {
+        if (details?.recoverable === true) {
+            setHasTrailerAutoplayBlocked(true);
+            clearFallbackTimeline();
+            slideProgressChangeRef.current?.(0);
+            return;
+        }
+
+        setHasTrailerPlaybackStalled(true);
+    };
+
     useImperativeHandle(ref, () => ({
         seekToProgress(progressRatio) {
             const safeProgress = normalizeProgressRatio(progressRatio);
@@ -270,12 +289,14 @@ const Hero = React.forwardRef(function Hero({
             setActualPreviewMuted(true);
             setHasTrailerPlaybackStarted(false);
             setHasTrailerPlaybackStalled(false);
+            setHasTrailerAutoplayBlocked(false);
             return;
         }
 
         setActualPreviewMuted(true);
         setHasTrailerPlaybackStarted(false);
         setHasTrailerPlaybackStalled(false);
+        setHasTrailerAutoplayBlocked(false);
     }, [anime?.id, isActive, shouldRenderTrailerPreview, restartToken]);
 
     useEffect(() => {
@@ -289,9 +310,21 @@ const Hero = React.forwardRef(function Hero({
             return undefined;
         }
 
-        onPreviewAvailabilityChange(Boolean(isActive && shouldRenderTrailerPreview && !hasTrailerPlaybackStalled));
+        onPreviewAvailabilityChange(Boolean(
+            isActive
+            && shouldRenderTrailerPreview
+            && !hasTrailerPlaybackStalled
+            && !hasTrailerAutoplayBlocked
+        ));
         return undefined;
-    }, [hasTrailerPlaybackStalled, isActive, onPreviewAvailabilityChange, shouldRenderTrailerPreview, anime?.id]);
+    }, [
+        hasTrailerAutoplayBlocked,
+        hasTrailerPlaybackStalled,
+        isActive,
+        onPreviewAvailabilityChange,
+        shouldRenderTrailerPreview,
+        anime?.id,
+    ]);
 
     useEffect(() => {
         if (typeof onPreviewPlaybackStartedChange !== 'function') {
@@ -302,10 +335,12 @@ const Hero = React.forwardRef(function Hero({
             isActive
             && shouldRenderTrailerPreview
             && !hasTrailerPlaybackStalled
+            && !hasTrailerAutoplayBlocked
             && hasTrailerPlaybackStarted
         ));
         return undefined;
     }, [
+        hasTrailerAutoplayBlocked,
         hasTrailerPlaybackStarted,
         hasTrailerPlaybackStalled,
         isActive,
@@ -319,7 +354,7 @@ const Hero = React.forwardRef(function Hero({
             return undefined;
         }
 
-        if (!isActive || !shouldRenderTrailerPreview || hasTrailerPlaybackStalled) {
+        if (!isActive || !shouldRenderTrailerPreview || hasTrailerPlaybackStalled || hasTrailerAutoplayBlocked) {
             onPreviewMuteStateChange(true);
             return undefined;
         }
@@ -328,6 +363,7 @@ const Hero = React.forwardRef(function Hero({
         return undefined;
     }, [
         actualPreviewMuted,
+        hasTrailerAutoplayBlocked,
         hasTrailerPlaybackStalled,
         isActive,
         onPreviewMuteStateChange,
@@ -535,11 +571,8 @@ const Hero = React.forwardRef(function Hero({
                                         restartToken={restartToken}
                                         deferVisibilityUntilPlaying
                                         onEnded={isActive ? onRequestAdvance : undefined}
-                                        onPlaybackStart={isActive ? () => {
-                                            setHasTrailerPlaybackStarted(true);
-                                            setHasTrailerPlaybackStalled(false);
-                                        } : undefined}
-                                        onPlaybackStalled={isActive ? () => setHasTrailerPlaybackStalled(true) : undefined}
+                                        onPlaybackStart={isActive ? handleTrailerPlaybackStarted : undefined}
+                                        onPlaybackStalled={isActive ? handleTrailerPlaybackStalled : undefined}
                                         onMuteStateChange={isActive ? setActualPreviewMuted : undefined}
                                         onProgressChange={isActive ? onSlideProgressChange : undefined}
                                     />
