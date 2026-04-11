@@ -425,11 +425,12 @@ body {
     position: fixed;
     inset: 0;
     z-index: 3600;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: #fff;
     pointer-events: none;
-    animation: siteLaunchSplashExit 3.2s ease both;
+    animation: siteLaunchSplashExit 3.45s ease both;
 }
 
 .site-launch-splash-stage {
@@ -439,16 +440,30 @@ body {
     display: grid;
     place-items: center;
     isolation: isolate;
+    overflow: visible;
 }
 
 .site-launch-splash-mark {
     position: relative;
     width: min(240px, 56vw);
     padding: 0;
+    display: grid;
+    place-items: center;
     opacity: 0;
     transform-origin: center;
-    animation: siteLaunchLogoAppear 2.9s cubic-bezier(0.2, 0.78, 0.22, 1) both;
+    animation: siteLaunchLogoAppear 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both;
     isolation: isolate;
+    will-change: opacity, transform, filter;
+}
+
+.site-launch-splash-mark::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .site-launch-splash-mark img {
@@ -457,6 +472,20 @@ body {
     display: block;
     width: 100%;
     height: auto;
+}
+
+@supports ((-webkit-mask: url("/images/logo.png") center / contain no-repeat) or (mask: url("/images/logo.png") center / contain no-repeat)) {
+    .site-launch-splash-mark::before {
+        opacity: 1;
+        background: #000;
+        -webkit-mask: url("/images/logo.png") center / contain no-repeat;
+        mask: url("/images/logo.png") center / contain no-repeat;
+        animation: siteLaunchLogoColorShift 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both;
+    }
+
+    .site-launch-splash-mark img {
+        opacity: 0;
+    }
 }
 
 .app-header {
@@ -725,7 +754,7 @@ body {
 
 @keyframes siteLaunchSplashExit {
     0%,
-    86% {
+    94% {
         opacity: 1;
         visibility: visible;
     }
@@ -739,26 +768,174 @@ body {
 @keyframes siteLaunchLogoAppear {
     0% {
         opacity: 0;
-        transform: translateY(8px) scale(0.965);
-        filter: blur(10px);
+        transform: translateY(0) scale(0.965);
+        filter: blur(5px);
     }
 
-    18% {
-        opacity: 0.82;
-        transform: translateY(2px) scale(0.992);
-        filter: blur(2px);
+    14% {
+        opacity: 0.48;
+        transform: translateY(0) scale(0.982);
+        filter: blur(1.5px);
     }
 
-    30%,
-    82% {
+    24% {
+        opacity: 0.76;
+        transform: translateY(0) scale(0.992);
+        filter: blur(0);
+    }
+
+    46%,
+    74% {
         opacity: 1;
         transform: translateY(0) scale(1);
         filter: blur(0);
     }
 
+    78% {
+        opacity: 1;
+        transform: translateX(-4px) scale(1);
+        filter: blur(0);
+    }
+
+    81% {
+        opacity: 1;
+        transform: translateX(4px) scale(1);
+        filter: blur(0);
+    }
+
+    84% {
+        opacity: 1;
+        transform: translateX(-2px) scale(1);
+        filter: blur(0);
+    }
+
+    88%,
+    92% {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+        filter: blur(0);
+    }
+
     100% {
         opacity: 0;
-        transform: translateY(-4px) scale(1.02);
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes siteLaunchLogoColorShift {
+    0% {
+        background: #8ff7df;
+    }
+
+    6% {
+        background: #4ed8ff;
+    }
+
+    12% {
+        background: #5b7cff;
+    }
+
+    18% {
+        background: #a05cff;
+    }
+
+    24% {
+        background: #ff66c4;
+    }
+
+    30% {
+        background: #ff8a3d;
+    }
+
+    36% {
+        background: #d6425f;
+    }
+
+    40% {
+        background: #7b4dff;
+    }
+
+    43% {
+        background: #00a8a8;
+    }
+
+    50% {
+        background: #68d83f;
+    }
+
+    56% {
+        background: #f6d445;
+    }
+
+    62% {
+        background: #ff5757;
+    }
+
+    65% {
+        background: #bf57ff;
+    }
+
+    68%,
+    100% {
+        background: #000000;
+    }
+}
+
+@keyframes siteLaunchLogoAppearMobile {
+    0% {
+        opacity: 0;
+        transform: translateX(0) scale(0.965);
+        filter: blur(5px);
+    }
+
+    14% {
+        opacity: 0.48;
+        transform: translateX(0) scale(0.982);
+        filter: blur(1.5px);
+    }
+
+    24% {
+        opacity: 0.76;
+        transform: translateX(0) scale(0.992);
+        filter: blur(0);
+    }
+
+    46%,
+    74% {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+        filter: blur(0);
+    }
+
+    78% {
+        opacity: 1;
+        transform: translateX(-9px) rotate(-1.2deg) scale(1);
+        filter: blur(0);
+    }
+
+    81% {
+        opacity: 1;
+        transform: translateX(9px) rotate(1.2deg) scale(1);
+        filter: blur(0);
+    }
+
+    84% {
+        opacity: 1;
+        transform: translateX(-5px) rotate(-0.6deg) scale(1);
+        filter: blur(0);
+    }
+
+    88%,
+    92% {
+        opacity: 1;
+        transform: translateX(0) rotate(0deg) scale(1);
+        filter: blur(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateX(0) rotate(0deg) scale(1);
         filter: blur(0);
     }
 }
@@ -813,6 +990,43 @@ body {
 
     .header-menu-line {
         width: 30px;
+    }
+
+    .site-launch-splash-mark {
+        animation-name: siteLaunchLogoAppearMobile;
+    }
+
+    @supports ((-webkit-mask: url("/images/logo.png") center / contain no-repeat) or (mask: url("/images/logo.png") center / contain no-repeat)) {
+        .site-launch-splash-mark::before {
+            animation:
+                siteLaunchLogoColorShift 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both,
+                siteLaunchLogoMaskShakeMobile 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both;
+            will-change: transform, background;
+        }
+    }
+}
+
+@keyframes siteLaunchLogoMaskShakeMobile {
+    0%,
+    74% {
+        transform: translateX(0) rotate(0deg);
+    }
+
+    78% {
+        transform: translateX(-10px) rotate(-1.4deg);
+    }
+
+    81% {
+        transform: translateX(10px) rotate(1.4deg);
+    }
+
+    84% {
+        transform: translateX(-6px) rotate(-0.7deg);
+    }
+
+    88%,
+    100% {
+        transform: translateX(0) rotate(0deg);
     }
 }
 
@@ -871,6 +1085,10 @@ body {
         transform: none;
         filter: none;
         animation: none;
+    }
+
+    .site-launch-splash-mark::before {
+        display: none;
     }
 }
 

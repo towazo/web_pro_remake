@@ -677,7 +677,7 @@ function App() {
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const timeoutId = window.setTimeout(
       () => setShowLaunchSplash(false),
-      prefersReducedMotion ? 1400 : 3600
+      prefersReducedMotion ? 1400 : 3900
     );
 
     return () => window.clearTimeout(timeoutId);
