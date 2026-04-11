@@ -1335,6 +1335,8 @@ body {
     margin-right: auto;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
+    align-items: stretch;
     gap: 10px;
     margin-bottom: 10px;
 }
@@ -1347,6 +1349,7 @@ body {
     position: relative;
     min-width: 0;
     width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1502,6 +1505,7 @@ body {
     background: linear-gradient(180deg, #1d1d1d 0%, #090909 100%);
     color: #fff;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
+    touch-action: manipulation;
 }
 
 .home-share-shortcut:hover:not(:disabled) {
@@ -4244,6 +4248,7 @@ button.card-watch-summary {
     flex-direction: column;
     gap: 3px;
     min-width: 0;
+    flex: 1 1 auto;
 }
 
 .slider-previous-title {
@@ -4282,6 +4287,10 @@ button.card-watch-summary {
 }
 
 .slider-previous-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
     min-height: 34px;
     padding: 0 10px;
     border: 1px solid rgba(255, 255, 255, 0.28);
@@ -4289,8 +4298,10 @@ button.card-watch-summary {
     color: #fff;
     font-size: 0.76rem;
     font-weight: 800;
+    text-align: center;
     cursor: pointer;
     transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+    touch-action: manipulation;
 }
 
 .slider-previous-action-button:hover:not(:disabled) {
@@ -8575,6 +8586,33 @@ body.trailer-modal-open .add-toast {
 }
 
 @media (hover: none) {
+    .home-quick-tile:hover,
+    .home-quick-library-tile:hover,
+    .home-quick-add-tile:hover {
+        transform: none;
+        box-shadow: 0 10px 22px rgba(17, 17, 17, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.38);
+    }
+
+    .home-quick-library-tile:hover {
+        background: linear-gradient(180deg, #1f1f1f 0%, #0b0b0b 100%);
+        border-color: #111;
+        box-shadow: 0 16px 28px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+
+    .home-quick-add-tile:hover {
+        background: #ffffff;
+        border-color: #96a0ad;
+        box-shadow: 0 12px 22px rgba(56, 62, 70, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+    }
+
+    .home-share-shortcut:hover:not(:disabled) {
+        transform: none;
+        background: linear-gradient(180deg, #1d1d1d 0%, #090909 100%);
+        border-color: #111;
+        color: #fff;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
+    }
+
     .bookmark-screen-add:hover,
     .bookmark-screen-home:hover,
     .bookmark-season-nav-button:hover {

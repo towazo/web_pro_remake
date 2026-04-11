@@ -83,16 +83,12 @@ function HeroSlider({
     const [activePreviewMuted, setActivePreviewMuted] = useState(true);
     const [activePreviewAudioAvailable, setActivePreviewAudioAvailable] = useState(false);
     const [activePreviewPlaybackStarted, setActivePreviewPlaybackStarted] = useState(false);
-    const [lastViewedAnime, setLastViewedAnime] = useState(null);
     const [currentSlideRestartToken, setCurrentSlideRestartToken] = useState(0);
     const [slideTransitionDirection, setSlideTransitionDirection] = useState('forward');
     const timelineRef = useRef(null);
     const progressFillRef = useRef(null);
     const progressHandleRef = useRef(null);
     const activeHeroRef = useRef(null);
-    const activeSlideAnimeRef = useRef(null);
-    const pendingCycleCarryoverAnimeRef = useRef(null);
-    const slideSessionKeyRef = useRef('');
     const timelineDragCleanupRef = useRef(null);
     const isTimelineScrubbingRef = useRef(false);
     const currentProgressRef = useRef(0);
@@ -123,31 +119,6 @@ function HeroSlider({
     useEffect(() => {
         setCurrentSlideRestartToken(0);
     }, [currentIndex, slideIdentityKey]);
-
-    useEffect(() => {
-        const sessionKey = `${sourceType}:${slideIdentityKey}`;
-        const sessionStartAnime = Array.isArray(slides) ? (slides[0] || null) : null;
-        const currentAnime = Array.isArray(slides) ? (slides[currentIndex] || null) : null;
-
-        if (slideSessionKeyRef.current !== sessionKey) {
-            const carryoverAnime = pendingCycleCarryoverAnimeRef.current;
-            slideSessionKeyRef.current = sessionKey;
-            pendingCycleCarryoverAnimeRef.current = null;
-            activeSlideAnimeRef.current = carryoverAnime || sessionStartAnime;
-            setLastViewedAnime(carryoverAnime || null);
-            return;
-        }
-
-        const previousAnime = activeSlideAnimeRef.current;
-        if (
-            previousAnime
-            && currentAnime
-            && Number(previousAnime?.id) !== Number(currentAnime?.id)
-        ) {
-            setLastViewedAnime(previousAnime);
-        }
-        activeSlideAnimeRef.current = currentAnime;
-    }, [currentIndex, slideIdentityKey, slides, sourceType]);
 
     useEffect(() => {
         if (!isMobileAutoplayEnvironment) return;
@@ -211,7 +182,6 @@ function HeroSlider({
         }
 
         if (!shouldLoopTutorialSlides && typeof onCycleComplete === 'function') {
-            pendingCycleCarryoverAnimeRef.current = slides[currentIndex] || null;
             onCycleComplete(slides[currentIndex]);
             return;
         }
@@ -323,58 +293,59 @@ function HeroSlider({
     const bufferEndIndex = Math.min(totalSlides, bufferStartIndex + INITIAL_BUFFER_SIZE);
     const bufferedSlides = slides.slice(bufferStartIndex, bufferEndIndex);
     const isCurrentSeasonSlider = String(sourceType || '').startsWith('current-season');
-    const numericLastViewedAnimeId = Number(lastViewedAnime?.id);
-    const isLastViewedAnimeInMyList = Number.isFinite(numericLastViewedAnimeId)
+    const visibleAnime = Array.isArray(slides) ? (slides[currentIndex] || null) : null;
+    const numericVisibleAnimeId = Number(visibleAnime?.id);
+    const isVisibleAnimeInMyList = Number.isFinite(numericVisibleAnimeId)
         && myListIdSet instanceof Set
-        && myListIdSet.has(numericLastViewedAnimeId);
-    const isLastViewedAnimeBookmarked = Number.isFinite(numericLastViewedAnimeId)
+        && myListIdSet.has(numericVisibleAnimeId);
+    const isVisibleAnimeBookmarked = Number.isFinite(numericVisibleAnimeId)
         && bookmarkIdSet instanceof Set
-        && bookmarkIdSet.has(numericLastViewedAnimeId);
-    const canAddLastViewedAnimeToMyList = Boolean(lastViewedAnime)
+        && bookmarkIdSet.has(numericVisibleAnimeId);
+    const canAddVisibleAnimeToMyList = Boolean(visibleAnime)
         && (
-            (isLastViewedAnimeInMyList && typeof onRemoveAnime === 'function')
-            || (!isLastViewedAnimeInMyList && typeof onAddAnime === 'function')
+            (isVisibleAnimeInMyList && typeof onRemoveAnime === 'function')
+            || (!isVisibleAnimeInMyList && typeof onAddAnime === 'function')
         );
-    const canBookmarkLastViewedAnime = Boolean(lastViewedAnime)
-        && !isLastViewedAnimeInMyList
+    const canBookmarkVisibleAnime = Boolean(visibleAnime)
+        && !isVisibleAnimeInMyList
         && typeof onToggleBookmark === 'function';
     const sliderAudioStatusText = isPreviewMuted
         ? '音声設定はオフです'
         : '音声設定はオンです';
     const isSliderAudioToggleDisabled = activePreviewAudioAvailable && !activePreviewPlaybackStarted;
-    const previousSlideStatusText = !lastViewedAnime
-        ? 'まだありません'
-        : isLastViewedAnimeInMyList
+    const visibleSlideStatusText = !visibleAnime
+        ? '作品がありません'
+        : isVisibleAnimeInMyList
             ? 'マイリスト追加済み'
-            : isLastViewedAnimeBookmarked
+            : isVisibleAnimeBookmarked
                 ? 'ブックマーク済み'
                 : '追加先を選ぶ';
-    const previousSlideTitle = lastViewedAnime?.title?.native
-        || lastViewedAnime?.title?.romaji
-        || lastViewedAnime?.title?.english
-        || '前の作品';
-    const previousSlideImage = lastViewedAnime?.coverImage?.large
-        || lastViewedAnime?.coverImage?.extraLarge
+    const visibleSlideTitle = visibleAnime?.title?.native
+        || visibleAnime?.title?.romaji
+        || visibleAnime?.title?.english
+        || '表示中の作品';
+    const visibleSlideImage = visibleAnime?.coverImage?.large
+        || visibleAnime?.coverImage?.extraLarge
         || '';
-    const myListActionLabel = isLastViewedAnimeInMyList ? '取消' : 'マイリスト';
-    const bookmarkActionLabel = isLastViewedAnimeBookmarked ? '解除' : 'ブックマーク';
+    const myListActionLabel = isVisibleAnimeInMyList ? '取消' : 'マイリスト';
+    const bookmarkActionLabel = isVisibleAnimeBookmarked ? '解除' : 'ブックマーク';
     const handleGoToSlide = (index) => {
         if (index === currentIndex) return;
         resetMobilePreviewAudioForNextSlide();
         setSlideTransitionDirection(index > currentIndex ? 'forward' : 'backward');
         setCurrentIndex(index);
     };
-    const handleAddLastViewedAnimeToMyList = () => {
-        if (!canAddLastViewedAnimeToMyList) return;
-        if (isLastViewedAnimeInMyList) {
-            onRemoveAnime(lastViewedAnime.id);
+    const handleAddVisibleAnimeToMyList = () => {
+        if (!canAddVisibleAnimeToMyList) return;
+        if (isVisibleAnimeInMyList) {
+            onRemoveAnime(visibleAnime.id);
             return;
         }
-        onAddAnime(lastViewedAnime);
+        onAddAnime(visibleAnime);
     };
-    const handleBookmarkLastViewedAnime = () => {
-        if (!canBookmarkLastViewedAnime) return;
-        onToggleBookmark(lastViewedAnime);
+    const handleBookmarkVisibleAnime = () => {
+        if (!canBookmarkVisibleAnime) return;
+        onToggleBookmark(visibleAnime);
     };
 
     const getTimelineProgressFromClientX = useCallback((clientX) => {
@@ -578,59 +549,6 @@ function HeroSlider({
                 role="group"
                 aria-label="スライダーコントロール"
             >
-                {isCurrentSeasonSlider && (
-                    <div className="hero-slider-previous-control">
-                        {previousSlideImage ? (
-                            <img
-                                src={previousSlideImage}
-                                alt=""
-                                className="slider-previous-thumb"
-                                loading="lazy"
-                                decoding="async"
-                            />
-                        ) : (
-                            <div className="slider-previous-thumb placeholder" aria-hidden="true" />
-                        )}
-                        <div className="slider-previous-main">
-                            <div className="slider-previous-copy">
-                                <span className="slider-audio-label">前の作品</span>
-                                {lastViewedAnime && (
-                                    <span className="slider-previous-title" title={previousSlideTitle}>
-                                        {previousSlideTitle}
-                                    </span>
-                                )}
-                                <span className="slider-audio-status" aria-live="polite">
-                                    {previousSlideStatusText}
-                                </span>
-                            </div>
-                            <div className="slider-previous-actions">
-                                <button
-                                    type="button"
-                                    className={`slider-previous-action-button ${isLastViewedAnimeInMyList ? 'is-active' : ''}`.trim()}
-                                    onClick={handleAddLastViewedAnimeToMyList}
-                                    disabled={!canAddLastViewedAnimeToMyList}
-                                    title={isLastViewedAnimeInMyList
-                                        ? `${previousSlideTitle}をマイリストから外す`
-                                        : `${previousSlideTitle}をマイリストに追加`}
-                                >
-                                    {myListActionLabel}
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`slider-previous-action-button secondary ${isLastViewedAnimeBookmarked ? 'is-active' : ''}`.trim()}
-                                    onClick={handleBookmarkLastViewedAnime}
-                                    disabled={!canBookmarkLastViewedAnime}
-                                    title={isLastViewedAnimeBookmarked
-                                        ? `${previousSlideTitle}のブックマークを外す`
-                                        : `${previousSlideTitle}をブックマークに追加`}
-                                >
-                                    {bookmarkActionLabel}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 <div className={`hero-slider-secondary-row ${shouldShowDots ? 'count-hidden' : 'has-count'}`.trim()}>
                     <div className="hero-slider-audio-control">
                         <AudioToggleButton
@@ -657,6 +575,59 @@ function HeroSlider({
                         </div>
                     )}
                 </div>
+
+                {isCurrentSeasonSlider && (
+                    <div className="hero-slider-previous-control">
+                        {visibleSlideImage ? (
+                            <img
+                                src={visibleSlideImage}
+                                alt=""
+                                className="slider-previous-thumb"
+                                loading="lazy"
+                                decoding="async"
+                            />
+                        ) : (
+                            <div className="slider-previous-thumb placeholder" aria-hidden="true" />
+                        )}
+                        <div className="slider-previous-main">
+                            <div className="slider-previous-copy">
+                                <span className="slider-audio-label">表示中の作品</span>
+                                {visibleAnime && (
+                                    <span className="slider-previous-title" title={visibleSlideTitle}>
+                                        {visibleSlideTitle}
+                                    </span>
+                                )}
+                                <span className="slider-audio-status" aria-live="polite">
+                                    {visibleSlideStatusText}
+                                </span>
+                            </div>
+                            <div className="slider-previous-actions">
+                                <button
+                                    type="button"
+                                    className={`slider-previous-action-button ${isVisibleAnimeInMyList ? 'is-active' : ''}`.trim()}
+                                    onClick={handleAddVisibleAnimeToMyList}
+                                    disabled={!canAddVisibleAnimeToMyList}
+                                    title={isVisibleAnimeInMyList
+                                        ? `${visibleSlideTitle}をマイリストから外す`
+                                        : `${visibleSlideTitle}をマイリストに追加`}
+                                >
+                                    {myListActionLabel}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`slider-previous-action-button secondary ${isVisibleAnimeBookmarked ? 'is-active' : ''}`.trim()}
+                                    onClick={handleBookmarkVisibleAnime}
+                                    disabled={!canBookmarkVisibleAnime}
+                                    title={isVisibleAnimeBookmarked
+                                        ? `${visibleSlideTitle}のブックマークを外す`
+                                        : `${visibleSlideTitle}をブックマークに追加`}
+                                >
+                                    {bookmarkActionLabel}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
