@@ -33,7 +33,6 @@ function BookmarkScreen({
   onOpenBookmarkAdd,
   onOpenCurrentSeasonAdd,
   onOpenNextSeasonAdd,
-  onBackHome,
   onToggleBookmark,
   onMarkWatched,
   onBulkRemoveBookmarks,
@@ -53,12 +52,6 @@ function BookmarkScreen({
   const [sortKey, setSortKey] = useState('added');
   const [sortOrder, setSortOrder] = useState('desc');
   const [currentPage, setCurrentPage] = useState(1);
-  const [quickNavState, setQuickNavState] = useState({
-    visible: false,
-    mobile: false,
-    nearTop: true,
-    nearBottom: false,
-  });
   const watchedIdSet = useMemo(
     () => new Set((watchedAnimeList || []).map((anime) => anime.id)),
     [watchedAnimeList]
@@ -181,65 +174,6 @@ function BookmarkScreen({
     }, 2200);
     return () => clearTimeout(timer);
   }, [actionNotice]);
-
-  useEffect(() => {
-    if (isSelectionMode || filteredBookmarks.length === 0) {
-      setQuickNavState({
-        visible: false,
-        mobile: false,
-        nearTop: true,
-        nearBottom: false,
-      });
-      return;
-    }
-
-    let rafId = null;
-    const updateQuickNav = () => {
-      const scrollTop = window.scrollY || window.pageYOffset || 0;
-      const viewportH = window.innerHeight || 0;
-      const docH = Math.max(
-        document.body?.scrollHeight || 0,
-        document.documentElement?.scrollHeight || 0
-      );
-      const maxScroll = Math.max(0, docH - viewportH);
-      const isMobile = window.matchMedia('(max-width: 1024px)').matches;
-
-      const nearTop = scrollTop <= 24;
-      const nearBottom = maxScroll - scrollTop <= 24;
-      const hasLongContent = maxScroll > 240;
-      const visible = hasLongContent && (!isMobile || scrollTop > 140 || nearBottom);
-
-      setQuickNavState((prev) => {
-        if (
-          prev.visible === visible &&
-          prev.mobile === isMobile &&
-          prev.nearTop === nearTop &&
-          prev.nearBottom === nearBottom
-        ) {
-          return prev;
-        }
-        return { visible, mobile: isMobile, nearTop, nearBottom };
-      });
-    };
-
-    const requestUpdate = () => {
-      if (rafId != null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        updateQuickNav();
-      });
-    };
-
-    window.addEventListener('scroll', requestUpdate, { passive: true });
-    window.addEventListener('resize', requestUpdate);
-    updateQuickNav();
-
-    return () => {
-      if (rafId != null) cancelAnimationFrame(rafId);
-      window.removeEventListener('scroll', requestUpdate);
-      window.removeEventListener('resize', requestUpdate);
-    };
-  }, [isSelectionMode, filteredBookmarks.length, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder, currentPage]);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -490,18 +424,6 @@ function BookmarkScreen({
   const handleSortOrderChange = (nextSortOrder) => {
     setCurrentPage(1);
     setSortOrder(nextSortOrder);
-  };
-
-  const handleScrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleScrollToBottom = () => {
-    const docH = Math.max(
-      document.body?.scrollHeight || 0,
-      document.documentElement?.scrollHeight || 0
-    );
-    window.scrollTo({ top: docH, behavior: 'smooth' });
   };
 
   return (
@@ -810,38 +732,6 @@ function BookmarkScreen({
         </div>
       )}
 
-      {!isSelectionMode && (
-        <nav className="screen-bottom-home-nav" aria-label="画面移動">
-          <button type="button" className="screen-bottom-home-button" onClick={onBackHome}>
-            ← ホームへ戻る
-          </button>
-        </nav>
-      )}
-
-      {!isSelectionMode && quickNavState.visible && (
-        <aside className={`quick-nav-rail ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
-          <button
-            type="button"
-            className="quick-nav-button"
-            onClick={handleScrollToTop}
-            disabled={quickNavState.nearTop}
-            aria-label="ページ最上部へ移動"
-            title="最上部へ"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            className="quick-nav-button"
-            onClick={handleScrollToBottom}
-            disabled={quickNavState.nearBottom}
-            aria-label="ページ最下部へ移動"
-            title="最下部へ"
-          >
-            ↓
-          </button>
-        </aside>
-      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AnimeCard from '../Cards/AnimeCard';
 import AnimeFilterDialog from '../Shared/AnimeFilterDialog';
 import AnimeSortControl from '../Shared/AnimeSortControl';
+import CollectionPagination from '../Shared/CollectionPagination';
 import {
   ANIME_SORT_OPTIONS,
   buildFilteredAnimeList,
@@ -20,13 +21,14 @@ import { collectAnimeFilterOptions } from '../../utils/animeFilters';
 const SHARE_IMAGE_WIDTH = 1800;
 const SHARE_IMAGE_HEIGHT = 2100;
 const SHARE_IMAGE_RENDER_SCALE = 2;
-const SHARE_IMAGE_PADDING = 72;
-const SHARE_IMAGE_HEADER_HEIGHT = 180;
-const SHARE_IMAGE_FOOTER_HEIGHT = 64;
-const SHARE_IMAGE_GRID_GAP = 28;
+const SHARE_IMAGE_PADDING = 86;
+const SHARE_IMAGE_HEADER_HEIGHT = 292;
+const SHARE_IMAGE_FOOTER_HEIGHT = 96;
+const SHARE_IMAGE_GRID_GAP = 34;
 const SHARE_IMAGE_GRID_COLUMNS = 3;
 const SHARE_IMAGE_GRID_ROWS = 2;
 const SHARE_LOGO_PATH = '/images/logo.png';
+const SHARE_COLLECTION_PAGE_SIZE = 30;
 const DIRECT_SHARE_IMAGE_LOAD_OPTIONS = {
   crossOrigin: 'anonymous',
   referrerPolicy: 'no-referrer',
@@ -218,6 +220,39 @@ const drawObjectFitCover = (context, image, x, y, width, height) => {
   context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
 };
 
+const drawObjectFitContain = (context, image, x, y, width, height) => {
+  const imageWidth = image.width || image.naturalWidth || width;
+  const imageHeight = image.height || image.naturalHeight || height;
+  if (!imageWidth || !imageHeight) return;
+
+  const scale = Math.min(width / imageWidth, height / imageHeight);
+  const drawWidth = imageWidth * scale;
+  const drawHeight = imageHeight * scale;
+  const drawX = x + (width - drawWidth) / 2;
+  const drawY = y + (height - drawHeight) / 2;
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+};
+
+const drawShareCardImage = (context, image, x, y, width, height) => {
+  context.save();
+  context.beginPath();
+  context.rect(x, y, width, height);
+  context.clip();
+
+  context.fillStyle = '#151515';
+  context.fillRect(x, y, width, height);
+  context.filter = 'blur(12px) saturate(0.72) brightness(0.72)';
+  context.globalAlpha = 0.56;
+  drawObjectFitCover(context, image, x - 16, y - 16, width + 32, height + 32);
+
+  context.filter = 'none';
+  context.globalAlpha = 1;
+  context.fillStyle = 'rgba(0, 0, 0, 0.24)';
+  context.fillRect(x, y, width, height);
+  drawObjectFitContain(context, image, x, y, width, height);
+  context.restore();
+};
+
 const getWrappedTextLines = (context, text, maxWidth, maxLines) => {
   const safeText = String(text || '').trim();
   if (!safeText) {
@@ -314,16 +349,16 @@ const drawMetaTag = (context, label, x, y, variant = 'default') => {
   const tagWidth = Math.ceil(metrics.width + 28);
 
   context.save();
-  context.fillStyle = variant === 'year' ? '#f9f9f9' : '#ffffff';
+  context.fillStyle = variant === 'year' ? '#111111' : '#ffffff';
   context.fillRect(x, y, tagWidth, 32);
   context.strokeStyle = '#111111';
   context.lineWidth = 2;
   if (variant === 'genre') {
-    context.setLineDash([4, 3]);
+    context.setLineDash([6, 4]);
   }
   context.strokeRect(x, y, tagWidth, 32);
   context.setLineDash([]);
-  context.fillStyle = '#111111';
+  context.fillStyle = variant === 'year' ? '#ffffff' : '#111111';
   context.fillText(safeLabel, x + 14, y + 22.5);
   context.restore();
 
@@ -363,11 +398,11 @@ const drawRatingStars = (context, rating, x, y, width) => {
   const startX = x;
   const buttonY = y;
 
-  context.strokeStyle = '#eeeeee';
-  context.lineWidth = 1;
+  context.strokeStyle = '#111111';
+  context.lineWidth = 2;
   context.beginPath();
-  context.moveTo(x, buttonY - 12);
-  context.lineTo(x + width, buttonY - 12);
+  context.moveTo(x, buttonY - 14);
+  context.lineTo(x + width, buttonY - 14);
   context.stroke();
 
   context.save();
@@ -378,13 +413,13 @@ const drawRatingStars = (context, rating, x, y, width) => {
     const boxX = startX + (index * (buttonSize + buttonGap));
     const isActive = index < safeRating;
 
-    context.fillStyle = isActive ? '#fff8dd' : '#ffffff';
+    context.fillStyle = isActive ? '#111111' : '#ffffff';
     context.fillRect(boxX, buttonY, buttonSize, buttonSize);
-    context.strokeStyle = isActive ? '#000000' : '#cfcfcf';
+    context.strokeStyle = '#111111';
     context.lineWidth = 1.5;
     context.strokeRect(boxX, buttonY, buttonSize, buttonSize);
 
-    context.fillStyle = isActive ? '#b78600' : '#b5b5b5';
+    context.fillStyle = isActive ? '#ffffff' : '#b5b5b5';
     context.fillText('★', boxX + (buttonSize / 2), buttonY + (buttonSize / 2) + 0.5);
   }
   context.restore();
@@ -393,12 +428,12 @@ const drawRatingStars = (context, rating, x, y, width) => {
 };
 
 const buildShareImageCardLayout = (context, animePage, cardWidth, cardHeight) => {
-  const infoPaddingX = 20;
+  const infoPaddingX = 24;
   const infoWidth = cardWidth - (infoPaddingX * 2);
-  const titleAreaHeight = 56;
-  const titleToMetaGap = 10;
-  const infoTopPadding = 32;
-  const infoBottomPadding = 18;
+  const titleAreaHeight = 54;
+  const titleToMetaGap = 8;
+  const infoTopPadding = 34;
+  const infoBottomPadding = 10;
   const hasAnyRating = animePage.some((anime) => normalizeAnimeRating(anime?.rating) !== null);
   const metaToRatingGap = hasAnyRating ? 10 : 0;
 
@@ -430,8 +465,8 @@ const buildShareImageCardLayout = (context, animePage, cardWidth, cardHeight) =>
     + ratingAreaHeight
     + infoBottomPadding;
   const maxAllowedCoverHeight = cardHeight - requiredInfoHeight;
-  const minCoverHeight = Math.round(cardHeight * 0.46);
-  const preferredCoverHeight = Math.round(cardHeight * 0.6);
+  const minCoverHeight = Math.round(cardHeight * 0.52);
+  const preferredCoverHeight = Math.round(cardHeight * 0.64);
   const coverHeight = maxAllowedCoverHeight >= minCoverHeight
     ? Math.min(preferredCoverHeight, maxAllowedCoverHeight)
     : maxAllowedCoverHeight;
@@ -481,57 +516,63 @@ const drawImageShareCard = (context, anime, imageAsset, x, y, width, height, lay
   const infoY = coverY + coverHeight;
   const infoTop = infoY + infoTopPadding;
   const infoBottom = y + height - infoBottomPadding;
+  const innerPad = 12;
+  const imageX = coverX + innerPad;
+  const imageY = coverY + innerPad + 10;
+  const imageWidth = coverWidth - (innerPad * 2);
+  const imageHeight = coverHeight - innerPad - 10;
 
   context.fillStyle = '#ffffff';
   context.fillRect(x, y, width, height);
   context.strokeStyle = '#111111';
-  context.lineWidth = 1.5;
+  context.lineWidth = 3;
   context.strokeRect(x, y, width, height);
 
-  context.fillStyle = '#f5f5f5';
-  context.fillRect(coverX, coverY, coverWidth, coverHeight);
+  context.fillStyle = '#111111';
+  context.fillRect(x, y, width, 10);
+  context.fillStyle = '#f3f3f0';
+  context.fillRect(imageX, imageY, imageWidth, imageHeight);
 
   if (imageAsset) {
-    context.save();
-    context.beginPath();
-    context.rect(coverX, coverY, coverWidth, coverHeight);
-    context.clip();
-    drawObjectFitCover(context, imageAsset, coverX, coverY, coverWidth, coverHeight);
-    context.restore();
+    drawShareCardImage(context, imageAsset, imageX, imageY, imageWidth, imageHeight);
   } else {
-    context.fillStyle = '#efefef';
-    context.fillRect(coverX, coverY, coverWidth, coverHeight);
+    context.fillStyle = '#e8e8e4';
+    context.fillRect(imageX, imageY, imageWidth, imageHeight);
     context.fillStyle = '#666666';
     context.font = '800 24px sans-serif';
-    context.fillText('NO IMAGE', coverX + 18, coverY + 38);
+    context.fillText('NO IMAGE', coverX + 34, coverY + 56);
   }
 
   context.save();
   context.fillStyle = '#111111';
-  context.fillRect(x + 12, y + 12, 92, 38);
+  context.fillRect(x + 26, y + 30, 106, 40);
   context.fillStyle = '#ffffff';
-  context.font = '900 15px sans-serif';
+  context.font = '900 16px sans-serif';
   context.textBaseline = 'middle';
-  context.fillText(`${anime?.episodes || '?'} 話`, x + 24, y + 31);
+  context.fillText(`${anime?.episodes || '?'} 話`, x + 40, y + 50);
   context.restore();
 
   context.strokeStyle = '#111111';
-  context.lineWidth = 1;
+  context.lineWidth = 3;
   context.beginPath();
   context.moveTo(x, infoY);
   context.lineTo(x + width, infoY);
   context.stroke();
 
   context.fillStyle = '#ffffff';
-  context.fillRect(x, infoY + 1, width, height - coverHeight - 1);
+  context.fillRect(x, infoY + 2, width, height - coverHeight - 2);
+  context.fillStyle = '#111111';
+  context.fillRect(x + width - 56, infoY + 16, 38, 5);
+  context.fillRect(x + width - 23, infoY + 16, 5, 34);
 
   context.fillStyle = '#111111';
-  context.font = '900 21px sans-serif';
-  const titleLineHeight = 24;
+  context.font = '900 23px sans-serif';
+  context.textBaseline = 'top';
+  const titleLineHeight = 27;
   const titleTop = infoTop;
 
   context.fillStyle = '#111111';
-  context.font = '900 21px sans-serif';
+  context.font = '900 23px sans-serif';
   drawWrappedText(
     context,
     titleText,
@@ -542,7 +583,8 @@ const drawImageShareCard = (context, anime, imageAsset, x, y, width, height, lay
     2
   );
 
-  context.font = '800 14px sans-serif';
+  context.textBaseline = 'alphabetic';
+  context.font = '900 14px sans-serif';
   const metaTop = titleTop + titleAreaHeight + titleToMetaGap;
   const metaBottom = metaLabels.length > 0
     ? drawMetaTagList(
@@ -575,21 +617,24 @@ const drawEmptyShareCard = (context, x, y, width, height, layout) => {
   const infoY = y + coverHeight;
 
   context.save();
-  context.fillStyle = '#ffffff';
+  context.fillStyle = '#f8f8f4';
   context.fillRect(x, y, width, height);
-  context.strokeStyle = '#d4d4d4';
-  context.lineWidth = 1.5;
-  context.setLineDash([10, 8]);
+  context.strokeStyle = '#9a9a9a';
+  context.lineWidth = 2;
+  context.setLineDash([12, 10]);
   context.strokeRect(x, y, width, height);
   context.setLineDash([]);
 
-  context.fillStyle = '#fafafa';
+  context.fillStyle = '#eeeeea';
   context.fillRect(x, y, width, coverHeight);
   context.fillStyle = '#ffffff';
   context.fillRect(x, infoY, width, height - coverHeight);
 
-  context.strokeStyle = '#dcdcdc';
-  context.lineWidth = 1;
+  context.fillStyle = '#111111';
+  context.fillRect(x, y, width, 10);
+
+  context.strokeStyle = '#cfcfcf';
+  context.lineWidth = 2;
   context.beginPath();
   context.moveTo(x, infoY);
   context.lineTo(x + width, infoY);
@@ -629,41 +674,52 @@ const renderShareImageBlob = async (animePage, options) => {
   ]);
 
   try {
-    context.fillStyle = '#ffffff';
+    context.fillStyle = '#f6f6f2';
     context.fillRect(0, 0, outputWidth, outputHeight);
     context.fillStyle = '#111111';
-    context.fillRect(0, 0, outputWidth, 18);
+    context.fillRect(0, 0, outputWidth, SHARE_IMAGE_HEADER_HEIGHT);
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, SHARE_IMAGE_HEADER_HEIGHT, outputWidth, 8);
     context.strokeStyle = '#111111';
-    context.lineWidth = 4;
-    context.strokeRect(16, 16, outputWidth - 32, outputHeight - 32);
+    context.lineWidth = 5;
+    context.strokeRect(28, 28, outputWidth - 56, outputHeight - 56);
+    context.strokeStyle = 'rgba(17, 17, 17, 0.16)';
+    context.lineWidth = 2;
+    context.strokeRect(48, SHARE_IMAGE_HEADER_HEIGHT + 34, outputWidth - 96, outputHeight - SHARE_IMAGE_HEADER_HEIGHT - 128);
 
     if (logoAsset) {
-      const logoHeight = 92;
+      const logoHeight = 86;
       const naturalWidth = logoAsset.width || logoAsset.naturalWidth || 1;
       const naturalHeight = logoAsset.height || logoAsset.naturalHeight || 1;
       const logoWidth = Math.round(logoHeight * (naturalWidth / naturalHeight));
       context.save();
-      context.shadowColor = 'rgba(0, 0, 0, 0.14)';
-      context.shadowBlur = 12;
-      context.shadowOffsetX = 0;
-      context.shadowOffsetY = 3;
-      context.drawImage(logoAsset, SHARE_IMAGE_PADDING + 10, 54, logoWidth, logoHeight);
+      context.filter = 'brightness(0) invert(1)';
+      context.globalAlpha = 0.96;
+      context.drawImage(logoAsset, SHARE_IMAGE_PADDING, 56, logoWidth, logoHeight);
       context.restore();
     }
 
     const pageLabel = `${options.totalItems}作品中 ${options.pageNumber}/${options.totalPages}枚目`;
-    context.font = '800 30px sans-serif';
-    const pageLabelWidth = Math.ceil(context.measureText(pageLabel).width + 36);
+    context.font = '900 28px sans-serif';
+    const pageLabelWidth = Math.ceil(context.measureText(pageLabel).width + 48);
     const pageLabelX = outputWidth - SHARE_IMAGE_PADDING - pageLabelWidth;
-    context.fillStyle = '#111111';
-    context.fillRect(pageLabelX, 58, pageLabelWidth, 54);
+    context.strokeStyle = '#ffffff';
+    context.lineWidth = 2;
+    context.strokeRect(pageLabelX, 58, pageLabelWidth, 58);
     context.fillStyle = '#ffffff';
-    context.fillText(pageLabel, pageLabelX + 18, 95);
+    context.fillText(pageLabel, pageLabelX + 24, 96);
+
+    context.fillStyle = '#ffffff';
+    context.font = '900 48px sans-serif';
+    context.fillText('MY ANIME SHARE LIST', SHARE_IMAGE_PADDING, 190);
+    context.font = '800 22px sans-serif';
+    context.fillStyle = 'rgba(255, 255, 255, 0.72)';
+    context.fillText('AniTriggerで選んだ作品リスト', SHARE_IMAGE_PADDING, 232);
 
     context.fillStyle = '#111111';
-    context.fillRect(SHARE_IMAGE_PADDING, 158, outputWidth - (SHARE_IMAGE_PADDING * 2), 5);
+    context.fillRect(SHARE_IMAGE_PADDING, SHARE_IMAGE_HEADER_HEIGHT + 36, outputWidth - (SHARE_IMAGE_PADDING * 2), 6);
 
-    const gridTop = SHARE_IMAGE_HEADER_HEIGHT + 28;
+    const gridTop = SHARE_IMAGE_HEADER_HEIGHT + 72;
     const gridWidth = outputWidth - (SHARE_IMAGE_PADDING * 2);
     const gridHeight = outputHeight - gridTop - SHARE_IMAGE_FOOTER_HEIGHT - SHARE_IMAGE_PADDING;
     const cardWidth = Math.floor((gridWidth - (SHARE_IMAGE_GRID_GAP * (SHARE_IMAGE_GRID_COLUMNS - 1))) / SHARE_IMAGE_GRID_COLUMNS);
@@ -695,7 +751,7 @@ const renderShareImageBlob = async (animePage, options) => {
     }
 
     context.fillStyle = '#111111';
-    context.fillRect(SHARE_IMAGE_PADDING, outputHeight - 44, outputWidth - (SHARE_IMAGE_PADDING * 2), 4);
+    context.fillRect(SHARE_IMAGE_PADDING, outputHeight - 72, outputWidth - (SHARE_IMAGE_PADDING * 2), 6);
 
     return canvasToBlob(canvas, 'image/png');
   } finally {
@@ -749,7 +805,6 @@ function ShareScreen({
   initialSelectedAnimeIds = [],
   onUpdateRating,
   onUpdateWatchCount,
-  onBackToMyList,
   onBackToMethod,
   onSelectMode,
 }) {
@@ -765,6 +820,7 @@ function ShareScreen({
   const [filterMatchMode, setFilterMatchMode] = useState('and');
   const [sortKey, setSortKey] = useState('added');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedAnimeIds, setSelectedAnimeIds] = useState(() => (
     normalizeSelectedAnimeIds(initialSelectedAnimeIds, animeList)
   ));
@@ -774,17 +830,11 @@ function ShareScreen({
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 });
   const [generatedImages, setGeneratedImages] = useState([]);
-  const [quickNavState, setQuickNavState] = useState({
-    visible: false,
-    mobile: false,
-    nearTop: true,
-    nearBottom: false,
-  });
   const generatedImagesRef = useRef([]);
   const generatedGalleryRef = useRef(null);
+  const resultsTopRef = useRef(null);
   const pendingGalleryScrollRef = useRef(false);
   const galleryScrollTimerRef = useRef(null);
-  const listStartRef = useRef(null);
   const tagTranslationVersion = useTagTranslationVersion();
 
   const shareFilterOptions = useMemo(
@@ -824,6 +874,12 @@ function ShareScreen({
     const animeById = new Map(animeList.map((anime) => [anime.id, anime]));
     return selectedAnimeIds.map((id) => animeById.get(id)).filter(Boolean);
   }, [animeList, selectedAnimeIds]);
+  const totalPages = Math.max(1, Math.ceil(filteredList.length / SHARE_COLLECTION_PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const pagedFilteredList = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * SHARE_COLLECTION_PAGE_SIZE;
+    return filteredList.slice(startIndex, startIndex + SHARE_COLLECTION_PAGE_SIZE);
+  }, [filteredList, safeCurrentPage]);
   const isImageSelectionOverLimit = selectedAnimeIds.length > SHARE_IMAGE_SELECTION_LIMIT;
 
   const isLikelyMobileDevice = useMemo(() => {
@@ -882,79 +938,8 @@ function ShareScreen({
   }, [animeList]);
 
   useEffect(() => {
-    if (isMethodMode) {
-      setQuickNavState({
-        visible: false,
-        mobile: false,
-        nearTop: true,
-        nearBottom: false,
-      });
-      return;
-    }
-
-    let rafId = null;
-    const updateQuickNav = () => {
-      const scrollTop = window.scrollY || window.pageYOffset || 0;
-      const viewportH = window.innerHeight || 0;
-      const docH = Math.max(
-        document.body?.scrollHeight || 0,
-        document.documentElement?.scrollHeight || 0
-      );
-      const maxScroll = Math.max(0, docH - viewportH);
-      const isMobile = window.matchMedia('(max-width: 1024px)').matches;
-      const listStartTop = listStartRef.current
-        ? listStartRef.current.getBoundingClientRect().top + scrollTop
-        : Number.POSITIVE_INFINITY;
-      const reachedList = Number.isFinite(listStartTop) && (scrollTop + 72 >= listStartTop);
-      const nearTop = scrollTop <= 24;
-      const nearBottom = maxScroll - scrollTop <= 24;
-      const hasLongContent = maxScroll > 240;
-      const visible = hasLongContent && reachedList && (!isMobile || reachedList || nearBottom);
-
-      setQuickNavState((prev) => {
-        if (
-          prev.visible === visible
-          && prev.mobile === isMobile
-          && prev.nearTop === nearTop
-          && prev.nearBottom === nearBottom
-        ) {
-          return prev;
-        }
-        return { visible, mobile: isMobile, nearTop, nearBottom };
-      });
-    };
-
-    const requestUpdate = () => {
-      if (rafId != null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        updateQuickNav();
-      });
-    };
-
-    window.addEventListener('scroll', requestUpdate, { passive: true });
-    window.addEventListener('resize', requestUpdate);
-    updateQuickNav();
-
-    return () => {
-      if (rafId != null) cancelAnimationFrame(rafId);
-      window.removeEventListener('scroll', requestUpdate);
-      window.removeEventListener('resize', requestUpdate);
-    };
-  }, [
-    filteredList.length,
-    filterMatchMode,
-    generatedImages.length,
-    isMethodMode,
-    minRating,
-    searchQuery,
-    selectedAnimeIds.length,
-    selectedGenres,
-    selectedTags,
-    selectedYear,
-    sortKey,
-    sortOrder,
-  ]);
+    setCurrentPage((prev) => Math.min(Math.max(1, prev), totalPages));
+  }, [totalPages]);
 
   const clearGeneratedImages = () => {
     pendingGalleryScrollRef.current = false;
@@ -1025,6 +1010,7 @@ function ShareScreen({
   }, [generatedImages.length]);
 
   const handleApplyFilters = (nextFilters) => {
+    setCurrentPage(1);
     setSelectedGenres(Array.isArray(nextFilters?.selectedGenres) ? nextFilters.selectedGenres : []);
     setSelectedTags(Array.isArray(nextFilters?.selectedTags) ? nextFilters.selectedTags : []);
     setSelectedYear(String(nextFilters?.selectedYear || '').trim());
@@ -1033,11 +1019,38 @@ function ShareScreen({
   };
 
   const handleClearFilters = () => {
+    setCurrentPage(1);
     setSelectedGenres([]);
     setSelectedTags([]);
     setSelectedYear('');
     setMinRating('');
     setFilterMatchMode('and');
+  };
+
+  const handleSearchChange = (event) => {
+    setCurrentPage(1);
+    setSearchQuery(event.target.value);
+  };
+
+  const handleSortKeyChange = (nextSortKey) => {
+    setCurrentPage(1);
+    setSortKey(nextSortKey);
+  };
+
+  const handleSortOrderChange = (nextSortOrder) => {
+    setCurrentPage(1);
+    setSortOrder(nextSortOrder);
+  };
+
+  const handlePageChange = (nextPage) => {
+    const page = Math.min(Math.max(1, Number(nextPage) || 1), totalPages);
+    setCurrentPage(page);
+    requestAnimationFrame(() => {
+      const target = resultsTopRef.current;
+      if (target?.scrollIntoView) {
+        target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    });
   };
 
   const handleToggleAnimeSelection = (animeId) => {
@@ -1072,7 +1085,7 @@ function ShareScreen({
       });
       return next;
     });
-    setNotice({ type: 'success', message: `表示中の ${filteredList.length} 件を選択しました。` });
+    setNotice({ type: 'success', message: `全ページの ${filteredList.length} 件を選択しました。` });
   };
 
   const handleClearSelection = () => {
@@ -1210,18 +1223,6 @@ function ShareScreen({
     });
   };
 
-  const handleScrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleScrollToBottom = () => {
-    const docH = Math.max(
-      document.body?.scrollHeight || 0,
-      document.documentElement?.scrollHeight || 0
-    );
-    window.scrollTo({ top: docH, behavior: 'smooth' });
-  };
-
   const canUseNativeSaveGeneratedImages = useMemo(() => {
     if (!isLikelyMobileDevice) return false;
     return canUseNativeFileShare(generatedImages.map((item) => item.file));
@@ -1234,7 +1235,7 @@ function ShareScreen({
 
     return (
       <>
-        <main className="main-content share-screen-main page-shell has-bottom-home-nav">
+        <main className="main-content share-screen-main page-shell">
           <div className="mylist-section-header bookmark-screen-header">
             <div>
               <h3 className="page-main-title">共有方法を選択</h3>
@@ -1290,12 +1291,6 @@ function ShareScreen({
             <div className="empty-state">共有できる作品がまだありません</div>
           )}
         </main>
-
-        <nav className="screen-bottom-home-nav" aria-label="画面移動">
-          <button type="button" className="screen-bottom-home-button" onClick={onBackToMyList}>
-            ← マイリストへ戻る
-          </button>
-        </nav>
       </>
     );
   }
@@ -1362,7 +1357,7 @@ function ShareScreen({
               type="text"
               placeholder="共有する作品を検索"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={handleSearchChange}
             />
           </div>
         </div>
@@ -1389,8 +1384,8 @@ function ShareScreen({
               sortKey={sortKey}
               sortOrder={sortOrder}
               options={ANIME_SORT_OPTIONS}
-              onSortKeyChange={setSortKey}
-              onSortOrderChange={setSortOrder}
+              onSortKeyChange={handleSortKeyChange}
+              onSortOrderChange={handleSortOrderChange}
               selectAriaLabel="共有候補の並び替え"
             />
           )}
@@ -1420,7 +1415,7 @@ function ShareScreen({
                 onClick={handleSelectAllVisibleForText}
                 disabled={filteredList.length === 0}
               >
-                表示中をすべて選択
+                すべて選択
               </button>
               <button
                 type="button"
@@ -1428,14 +1423,23 @@ function ShareScreen({
                 onClick={handleClearSelection}
                 disabled={selectedAnimeIds.length === 0}
               >
-                すべて解除
+                解除
               </button>
             </div>
           )}
         </div>
 
-        <div className="results-count">
-          {filteredList.length} 作品が見つかりました
+        <div ref={resultsTopRef}>
+          <div className="results-count">
+            {filteredList.length} 作品が見つかりました
+          </div>
+          <CollectionPagination
+            currentPage={safeCurrentPage}
+            totalPages={totalPages}
+            totalItems={filteredList.length}
+            itemsPerPage={SHARE_COLLECTION_PAGE_SIZE}
+            onPageChange={handlePageChange}
+          />
         </div>
 
         {isImageMode && generatedImages.length > 0 && (
@@ -1470,8 +1474,8 @@ function ShareScreen({
           </section>
         )}
 
-        <div ref={listStartRef} className="anime-grid">
-          {filteredList.map((anime) => (
+        <div className="anime-grid">
+          {pagedFilteredList.map((anime) => (
             <AnimeCard
               key={anime.id}
               anime={anime}
@@ -1490,6 +1494,15 @@ function ShareScreen({
         {filteredList.length === 0 && (
           <div className="empty-state">該当する作品がありません</div>
         )}
+
+        <CollectionPagination
+          currentPage={safeCurrentPage}
+          totalPages={totalPages}
+          totalItems={filteredList.length}
+          itemsPerPage={SHARE_COLLECTION_PAGE_SIZE}
+          className="browse-pagination-bottom"
+          onPageChange={handlePageChange}
+        />
       </main>
 
       <div className="selection-action-dock share-action-dock" role="region" aria-label="共有操作">
@@ -1508,9 +1521,6 @@ function ShareScreen({
                 <button type="button" className="share-dock-secondary" onClick={handleClearSelection}>
                   キャンセル
                 </button>
-                <button type="button" className="share-dock-secondary" onClick={onBackToMyList}>
-                  マイリストに戻る
-                </button>
               </>
             ) : (
               <>
@@ -1528,10 +1538,7 @@ function ShareScreen({
                   onClick={handleClearSelection}
                   disabled={selectedAnimeIds.length === 0 || isGeneratingImages}
                 >
-                  すべて解除
-                </button>
-                <button type="button" className="share-dock-secondary" onClick={onBackToMyList}>
-                  マイリストに戻る
+                  解除
                 </button>
               </>
             )
@@ -1551,43 +1558,12 @@ function ShareScreen({
                 onClick={handleClearSelection}
                 disabled={selectedAnimeIds.length === 0}
               >
-                すべて解除
-              </button>
-              <button type="button" className="share-dock-secondary" onClick={onBackToMyList}>
-                マイリストに戻る
+                解除
               </button>
             </>
           )}
         </div>
       </div>
-
-      {!isMethodMode && quickNavState.visible && (
-        <aside
-          className={`quick-nav-rail share-screen-quick-nav ${quickNavState.mobile ? 'mobile' : ''}`}
-          aria-label="ページ移動"
-        >
-          <button
-            type="button"
-            className="quick-nav-button"
-            onClick={handleScrollToTop}
-            disabled={quickNavState.nearTop}
-            aria-label="ページ最上部へ移動"
-            title="最上部へ"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            className="quick-nav-button"
-            onClick={handleScrollToBottom}
-            disabled={quickNavState.nearBottom}
-            aria-label="ページ最下部へ移動"
-            title="最下部へ"
-          >
-            ↓
-          </button>
-        </aside>
-      )}
     </>
   );
 }

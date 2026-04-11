@@ -156,6 +156,7 @@ const COLLECTION_PAGE_SIZE = 30;
 const DETAIL_ENRICHMENT_RETRY_BASE_MS = 4000;
 const DETAIL_ENRICHMENT_RETRY_MAX_MS = 60000;
 const FEATURED_SLIDER_CURRENT_SEASON_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
+const PAGE_TRANSITION_FOOTER_HIDE_MS = 1200;
 
 const getFeaturedSliderBuildOptions = (source) => (
   source === HOME_FEATURED_SLIDER_SOURCES.currentSeason
@@ -430,19 +431,11 @@ function App() {
     readHomeQuickActionBackgroundsFromStorage()
   );
   const [isHomeQuickActionBackgroundsHydrated, setIsHomeQuickActionBackgroundsHydrated] = useState(false);
-  const [seasonalAddSource, setSeasonalAddSource] = useState('home');
-  const [quickNavState, setQuickNavState] = useState({
-    visible: false,
-    mobile: false,
-    nearTop: true,
-    nearBottom: false,
-  });
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedAnimeIds, setSelectedAnimeIds] = useState([]);
   const [bookmarkVisibleAnimeIds, setBookmarkVisibleAnimeIds] = useState([]);
   const [sharePresetAnimeIds, setSharePresetAnimeIds] = useState([]);
   const [isOnboardingDismissed, setIsOnboardingDismissed] = useState(false);
-  const [isOnboardingCurrentSeasonFlow, setIsOnboardingCurrentSeasonFlow] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [isRefreshingFeatured, setIsRefreshingFeatured] = useState(false);
   const [activeTrailerAnime, setActiveTrailerAnime] = useState(null);
@@ -450,6 +443,10 @@ function App() {
   const [detailEnrichmentRetryTick, setDetailEnrichmentRetryTick] = useState(0);
   const [myListViewportPriorityMap, setMyListViewportPriorityMap] = useState({});
   const [addScreenResetNonce, setAddScreenResetNonce] = useState(0);
+  const [showLaunchSplash, setShowLaunchSplash] = useState(true);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [isFooterHiddenDuringTransition, setIsFooterHiddenDuringTransition] = useState(false);
+  const [isFooterTouchingViewport, setIsFooterTouchingViewport] = useState(false);
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
@@ -462,6 +459,9 @@ function App() {
   const detailEnrichmentRetryTimerRef = useRef(null);
   const detailEnrichmentMountedRef = useRef(true);
   const trailerOpenRequestIdRef = useRef(0);
+  const headerMenuRef = useRef(null);
+  const footerRef = useRef(null);
+  const hasCompletedInitialViewRenderRef = useRef(false);
   const myListResultsRef = useRef(null);
   const pendingMyListPageScrollRef = useRef(false);
   const onboardingStepListRef = useRef(null);
@@ -668,6 +668,22 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      setShowLaunchSplash(false);
+      return undefined;
+    }
+
+    const prefersReducedMotion = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timeoutId = window.setTimeout(
+      () => setShowLaunchSplash(false),
+      prefersReducedMotion ? 1400 : 3600
+    );
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     readHomeQuickActionBackgroundsFromPersistentStorage()
@@ -711,6 +727,102 @@ function App() {
     const timeoutId = window.setTimeout(warmYouTubeApi, 900);
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  useEffect(() => {
+    if (!isHeaderMenuOpen || typeof document === 'undefined') return undefined;
+
+    const handlePointerDown = (event) => {
+      if (headerMenuRef.current?.contains(event.target)) return;
+      setIsHeaderMenuOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsHeaderMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isHeaderMenuOpen]);
+
+  useEffect(() => {
+    setIsHeaderMenuOpen(false);
+  }, [view]);
+
+  useEffect(() => {
+    if (!hasCompletedInitialViewRenderRef.current) {
+      hasCompletedInitialViewRenderRef.current = true;
+      return undefined;
+    }
+
+    if (
+      typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setIsFooterHiddenDuringTransition(false);
+      return undefined;
+    }
+
+    setIsFooterHiddenDuringTransition(true);
+    const timeoutId = setTimeout(() => {
+      setIsFooterHiddenDuringTransition(false);
+    }, PAGE_TRANSITION_FOOTER_HIDE_MS);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    let animationFrameId = null;
+
+    const updateFooterTouchState = () => {
+      animationFrameId = null;
+      const footerElement = footerRef.current;
+      if (!footerElement) {
+        setIsFooterTouchingViewport(false);
+        return;
+      }
+
+      const footerRect = footerElement.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const isTouching = footerRect.top <= viewportHeight && footerRect.bottom >= 0;
+      setIsFooterTouchingViewport((current) => (current === isTouching ? current : isTouching));
+    };
+
+    const scheduleFooterTouchStateUpdate = () => {
+      if (animationFrameId !== null) return;
+      animationFrameId = window.requestAnimationFrame(updateFooterTouchState);
+    };
+
+    updateFooterTouchState();
+    window.addEventListener('scroll', scheduleFooterTouchStateUpdate, { passive: true });
+    window.addEventListener('resize', scheduleFooterTouchStateUpdate);
+    const resizeObserver = typeof window.ResizeObserver === 'function'
+      ? new window.ResizeObserver(scheduleFooterTouchStateUpdate)
+      : null;
+    if (resizeObserver) {
+      if (document.body) resizeObserver.observe(document.body);
+      if (document.documentElement) resizeObserver.observe(document.documentElement);
+      if (footerRef.current) resizeObserver.observe(footerRef.current);
+    }
+
+    return () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      window.removeEventListener('scroll', scheduleFooterTouchStateUpdate);
+      window.removeEventListener('resize', scheduleFooterTouchStateUpdate);
+      resizeObserver?.disconnect();
+    };
+  }, [view, isFooterHiddenDuringTransition]);
 
   useEffect(() => () => {
     detailEnrichmentMountedRef.current = false;
@@ -930,67 +1042,12 @@ function App() {
     };
   }, [view]);
 
-  // 4. MyList Quick Navigation (Top/Bottom)
   useEffect(() => {
     if (view !== 'mylist') {
       setIsSelectionMode(false);
       setSelectedAnimeIds([]);
-      setQuickNavState({
-        visible: false,
-        mobile: false,
-        nearTop: true,
-        nearBottom: false,
-      });
-      return;
     }
-
-    let rafId = null;
-    const updateQuickNav = () => {
-      const scrollTop = window.scrollY || window.pageYOffset || 0;
-      const viewportH = window.innerHeight || 0;
-      const docH = Math.max(
-        document.body?.scrollHeight || 0,
-        document.documentElement?.scrollHeight || 0
-      );
-      const maxScroll = Math.max(0, docH - viewportH);
-      const isMobile = window.matchMedia('(max-width: 1024px)').matches;
-
-      const nearTop = scrollTop <= 24;
-      const nearBottom = maxScroll - scrollTop <= 24;
-      const hasLongContent = maxScroll > 240;
-      const visible = hasLongContent && (!isMobile || scrollTop > 140 || nearBottom);
-
-      setQuickNavState((prev) => {
-        if (
-          prev.visible === visible &&
-          prev.mobile === isMobile &&
-          prev.nearTop === nearTop &&
-          prev.nearBottom === nearBottom
-        ) {
-          return prev;
-        }
-        return { visible, mobile: isMobile, nearTop, nearBottom };
-      });
-    };
-
-    const requestUpdate = () => {
-      if (rafId != null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        updateQuickNav();
-      });
-    };
-
-    window.addEventListener('scroll', requestUpdate, { passive: true });
-    window.addEventListener('resize', requestUpdate);
-    updateQuickNav();
-
-    return () => {
-      if (rafId != null) cancelAnimationFrame(rafId);
-      window.removeEventListener('scroll', requestUpdate);
-      window.removeEventListener('resize', requestUpdate);
-    };
-  }, [view, animeList.length, minRating, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder, myListPage]);
+  }, [view]);
 
   useEffect(() => {
     setSelectedAnimeIds((prev) => prev.filter((id) => animeList.some((anime) => anime.id === id)));
@@ -1019,26 +1076,9 @@ function App() {
     setView(forcedHome);
   }, [isOnboardingActive, view]);
 
-  useEffect(() => {
-    if (view === 'addCurrent') return;
-    setIsOnboardingCurrentSeasonFlow(false);
-  }, [view]);
-
   // 3. Initial Data Acquisition (Hydration) - Empty for Clean Start
 
   // 4. Action Handlers
-  const handleScrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleScrollToBottom = () => {
-    const docH = Math.max(
-      document.body?.scrollHeight || 0,
-      document.documentElement?.scrollHeight || 0
-    );
-    window.scrollTo({ top: docH, behavior: 'smooth' });
-  };
-
   const handleRefreshFeaturedSlides = () => {
     if (isRefreshingFeatured || !featuredSliderState.showRefreshButton) return;
     setIsRefreshingFeatured(true);
@@ -1257,8 +1297,7 @@ function App() {
     navigateTo('shareMethod');
   };
 
-  const openSeasonalAddView = (targetView, source = 'home', options = {}) => {
-    setSeasonalAddSource(source);
+  const openSeasonalAddView = (targetView, options = {}) => {
     navigateTo(targetView, options);
   };
 
@@ -1286,19 +1325,16 @@ function App() {
 
   const handleOnboardingAddCurrent = () => {
     setIsOnboardingDismissed(true);
-    setIsOnboardingCurrentSeasonFlow(true);
-    openSeasonalAddView('addCurrent', 'home', { force: true });
+    openSeasonalAddView('addCurrent', { force: true });
   };
 
   const handleOnboardingSearchAdd = () => {
     setIsOnboardingDismissed(true);
-    setIsOnboardingCurrentSeasonFlow(false);
     navigateTo('add', { force: true });
   };
 
   const handleOnboardingCancel = () => {
     setIsOnboardingDismissed(true);
-    setIsOnboardingCurrentSeasonFlow(false);
     navigateTo('home', { replace: true, force: true });
   };
 
@@ -1664,7 +1700,7 @@ function App() {
     || view === 'homeCustomizeStats'
     || view === 'homeCustomizeQuick';
   const isShareView = view === 'shareMethod' || view === 'shareImage' || view === 'shareText';
-  const isMyListSectionView = view === 'mylist' || isShareView;
+  const isMyListView = view === 'mylist';
   const shouldShowHomeOnboarding = view === 'home' && isOnboardingActive;
   const isOnboardingNavigationLocked = shouldShowHomeOnboarding;
   const isLastOnboardingStep = onboardingStep >= ONBOARDING_STEPS.length - 1;
@@ -1678,17 +1714,6 @@ function App() {
     : view === 'addNext'
       ? nextSeasonAddPreset
       : null;
-  const isOnboardingCurrentAddBackToHome = view === 'addCurrent' && isOnboardingCurrentSeasonFlow;
-  const addViewBackTarget = isOnboardingCurrentAddBackToHome
-    ? 'home'
-    : activeBrowsePreset && seasonalAddSource === 'bookmarks'
-      ? 'bookmarks'
-      : 'home';
-  const addViewBackLabel = isOnboardingCurrentAddBackToHome
-    ? '← ホームに戻る'
-    : activeBrowsePreset && seasonalAddSource === 'bookmarks'
-      ? '← ブックマークへ戻る'
-      : '← ホームへ戻る';
   const addViewTitle = view === 'addCurrent'
     ? '今期放送中作品の追加'
     : view === 'addNext'
@@ -1699,7 +1724,6 @@ function App() {
     : view === 'addNext'
       ? `${nextSeasonLabel}の放送予定作品を先に追加できます。`
       : 'マイリストやブックマークに追加する作品を探せます。';
-
   const handleSaveHomeStatsCardBackgrounds = (nextBackgrounds) => {
     setHomeStatsCardBackgrounds(sanitizeHomeStatsCardBackgrounds(nextBackgrounds));
   };
@@ -1750,54 +1774,244 @@ function App() {
 
   // 6. UI Render
   const pageTransitionDirection = navigationTypeRef.current === 'pop' ? 'backward' : 'forward';
+  const shortcutItems = [
+    {
+      key: 'home',
+      label: 'ホーム',
+      active: isHomeView,
+      onClick: () => navigateTo('home'),
+      disabled: isOnboardingNavigationLocked,
+    },
+    {
+      key: 'mylist',
+      label: 'マイリスト',
+      active: isMyListView,
+      onClick: () => navigateTo('mylist'),
+      disabled: isOnboardingNavigationLocked,
+    },
+    {
+      key: 'bookmarks',
+      label: 'ブックマーク',
+      active: view === 'bookmarks',
+      onClick: () => navigateTo('bookmarks'),
+      disabled: isOnboardingNavigationLocked,
+    },
+    {
+      key: 'add',
+      label: '作品を追加',
+      active: isAddView,
+      onClick: handleOpenAddView,
+      disabled: isOnboardingNavigationLocked,
+    },
+    {
+      key: 'share',
+      label: '共有',
+      active: isShareView,
+      onClick: () => handleOpenShareMethod(),
+      disabled: isOnboardingNavigationLocked || animeList.length === 0,
+      disabledReason: 'マイリストに作品を追加すると使えます',
+    },
+  ];
+  const headerShortcutItems = shortcutItems;
+  const footerShareDisabled = isOnboardingNavigationLocked || animeList.length === 0;
+  const footerShareDisabledReason = 'マイリストに作品を追加すると使えます';
+  const openFooterShareView = (nextShareView) => {
+    if (footerShareDisabled) return;
+    setSharePresetAnimeIds([]);
+    navigateTo(nextShareView);
+  };
+  const footerShortcutGroups = [
+    {
+      key: 'main',
+      title: 'メイン',
+      items: [
+        {
+          key: 'home',
+          label: 'ホーム',
+          active: view === 'home',
+          onClick: () => navigateTo('home'),
+          disabled: isOnboardingNavigationLocked,
+        },
+        {
+          key: 'mylist',
+          label: 'マイリスト',
+          active: isMyListView,
+          onClick: () => navigateTo('mylist'),
+          disabled: isOnboardingNavigationLocked,
+        },
+        {
+          key: 'bookmarks',
+          label: 'ブックマーク',
+          active: view === 'bookmarks',
+          onClick: () => navigateTo('bookmarks'),
+          disabled: isOnboardingNavigationLocked,
+        },
+      ],
+    },
+    {
+      key: 'add',
+      title: '作品追加',
+      items: [
+        {
+          key: 'add-search',
+          label: '検索して追加',
+          active: view === 'add',
+          onClick: handleOpenAddView,
+          disabled: isOnboardingNavigationLocked,
+        },
+        {
+          key: 'add-current',
+          label: '今期放送中',
+          active: view === 'addCurrent',
+          onClick: () => openSeasonalAddView('addCurrent'),
+          disabled: isOnboardingNavigationLocked,
+        },
+        {
+          key: 'add-next',
+          label: '来季放送予定',
+          active: view === 'addNext',
+          onClick: () => openSeasonalAddView('addNext'),
+          disabled: isOnboardingNavigationLocked,
+        },
+      ],
+    },
+    {
+      key: 'share',
+      title: '共有',
+      items: [
+        {
+          key: 'share-image',
+          label: '画像で共有',
+          active: view === 'shareImage',
+          onClick: () => openFooterShareView('shareImage'),
+          disabled: footerShareDisabled,
+          disabledReason: footerShareDisabledReason,
+        },
+        {
+          key: 'share-text',
+          label: '文字で共有',
+          active: view === 'shareText',
+          onClick: () => openFooterShareView('shareText'),
+          disabled: footerShareDisabled,
+          disabledReason: footerShareDisabledReason,
+        },
+      ],
+    },
+    {
+      key: 'customize',
+      title: '設定',
+      items: [
+        {
+          key: 'customize-slider',
+          label: 'ホームスライド',
+          active: view === 'homeCustomizeSlider',
+          onClick: () => navigateTo('homeCustomizeSlider'),
+          disabled: isOnboardingNavigationLocked,
+        },
+        {
+          key: 'customize-stats',
+          label: '統計カード',
+          active: view === 'homeCustomizeStats',
+          onClick: () => navigateTo('homeCustomizeStats'),
+          disabled: isOnboardingNavigationLocked,
+        },
+        {
+          key: 'customize-quick',
+          label: 'ショートカット背景',
+          active: view === 'homeCustomizeQuick',
+          onClick: () => navigateTo('homeCustomizeQuick'),
+          disabled: isOnboardingNavigationLocked,
+        },
+      ],
+    },
+  ];
 
   return (
-    <div className="app-container">
-      {/* Navigation Header */}
+    <div className={`app-container${isFooterTouchingViewport ? ' footer-touching-viewport' : ''}`}>
+      {showLaunchSplash && (
+        <div className="site-launch-splash" aria-hidden="true">
+          <div className="site-launch-splash-stage">
+            <div className="site-launch-splash-mark">
+              <img src="/images/logo.png" alt="" />
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="app-header">
-        <div
-          className={`logo${isOnboardingNavigationLocked ? ' nav-locked' : ''}`}
-          onClick={isOnboardingNavigationLocked ? undefined : () => navigateTo('home')}
-          style={{ cursor: isOnboardingNavigationLocked ? 'default' : 'pointer' }}
-        >
-          <img src="/images/logo.png" alt="AniTrigger" style={{ height: '120px' }} />
+        <div className="app-header-inner">
+          <button
+            type="button"
+            className={`logo-button${isOnboardingNavigationLocked ? ' nav-locked' : ''}`}
+            onClick={isOnboardingNavigationLocked ? undefined : () => navigateTo('home')}
+            disabled={isOnboardingNavigationLocked}
+            aria-label="ホームへ移動"
+          >
+            <img src="/images/logo.png" alt="AniTrigger" />
+            <span className="logo-title" title="ホームへ移動">AniTrigger</span>
+          </button>
+
+          <div className="header-actions" ref={headerMenuRef}>
+            <a
+              className={`header-home-link ${isHomeView ? 'active' : ''}${isOnboardingNavigationLocked ? ' disabled' : ''}`}
+              href={APP_VIEW_HASHES.home}
+              onClick={(event) => {
+                event.preventDefault();
+                if (isOnboardingNavigationLocked) return;
+                navigateTo('home');
+                setIsHeaderMenuOpen(false);
+              }}
+              aria-current={isHomeView ? 'page' : undefined}
+              aria-disabled={isOnboardingNavigationLocked ? 'true' : undefined}
+              aria-label="ホームへ移動"
+              tabIndex={isOnboardingNavigationLocked ? -1 : undefined}
+              title="ホーム"
+            >
+              <svg className="header-home-illustration" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                <path d="M5 15.2 16 6l11 9.2" />
+                <path d="M8.5 14.2v12.3h15V14.2" />
+                <path d="M13 26.5v-7h6v7" />
+              </svg>
+            </a>
+
+            <button
+              type="button"
+              className={`header-menu-trigger ${isHeaderMenuOpen ? 'active' : ''}`}
+              onClick={() => setIsHeaderMenuOpen((current) => !current)}
+              disabled={isOnboardingNavigationLocked}
+              aria-label="ショートカットメニューを開く"
+              aria-expanded={isHeaderMenuOpen}
+              aria-controls="header-shortcut-menu"
+              title="メニュー"
+            >
+              <span className="header-menu-line" aria-hidden="true" />
+              <span className="header-menu-line" aria-hidden="true" />
+              <span className="header-menu-line" aria-hidden="true" />
+            </button>
+
+            {isHeaderMenuOpen && (
+              <nav id="header-shortcut-menu" className="header-shortcut-menu" aria-label="ヘッダーショートカット">
+                {headerShortcutItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`header-shortcut-item ${item.active ? 'active' : ''}`}
+                    onClick={() => {
+                      item.onClick();
+                      setIsHeaderMenuOpen(false);
+                    }}
+                    disabled={item.disabled}
+                    aria-current={item.active ? 'page' : undefined}
+                    title={item.disabled ? item.disabledReason : undefined}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+            )}
+          </div>
         </div>
       </header>
-
-      <nav className="global-view-nav" aria-label="メインナビゲーション">
-        <button
-          type="button"
-          className={`global-view-nav-button ${isHomeView ? 'active' : ''}`}
-          onClick={() => navigateTo('home')}
-          disabled={isOnboardingNavigationLocked}
-        >
-          ホーム
-        </button>
-        <button
-          type="button"
-          className={`global-view-nav-button ${isMyListSectionView ? 'active' : ''}`}
-          onClick={() => navigateTo('mylist')}
-          disabled={isOnboardingNavigationLocked}
-        >
-          マイリスト
-        </button>
-        <button
-          type="button"
-          className={`global-view-nav-button ${view === 'bookmarks' ? 'active' : ''}`}
-          onClick={() => navigateTo('bookmarks')}
-          disabled={isOnboardingNavigationLocked}
-        >
-          ブックマーク
-        </button>
-        <button
-          type="button"
-          className={`global-view-nav-button ${isAddView ? 'active' : ''}`}
-          onClick={handleOpenAddView}
-          disabled={isOnboardingNavigationLocked}
-        >
-          作品の追加
-        </button>
-      </nav>
 
       {/* Content Rendering Loop */}
       <div key={view} className={`app-view-stage view-transition-${pageTransitionDirection}`}>
@@ -1819,11 +2033,9 @@ function App() {
             onToggleBookmark={handleToggleBookmark}
             bookmarkList={bookmarkList}
             onPlayTrailer={handleOpenTrailer}
-            onBack={() => navigateTo(addViewBackTarget)}
             animeList={animeList}
             screenTitle={addViewTitle}
             screenSubtitle={addViewSubtitle}
-            backButtonLabel={addViewBackLabel}
             initialEntryTab={activeBrowsePreset ? 'browse' : 'search'}
             browsePreset={activeBrowsePreset}
           />
@@ -1833,10 +2045,9 @@ function App() {
           <BookmarkScreen
             bookmarkList={bookmarkList}
             watchedAnimeList={animeList}
-            onOpenBookmarkAdd={() => navigateTo('add')}
-            onOpenCurrentSeasonAdd={() => openSeasonalAddView('addCurrent', 'bookmarks')}
-            onOpenNextSeasonAdd={() => openSeasonalAddView('addNext', 'bookmarks')}
-            onBackHome={() => navigateTo('home')}
+            onOpenBookmarkAdd={() => handleOpenAddView('bookmarks')}
+            onOpenCurrentSeasonAdd={() => openSeasonalAddView('addCurrent')}
+            onOpenNextSeasonAdd={() => openSeasonalAddView('addNext')}
             onToggleBookmark={handleToggleBookmark}
             onMarkWatched={handleMarkBookmarkAsWatched}
             onBulkRemoveBookmarks={handleBulkRemoveBookmarks}
@@ -1887,13 +2098,12 @@ function App() {
           initialSelectedAnimeIds={sharePresetAnimeIds}
           onUpdateRating={handleUpdateAnimeRating}
           onUpdateWatchCount={handleUpdateAnimeWatchCount}
-          onBackToMyList={() => navigateTo('mylist')}
           onBackToMethod={() => navigateTo('shareMethod')}
           onSelectMode={(mode) => navigateTo(mode === 'image' ? 'shareImage' : 'shareText')}
         />
       ) : view === 'mylist' ? (
         <>
-          <main className={`main-content mylist-page-main page-shell${isSelectionMode ? ' has-selection-dock' : ' has-bottom-home-nav'}`}>
+          <main className={`main-content mylist-page-main page-shell${isSelectionMode ? ' has-selection-dock' : ''}`}>
               <div className="mylist-section-header bookmark-screen-header">
                 <div>
                   <h3 className="page-main-title">マイリスト</h3>
@@ -2034,7 +2244,7 @@ function App() {
               )}
             </main>
 
-          {isSelectionMode ? (
+          {isSelectionMode && (
             <div className="selection-action-dock" role="region" aria-label="選択モード操作">
               <p className="selection-action-dock-count">{selectedAnimeIds.length} 件を選択中</p>
               <div className="selection-action-dock-buttons">
@@ -2071,39 +2281,6 @@ function App() {
                 </button>
               </div>
             </div>
-          ) : (
-            <>
-              <nav className="screen-bottom-home-nav" aria-label="画面移動">
-                <button type="button" className="screen-bottom-home-button" onClick={() => navigateTo('home')}>
-                  ← ホームへ戻る
-                </button>
-              </nav>
-
-              {quickNavState.visible && (
-                <aside className={`quick-nav-rail mylist-quick-nav ${quickNavState.mobile ? 'mobile' : ''}`} aria-label="ページ移動">
-                  <button
-                    type="button"
-                    className="quick-nav-button"
-                    onClick={handleScrollToTop}
-                    disabled={quickNavState.nearTop}
-                    aria-label="ページ最上部へ移動"
-                    title="最上部へ"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="quick-nav-button"
-                    onClick={handleScrollToBottom}
-                    disabled={quickNavState.nearBottom}
-                    aria-label="ページ最下部へ移動"
-                    title="最下部へ"
-                  >
-                    ↓
-                  </button>
-                </aside>
-              )}
-            </>
           )}
         </>
       ) : shouldShowHomeOnboarding ? (
@@ -2246,8 +2423,8 @@ function App() {
               backgrounds={homeQuickActionBackgrounds}
               onOpenMyList={() => navigateTo('mylist')}
               onOpenBookmarks={() => navigateTo('bookmarks')}
-              onOpenCurrentSeason={() => openSeasonalAddView('addCurrent', 'home')}
-              onOpenNextSeason={() => openSeasonalAddView('addNext', 'home')}
+              onOpenCurrentSeason={() => openSeasonalAddView('addCurrent')}
+              onOpenNextSeason={() => openSeasonalAddView('addNext')}
               onOpenShare={() => handleOpenShareMethod()}
               shareDisabled={animeList.length === 0}
             />
@@ -2268,8 +2445,39 @@ function App() {
       )}
       </div>
 
-      <footer className="app-footer">
-        <p>AniTrigger &copy; 2025 - Data provided by AniList API</p>
+      <footer ref={footerRef} className={`app-footer${isFooterHiddenDuringTransition ? ' hidden-during-transition' : ''}`}>
+        <div className="app-footer-inner">
+          <div className="app-footer-heading">
+            <p className="app-footer-eyebrow">SHORTCUTS</p>
+            <div className="app-footer-heading-main">
+              <p className="app-footer-title">サイトマップ</p>
+              <img className="app-footer-logo" src="/images/logo.png" alt="AniTrigger" />
+            </div>
+          </div>
+          <nav className="app-footer-shortcut-groups" aria-label="フッターショートカット">
+            {footerShortcutGroups.map((group) => (
+              <div className="app-footer-shortcut-group" key={group.key}>
+                <p className="app-footer-group-title">{group.title}</p>
+                <div className="app-footer-shortcuts">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`app-footer-shortcut ${item.active ? 'active' : ''}`}
+                      onClick={item.onClick}
+                      disabled={item.disabled}
+                      aria-current={item.active ? 'page' : undefined}
+                      title={item.disabled ? item.disabledReason : undefined}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
+          <p className="app-footer-copy">AniTrigger &copy; 2025 - Data provided by AniList API</p>
+        </div>
       </footer>
 
       <TrailerModal anime={activeTrailerAnime} onClose={handleCloseTrailer} />
