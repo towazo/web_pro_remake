@@ -4098,6 +4098,92 @@ button.card-watch-summary {
     display: block;
 }
 
+.hero-trailer-gesture-cta {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    padding: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.34);
+    background:
+        radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.14), transparent 32%),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.58));
+    color: #fff;
+    cursor: pointer;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.hero-trailer-gesture-cta:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.95);
+    outline-offset: -5px;
+}
+
+.hero-trailer-gesture-cta-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.72));
+    box-shadow:
+        0 14px 36px rgba(0, 0, 0, 0.34),
+        0 0 0 8px rgba(255, 255, 255, 0.12);
+    position: relative;
+}
+
+.hero-trailer-gesture-cta-icon::before {
+    content: "";
+    position: absolute;
+    left: 19px;
+    top: 15px;
+    width: 0;
+    height: 0;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-left: 14px solid #111;
+}
+
+.hero-trailer-gesture-cta.is-retrying .hero-trailer-gesture-cta-icon::before {
+    display: none;
+}
+
+.hero-trailer-gesture-cta.is-retrying .hero-trailer-gesture-cta-icon::after {
+    content: "";
+    position: absolute;
+    inset: 13px;
+    border-radius: 999px;
+    border: 3px solid rgba(0, 0, 0, 0.22);
+    border-top-color: #111;
+    animation: trailerCtaSpin 0.8s linear infinite;
+}
+
+.hero-trailer-gesture-cta-main {
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.62);
+}
+
+.hero-trailer-gesture-cta-sub {
+    max-width: 17em;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.82);
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+}
+
+@keyframes trailerCtaSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .audio-toggle-button {
     display: inline-flex;
     align-items: center;

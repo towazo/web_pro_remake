@@ -7,6 +7,27 @@ import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 const TRAILER_START_TIMEOUT_MS = 12000;
 const NO_TRAILER_ADVANCE_DELAY_MS = 8200;
 const STALLED_TRAILER_ADVANCE_DELAY_MS = 3200;
+const TRAILER_AUTOPLAY_BLOCKED_STORAGE_KEY = 'anitrigger:trailer-autoplay-blocked';
+
+const readStoredTrailerAutoplayBlocked = () => {
+    if (typeof window === 'undefined') return false;
+
+    try {
+        return window.localStorage.getItem(TRAILER_AUTOPLAY_BLOCKED_STORAGE_KEY) === '1';
+    } catch (_) {
+        return false;
+    }
+};
+
+const rememberTrailerAutoplayBlocked = () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+        window.localStorage.setItem(TRAILER_AUTOPLAY_BLOCKED_STORAGE_KEY, '1');
+    } catch (_) {
+        // Ignore storage failures.
+    }
+};
 
 const normalizeAnimeRating = (value) => {
     const parsed = Number(value);
@@ -51,12 +72,14 @@ const Hero = React.forwardRef(function Hero({
     const [actualPreviewMuted, setActualPreviewMuted] = useState(true);
     const [hasTrailerPlaybackStarted, setHasTrailerPlaybackStarted] = useState(false);
     const [hasTrailerPlaybackStalled, setHasTrailerPlaybackStalled] = useState(false);
-    const [hasTrailerAutoplayBlocked, setHasTrailerAutoplayBlocked] = useState(false);
+    const [hasTrailerAutoplayBlocked, setHasTrailerAutoplayBlocked] = useState(() => readStoredTrailerAutoplayBlocked());
+    const [isTrailerGestureRetrying, setIsTrailerGestureRetrying] = useState(false);
     const trailerPlayerRef = useRef(null);
     const fallbackTimelineFrameRef = useRef(0);
     const fallbackTimelineStartedAtRef = useRef(0);
     const fallbackTimelineDurationRef = useRef(NO_TRAILER_ADVANCE_DELAY_MS);
     const fallbackTimelineAdvanceTriggeredRef = useRef(false);
+    const trailerGestureRetryTimeoutRef = useRef(0);
     const slideProgressChangeRef = useRef(onSlideProgressChange);
     const requestAdvanceRef = useRef(onRequestAdvance);
     const isTutorial = Boolean(anime?.isTutorial);
@@ -209,6 +232,12 @@ const Hero = React.forwardRef(function Hero({
         fallbackTimelineAdvanceTriggeredRef.current = false;
     };
 
+    const clearTrailerGestureRetryTimeout = () => {
+        if (!trailerGestureRetryTimeoutRef.current) return;
+        window.clearTimeout(trailerGestureRetryTimeoutRef.current);
+        trailerGestureRetryTimeoutRef.current = 0;
+    };
+
     const startFallbackTimeline = (durationMs, initialProgress = 0) => {
         clearFallbackTimeline();
         const safeDurationMs = Math.max(1, Number(durationMs) || NO_TRAILER_ADVANCE_DELAY_MS);
@@ -251,13 +280,18 @@ const Hero = React.forwardRef(function Hero({
     };
 
     const handleTrailerPlaybackStarted = () => {
+        clearTrailerGestureRetryTimeout();
         setHasTrailerPlaybackStarted(true);
         setHasTrailerPlaybackStalled(false);
         setHasTrailerAutoplayBlocked(false);
+        setIsTrailerGestureRetrying(false);
     };
 
     const handleTrailerPlaybackStalled = (details = {}) => {
+        clearTrailerGestureRetryTimeout();
+        setIsTrailerGestureRetrying(false);
         if (details?.recoverable === true) {
+            rememberTrailerAutoplayBlocked();
             setHasTrailerAutoplayBlocked(true);
             clearFallbackTimeline();
             slideProgressChangeRef.current?.(0);
@@ -265,6 +299,20 @@ const Hero = React.forwardRef(function Hero({
         }
 
         setHasTrailerPlaybackStalled(true);
+    };
+
+    const handleTrailerGestureRetry = (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        if (!isActive || !shouldRenderTrailerPreview) return;
+
+        clearTrailerGestureRetryTimeout();
+        setIsTrailerGestureRetrying(true);
+        trailerPlayerRef.current?.resumePlaybackFromGesture?.();
+        trailerGestureRetryTimeoutRef.current = window.setTimeout(() => {
+            trailerGestureRetryTimeoutRef.current = 0;
+            setIsTrailerGestureRetrying(false);
+        }, 2600);
     };
 
     useImperativeHandle(ref, () => ({
@@ -294,13 +342,17 @@ const Hero = React.forwardRef(function Hero({
             setHasTrailerPlaybackStarted(false);
             setHasTrailerPlaybackStalled(false);
             setHasTrailerAutoplayBlocked(false);
+            setIsTrailerGestureRetrying(false);
+            clearTrailerGestureRetryTimeout();
             return;
         }
 
         setActualPreviewMuted(true);
         setHasTrailerPlaybackStarted(false);
         setHasTrailerPlaybackStalled(false);
-        setHasTrailerAutoplayBlocked(false);
+        setHasTrailerAutoplayBlocked(readStoredTrailerAutoplayBlocked());
+        setIsTrailerGestureRetrying(false);
+        clearTrailerGestureRetryTimeout();
     }, [anime?.id, isActive, shouldRenderTrailerPreview, restartToken]);
 
     useEffect(() => {
@@ -424,6 +476,7 @@ const Hero = React.forwardRef(function Hero({
 
     useEffect(() => () => {
         clearFallbackTimeline();
+        clearTrailerGestureRetryTimeout();
     }, []);
 
     if (!anime) return null;
@@ -580,6 +633,24 @@ const Hero = React.forwardRef(function Hero({
                                         onMuteStateChange={isActive ? setActualPreviewMuted : undefined}
                                         onProgressChange={isActive ? onSlideProgressChange : undefined}
                                     />
+                                    {isActive && hasTrailerAutoplayBlocked && !hasTrailerPlaybackStarted && (
+                                        <button
+                                            type="button"
+                                            className={`hero-trailer-gesture-cta${isTrailerGestureRetrying ? ' is-retrying' : ''}`}
+                                            onClick={handleTrailerGestureRetry}
+                                            onPointerDown={handleTrailerGestureRetry}
+                                            onTouchStart={handleTrailerGestureRetry}
+                                            aria-label="トレーラーを再生"
+                                        >
+                                            <span className="hero-trailer-gesture-cta-icon" aria-hidden="true" />
+                                            <span className="hero-trailer-gesture-cta-main">
+                                                {isTrailerGestureRetrying ? '再生を準備中...' : 'タップでプレビュー再生'}
+                                            </span>
+                                            <span className="hero-trailer-gesture-cta-sub">
+                                                この端末では自動再生にタップが必要です
+                                            </span>
+                                        </button>
+                                    )}
                                 </>
                             )}
                         </div>
