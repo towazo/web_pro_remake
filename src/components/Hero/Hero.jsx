@@ -7,6 +7,7 @@ import YouTubeTrailerPlayer from '../Shared/YouTubeTrailerPlayer';
 const TRAILER_START_TIMEOUT_MS = 12000;
 const NO_TRAILER_ADVANCE_DELAY_MS = 8200;
 const STALLED_TRAILER_ADVANCE_DELAY_MS = 3200;
+const AUTOPLAY_BLOCKED_ADVANCE_DELAY_MS = 8000;
 const TRAILER_AUTOPLAY_BLOCKED_STORAGE_KEY = 'anitrigger:trailer-autoplay-blocked';
 
 const readStoredTrailerAutoplayBlocked = () => {
@@ -210,6 +211,13 @@ const Hero = React.forwardRef(function Hero({
         && !hasTrailerPlaybackStarted
         && !hasTrailerPlaybackStalled
         && !hasTrailerAutoplayBlocked;
+    const shouldUseAutoplayBlockedFallbackTimeline = isActive
+        && !isTutorial
+        && shouldRenderTrailerPreview
+        && hasTrailerAutoplayBlocked
+        && !hasTrailerPlaybackStarted
+        && !hasTrailerPlaybackStalled
+        && !isTrailerGestureRetrying;
     const getFallbackTimelineDuration = () => (
         shouldRenderTrailerPreview && hasTrailerPlaybackStalled
             ? STALLED_TRAILER_ADVANCE_DELAY_MS
@@ -456,6 +464,23 @@ const Hero = React.forwardRef(function Hero({
     ]);
 
     useEffect(() => {
+        if (!shouldUseAutoplayBlockedFallbackTimeline || typeof onSlideProgressChange !== 'function') {
+            return undefined;
+        }
+
+        startFallbackTimeline(AUTOPLAY_BLOCKED_ADVANCE_DELAY_MS, 0);
+
+        return () => {
+            clearFallbackTimeline();
+        };
+    }, [
+        anime?.id,
+        onSlideProgressChange,
+        restartToken,
+        shouldUseAutoplayBlockedFallbackTimeline,
+    ]);
+
+    useEffect(() => {
         if (!shouldUseFallbackTimeline || typeof onSlideProgressChange !== 'function') {
             clearFallbackTimeline();
             return undefined;
@@ -647,7 +672,7 @@ const Hero = React.forwardRef(function Hero({
                                                 {isTrailerGestureRetrying ? '再生を準備中...' : 'タップでプレビュー再生'}
                                             </span>
                                             <span className="hero-trailer-gesture-cta-sub">
-                                                この端末では自動再生にタップが必要です
+                                                タップしない場合は8秒後に次へ進みます
                                             </span>
                                         </button>
                                     )}
