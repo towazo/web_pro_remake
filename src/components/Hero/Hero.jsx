@@ -300,6 +300,10 @@ const Hero = React.forwardRef(function Hero({
         setIsTrailerGestureRetrying(false);
         if (details?.recoverable === true) {
             rememberTrailerAutoplayBlocked();
+            if (hasTrailerAutoplayBlocked) {
+                return;
+            }
+
             setHasTrailerAutoplayBlocked(true);
             clearFallbackTimeline();
             slideProgressChangeRef.current?.(0);
