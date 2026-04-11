@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { loadYouTubeIframeApi } from '../../services/youtubePlayerService';
 import {
   markAnimeTrailerPlayable,
@@ -19,7 +19,12 @@ const PROGRESS_PLAYER_RESAMPLE_MS = 450;
 const USER_PLAYBACK_INTERACTION_GRACE_MS = 2200;
 
 const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) || 0));
-let youtubeTrailerPlayerIdSequence = 0;
+
+const getYouTubeTrailerThumbnailUrl = (videoId) => (
+  videoId
+    ? `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`
+    : ''
+);
 
 const isLikelyMobileAutoplayEnvironment = () => (
   typeof window !== 'undefined'
@@ -79,39 +84,10 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   const pendingSeekProgressRef = useRef(null);
   const userPlaybackInteractionUntilRef = useRef(0);
   const [playerRestartNonce, setPlayerRestartNonce] = useState(0);
-  const [iframeId] = useState(() => {
-    youtubeTrailerPlayerIdSequence += 1;
-    return `youtube-trailer-player-${youtubeTrailerPlayerIdSequence}`;
-  });
   const normalizedTrailer = normalizeAnimeTrailer(trailer);
   const videoId = normalizedTrailer?.id || '';
   const [isPlaybackVisible, setIsPlaybackVisible] = useState(() => !deferVisibilityUntilPlaying || !autoplay);
-  const iframeEmbedUrl = useMemo(() => {
-    if (!videoId) return '';
-
-    const params = new URLSearchParams({
-      autoplay: autoplay ? '1' : '0',
-      controls: controls ? '1' : '0',
-      disablekb: controls ? '0' : '1',
-      enablejsapi: '1',
-      fs: controls ? '1' : '0',
-      iv_load_policy: '3',
-      loop: loop ? '1' : '0',
-      modestbranding: '1',
-      // A muted iframe src lets the browser evaluate autoplay with the correct state
-      // before the IFrame API attaches.
-      mute: autoplay ? '1' : (muted ? '1' : '0'),
-      playsinline: '1',
-      rel: '0',
-      origin: typeof window !== 'undefined' ? window.location.origin : '',
-    });
-
-    if (loop) {
-      params.set('playlist', videoId);
-    }
-
-    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
-  }, [autoplay, controls, loop, muted, videoId]);
+  const startupThumbnailSrc = normalizedTrailer?.thumbnail || getYouTubeTrailerThumbnailUrl(videoId);
 
   useEffect(() => {
     autoplayRef.current = autoplay;
@@ -267,6 +243,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     try {
       player.mute();
+      player.setVolume?.(0);
     } catch (_) {
       // Ignore mute preparation failures.
     }
@@ -607,14 +584,31 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     let cancelled = false;
     let localPlayer = null;
-    const iframeNode = hostRef.current;
 
     const createPlayer = async () => {
       try {
         const YT = await loadYouTubeIframeApi();
-        if (cancelled || !iframeNode || !document.getElementById(iframeId)) return;
+        if (cancelled || !hostRef.current) return;
 
-        localPlayer = new YT.Player(iframeId, {
+        localPlayer = new YT.Player(hostRef.current, {
+          host: 'https://www.youtube-nocookie.com',
+          videoId,
+          playerVars: {
+            autoplay: autoplay ? 1 : 0,
+            controls: controls ? 1 : 0,
+            disablekb: controls ? 0 : 1,
+            enablejsapi: 1,
+            fs: controls ? 1 : 0,
+            iv_load_policy: 3,
+            loop: loop ? 1 : 0,
+            modestbranding: 1,
+            // Mobile autoplay is much more reliable if the player starts muted.
+            mute: autoplay ? 1 : (muted ? 1 : 0),
+            playsinline: 1,
+            playlist: loop ? videoId : undefined,
+            rel: 0,
+            origin: window.location.origin,
+          },
           events: {
             onReady: (event) => {
               if (cancelled) return;
@@ -746,11 +740,11 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
         }
       }
       playerRef.current = null;
-      if (iframeNode && iframeNode === hostRef.current) {
-        iframeNode.removeAttribute('src');
+      if (hostRef.current) {
+        hostRef.current.innerHTML = '';
       }
     };
-  }, [iframeId, playerRestartNonce, videoId]);
+  }, [controls, loop, playerRestartNonce, videoId]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -814,6 +808,33 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
   }, [autoplay, muted, videoId, muteChangeToken]);
 
   useEffect(() => {
+    if (!autoplay || typeof window === 'undefined') return undefined;
+
+    const handleTrustedPlaybackGesture = () => {
+      if (hasStartedPlayback()) return;
+
+      const player = playerRef.current;
+      if (!player || !readyRef.current) return;
+
+      markUserPlaybackInteraction();
+      syncDesiredMuteState(player, { userInitiated: true });
+      requestPlaybackResume(player, { userInitiated: true });
+      scheduleAutoplayStartupWatch(player);
+    };
+
+    const listenerOptions = { capture: true, passive: true };
+    window.addEventListener('pointerdown', handleTrustedPlaybackGesture, listenerOptions);
+    window.addEventListener('touchend', handleTrustedPlaybackGesture, listenerOptions);
+    window.addEventListener('keydown', handleTrustedPlaybackGesture, true);
+
+    return () => {
+      window.removeEventListener('pointerdown', handleTrustedPlaybackGesture, listenerOptions);
+      window.removeEventListener('touchend', handleTrustedPlaybackGesture, listenerOptions);
+      window.removeEventListener('keydown', handleTrustedPlaybackGesture, true);
+    };
+  }, [autoplay, videoId]);
+
+  useEffect(() => {
     const player = playerRef.current;
     if (!player || !readyRef.current) return;
 
@@ -860,24 +881,16 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     <div
       className={`youtube-trailer-player${deferVisibilityUntilPlaying ? ' defer-visibility' : ''}${isPlaybackVisible ? ' is-playback-visible' : ''}${className ? ` ${className}` : ''}`.trim()}
     >
-      <iframe
-        key={`${iframeId}-${videoId}-${playerRestartNonce}`}
-        id={iframeId}
+      <div
         ref={hostRef}
         className="youtube-trailer-player-slot"
-        src={iframeEmbedUrl}
-        title={title}
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-        allowFullScreen
-        playsinline="1"
-        webkit-playsinline="1"
-        referrerPolicy="strict-origin-when-cross-origin"
+        aria-label={title}
       />
       {deferVisibilityUntilPlaying && !isPlaybackVisible && (
         <div className="youtube-trailer-player-startup-cover" aria-hidden="true">
-          {normalizedTrailer?.thumbnail ? (
+          {startupThumbnailSrc ? (
             <img
-              src={normalizedTrailer.thumbnail}
+              src={startupThumbnailSrc}
               alt=""
               className="youtube-trailer-player-startup-cover-image"
               loading="eager"
