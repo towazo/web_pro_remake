@@ -3,6 +3,7 @@ import {
     fetchAnimeByYearAllPages,
     fetchAnimeDetails,
     fetchAnimeDetailsById,
+    fetchAnimeDetailsByIds,
     fetchAnimeDetailsBulk,
     normalizeTitleForCompare,
     searchAnimeList,
@@ -20,6 +21,7 @@ import {
     getNextSeasonInfo,
     seasonToFilterKey,
 } from '../../utils/season';
+import { decodeShareCardMarkerFromFile } from '../../utils/shareCardMarker';
 
 const ANILIST_SEASON_TO_FILTER_KEY = {
     WINTER: 'winter',
@@ -516,12 +518,12 @@ function AddAnimeScreen({
     const hasFixedBrowseSeason = Boolean(activeBrowsePreset?.seasonKey);
     const [entryTab, setEntryTab] = useState(() => (
         normalizedBrowsePreset ? 'browse' : (initialEntryTab === 'browse' ? 'browse' : 'search')
-    )); // 'search' or 'browse'
+    )); // search | browse | shareCard
     const [addFlowStage, setAddFlowStage] = useState(() => {
         if (normalizedBrowsePreset) return 'browse-work';
         if (initialEntryTab === 'browse') return 'browse-work';
         return 'entry';
-    }); // entry | search-mode | search-work | browse-work
+    }); // entry | search-mode | search-work | browse-work | share-card-work
     const [mode, setMode] = useState('normal'); // 'normal' or 'bulk'
     const [query, setQuery] = useState('');
     const [normalTarget, setNormalTarget] = useState('mylist'); // mylist | bookmark
@@ -549,6 +551,7 @@ function AddAnimeScreen({
     const bulkAbortControllerRef = React.useRef(null);
     const searchFieldWrapperRef = React.useRef(null);
     const normalMultiAddPanelRef = React.useRef(null);
+    const shareCardImportRequestIdRef = React.useRef(0);
 
     // Bulk Add States
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
@@ -563,6 +566,16 @@ function AddAnimeScreen({
     const [bulkRetryUntilTs, setBulkRetryUntilTs] = useState(0);
     const [bulkRetryCountdownSec, setBulkRetryCountdownSec] = useState(0);
     const [bulkTarget, setBulkTarget] = useState('mylist'); // mylist | bookmark
+    const [shareCardTarget, setShareCardTarget] = useState('mylist'); // mylist | bookmark
+    const [shareCardItems, setShareCardItems] = useState([]);
+    const [shareCardLoading, setShareCardLoading] = useState(false);
+    const [shareCardStatus, setShareCardStatus] = useState({ type: '', message: '' });
+    const [shareCardReadSummary, setShareCardReadSummary] = useState({
+        readableFiles: 0,
+        invalidFiles: 0,
+        duplicateIds: 0,
+        missingDetails: 0
+    });
     const [bulkExecutionSummary, setBulkExecutionSummary] = useState({
         added: 0,
         skipped: 0,
@@ -603,7 +616,7 @@ function AddAnimeScreen({
     const [browseRetryCountdownSec, setBrowseRetryCountdownSec] = useState(0);
     const [browseAutoRetryPlan, setBrowseAutoRetryPlan] = useState(null);
     const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
-    const entryScrollPositionsRef = React.useRef({ search: 0, browse: 0 });
+    const entryScrollPositionsRef = React.useRef({ search: 0, browse: 0, shareCard: 0 });
     const browseRequestIdRef = React.useRef(0);
     const browseResultsTopRef = React.useRef(null);
     const browsePageSwitchTimerRef = React.useRef(null);
@@ -1105,6 +1118,7 @@ function AddAnimeScreen({
     useEffect(() => () => {
         searchAbortControllerRef.current?.abort();
         bulkAbortControllerRef.current?.abort();
+        shareCardImportRequestIdRef.current += 1;
     }, []);
 
     useEffect(() => {
@@ -1596,7 +1610,11 @@ function AddAnimeScreen({
             handleEntryTabChange(nextTab);
         }
         setShowSuggestions(false);
-        setAddFlowStage(nextTab === 'search' ? 'search-mode' : 'browse-work');
+        setAddFlowStage(
+            nextTab === 'search'
+                ? 'search-mode'
+                : (nextTab === 'browse' ? 'browse-work' : 'share-card-work')
+        );
         requestAnimationFrame(() => {
             scrollAddScreenToTop();
         });
@@ -1754,6 +1772,204 @@ function AddAnimeScreen({
             }
         } else if (result?.message) {
             setToast({ visible: true, message: result.message, type: 'warning' });
+        }
+    };
+
+    const handleShareCardFilesChange = async (event) => {
+        const files = Array.from(event?.target?.files || []);
+        if (event?.target) {
+            event.target.value = '';
+        }
+        if (files.length === 0 || shareCardLoading) return;
+
+        const requestId = shareCardImportRequestIdRef.current + 1;
+        shareCardImportRequestIdRef.current = requestId;
+        setShareCardLoading(true);
+        setShareCardItems([]);
+        setShareCardReadSummary({
+            readableFiles: 0,
+            invalidFiles: 0,
+            duplicateIds: 0,
+            missingDetails: 0
+        });
+        setShareCardStatus({ type: 'info', message: '共有カードを読み取っています…' });
+
+        try {
+            const decodedResults = await Promise.all(files.map(async (file, index) => {
+                try {
+                    const payload = await decodeShareCardMarkerFromFile(file);
+                    return { ok: true, payload, index };
+                } catch (error) {
+                    return { ok: false, error, index };
+                }
+            }));
+            if (shareCardImportRequestIdRef.current !== requestId) return;
+
+            const readableResults = decodedResults
+                .filter((result) => result.ok && Array.isArray(result.payload?.animeIds) && result.payload.animeIds.length > 0)
+                .sort((left, right) => {
+                    const leftPage = Number(left.payload?.pageNumber) || left.index;
+                    const rightPage = Number(right.payload?.pageNumber) || right.index;
+                    if (leftPage !== rightPage) return leftPage - rightPage;
+                    return left.index - right.index;
+                });
+            const invalidFiles = decodedResults.length - readableResults.length;
+
+            if (readableResults.length === 0) {
+                setShareCardStatus({
+                    type: 'error',
+                    message: 'AniTriggerの共有カードマーカーを読み取れませんでした。画像共有で作成した画像を選択してください。'
+                });
+                return;
+            }
+
+            const allIds = readableResults.flatMap((result) => result.payload.animeIds);
+            const uniqueIds = [];
+            const seenIdSet = new Set();
+            allIds.forEach((id) => {
+                if (seenIdSet.has(id)) return;
+                seenIdSet.add(id);
+                uniqueIds.push(id);
+            });
+            const duplicateIds = Math.max(0, allIds.length - uniqueIds.length);
+
+            if (uniqueIds.length === 0) {
+                setShareCardStatus({
+                    type: 'error',
+                    message: '共有カードに追加できる作品情報がありませんでした。'
+                });
+                return;
+            }
+
+            setShareCardStatus({ type: 'info', message: '作品情報を取得しています…' });
+            const details = await fetchAnimeDetailsByIds(uniqueIds, {
+                allowUnknownFormat: true,
+                allowUnknownCountry: true,
+            });
+            if (shareCardImportRequestIdRef.current !== requestId) return;
+
+            const detailById = new Map(
+                (Array.isArray(details) ? details : [])
+                    .filter((anime) => anime && typeof anime.id === 'number')
+                    .map((anime) => [anime.id, anime])
+            );
+            const importedItems = uniqueIds.map((id) => detailById.get(id)).filter(Boolean);
+            const missingDetails = Math.max(0, uniqueIds.length - importedItems.length);
+
+            setShareCardItems(importedItems);
+            setShareCardReadSummary({
+                readableFiles: readableResults.length,
+                invalidFiles,
+                duplicateIds,
+                missingDetails
+            });
+
+            if (importedItems.length === 0) {
+                setShareCardStatus({
+                    type: 'error',
+                    message: '共有カードは読み取れましたが、作品情報を取得できませんでした。時間をおいて再試行してください。'
+                });
+                return;
+            }
+
+            const warningParts = [];
+            if (invalidFiles > 0) warningParts.push(`${invalidFiles}枚は共有カードとして読み取れませんでした`);
+            if (missingDetails > 0) warningParts.push(`${missingDetails}件は作品情報を取得できませんでした`);
+            setShareCardStatus({
+                type: warningParts.length > 0 ? 'warning' : 'info',
+                message: warningParts.length > 0
+                    ? `共有カードから ${importedItems.length} 件を読み取りました。${warningParts.join('。')}。`
+                    : `共有カードから ${importedItems.length} 件を読み取りました。追加先を確認してください。`
+            });
+        } catch (_) {
+            if (shareCardImportRequestIdRef.current !== requestId) return;
+            setShareCardStatus({
+                type: 'error',
+                message: '共有カードの読み取り中にエラーが発生しました。画像を確認してもう一度お試しください。'
+            });
+        } finally {
+            if (shareCardImportRequestIdRef.current === requestId) {
+                setShareCardLoading(false);
+            }
+        }
+    };
+
+    const handleClearShareCardImport = () => {
+        shareCardImportRequestIdRef.current += 1;
+        setShareCardLoading(false);
+        setShareCardItems([]);
+        setShareCardStatus({ type: '', message: '' });
+        setShareCardReadSummary({
+            readableFiles: 0,
+            invalidFiles: 0,
+            duplicateIds: 0,
+            missingDetails: 0
+        });
+    };
+
+    const handleConfirmShareCardImport = () => {
+        if (shareCardItems.length === 0) return;
+        const localMyListIdSet = new Set((animeList || []).map((anime) => anime.id));
+        const localBookmarkIdSet = new Set((bookmarkList || []).map((anime) => anime.id));
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        if (shareCardTarget === 'bookmark') {
+            if (typeof onToggleBookmark !== 'function') {
+                setShareCardStatus({ type: 'error', message: 'ブックマーク追加処理を実行できませんでした。' });
+                return;
+            }
+
+            shareCardItems.forEach((data) => {
+                if (!data || typeof data.id !== 'number') {
+                    skippedCount += 1;
+                    return;
+                }
+                if (localMyListIdSet.has(data.id) || localBookmarkIdSet.has(data.id)) {
+                    skippedCount += 1;
+                    return;
+                }
+                const result = onToggleBookmark(data);
+                if (result?.success && result.action === 'added') {
+                    addedCount += 1;
+                    localBookmarkIdSet.add(data.id);
+                } else {
+                    skippedCount += 1;
+                }
+            });
+        } else {
+            shareCardItems.forEach((data) => {
+                if (!data || typeof data.id !== 'number') {
+                    skippedCount += 1;
+                    return;
+                }
+                if (localMyListIdSet.has(data.id)) {
+                    skippedCount += 1;
+                    return;
+                }
+                const result = onAdd(data, { rating: null });
+                if (result?.success) {
+                    addedCount += 1;
+                    localMyListIdSet.add(data.id);
+                    localBookmarkIdSet.delete(data.id);
+                } else {
+                    skippedCount += 1;
+                }
+            });
+        }
+
+        const targetLabel = shareCardTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト';
+        const message = skippedCount > 0
+            ? `${targetLabel}に ${addedCount} 件追加、${skippedCount} 件は登録済みのためスキップしました。`
+            : `${targetLabel}に ${addedCount} 件追加しました。`;
+        setToast({
+            visible: true,
+            type: addedCount > 0 ? 'success' : 'warning',
+            message
+        });
+        setShareCardStatus({ type: addedCount > 0 ? 'info' : 'warning', message });
+        if (addedCount > 0) {
+            setShareCardItems([]);
         }
     };
 
@@ -3202,6 +3418,18 @@ function AddAnimeScreen({
         && status.type === 'error'
         && searchErrorCanRetry
         && !previewData;
+    const shareCardAddableItems = React.useMemo(() => {
+        const myListIdSet = new Set((animeList || []).map((anime) => anime.id));
+        const bookmarkIdSet = new Set((bookmarkList || []).map((anime) => anime.id));
+        return shareCardItems.filter((anime) => {
+            if (!anime || typeof anime.id !== 'number') return false;
+            if (shareCardTarget === 'bookmark') {
+                return !myListIdSet.has(anime.id) && !bookmarkIdSet.has(anime.id);
+            }
+            return !myListIdSet.has(anime.id);
+        });
+    }, [animeList, bookmarkList, shareCardItems, shareCardTarget]);
+    const shareCardAlreadyRegisteredCount = Math.max(0, shareCardItems.length - shareCardAddableItems.length);
     const bulkFailureCount = bulkResults.rateLimited.length + bulkResults.fetchFailed.length;
     const bulkFetchFailedRetryCount = [...new Set(bulkResults.fetchFailed)].length;
     const isBulkRateLimitedInterrupted = bulkResults.rateLimited.length > 0;
@@ -3222,11 +3450,14 @@ function AddAnimeScreen({
     const showSearchModeSelectionPage = !isBrowsePresetLocked && addFlowStage === 'search-mode';
     const showSearchWorkspace = entryTab === 'search' && (isBrowsePresetLocked || addFlowStage === 'search-work');
     const showBrowseWorkspace = entryTab === 'browse' && (isBrowsePresetLocked || addFlowStage === 'browse-work');
-    const showWorkspaceControls = showSearchWorkspace || showBrowseWorkspace;
-    const workspacePrimaryLabel = showSearchWorkspace ? 'タイトルで探す' : '一覧から探す';
+    const showShareCardWorkspace = entryTab === 'shareCard' && addFlowStage === 'share-card-work';
+    const showWorkspaceControls = showSearchWorkspace || showBrowseWorkspace || showShareCardWorkspace;
+    const workspacePrimaryLabel = showSearchWorkspace
+        ? 'タイトルから探す'
+        : (showBrowseWorkspace ? '一覧から探す' : '共有カードから追加');
     const workspaceSecondaryLabel = showSearchWorkspace
         ? (mode === 'bulk' ? 'まとめて追加' : '1つずつ追加')
-        : (normalizedBrowsePreset?.title || '');
+        : (showBrowseWorkspace ? (normalizedBrowsePreset?.title || '') : (shareCardTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト'));
     const disableBulkFailedRetry = isSearching || bulkFetchFailedRetryCount === 0;
     const disableBulkRetryAll = isSearching
         || !bulkQuery.trim()
@@ -3302,7 +3533,7 @@ function AddAnimeScreen({
                                 onClick={() => handleSelectEntryRoute('search')}
                                 disabled={isSearching || browseLoading}
                             >
-                                <strong className="add-step-choice-title">タイトルで探す</strong>
+                                <strong className="add-step-choice-title">タイトルから探す</strong>
                                 <span className="add-step-choice-text">作品名を入力する</span>
                             </button>
                             <button
@@ -3313,6 +3544,15 @@ function AddAnimeScreen({
                             >
                                 <strong className="add-step-choice-title">一覧から探す</strong>
                                 <span className="add-step-choice-text">年代や今季から選ぶ</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="add-step-choice-card"
+                                onClick={() => handleSelectEntryRoute('shareCard')}
+                                disabled={isSearching || browseLoading || shareCardLoading}
+                            >
+                                <strong className="add-step-choice-title">共有カードから追加</strong>
+                                <span className="add-step-choice-text">共有画像を読み込む</span>
                             </button>
                         </div>
                     </div>
@@ -3356,7 +3596,7 @@ function AddAnimeScreen({
                 )}
 
                 {showWorkspaceControls && (
-                    <div className="add-workspace-toolbar">
+                    <div className={`add-workspace-toolbar${showShareCardWorkspace ? ' share-card-workspace-toolbar' : ''}`}>
                         <div className="add-workspace-toolbar-summary">
                             <span className="entry-guide-badge">{workspacePrimaryLabel}</span>
                             {workspaceSecondaryLabel && (
@@ -3382,6 +3622,15 @@ function AddAnimeScreen({
                                     戻る
                                 </button>
                             )}
+                            {showShareCardWorkspace && !isBrowsePresetLocked && (
+                                <button
+                                    type="button"
+                                    className="add-step-back-button subtle"
+                                    onClick={handleReturnToEntrySelection}
+                                >
+                                    戻る
+                                </button>
+                            )}
                             {showSearchWorkspace && !isBrowsePresetLocked && (
                                 <button
                                     type="button"
@@ -3396,6 +3645,143 @@ function AddAnimeScreen({
                 )}
 
             </div>
+
+            {showShareCardWorkspace && (
+                <section className="share-card-import-workspace">
+                    <div className="normal-add-surface share-card-import-surface">
+                        <div className="normal-add-surface-head">
+                            <div className="normal-add-surface-heading">
+                                <h3 className="normal-add-surface-title">共有画像を読み込む</h3>
+                                {shareCardItems.length > 0 && (
+                                    <span className="normal-add-selection-pill">{shareCardItems.length}件読み取り済み</span>
+                                )}
+                            </div>
+                            <p className="normal-add-surface-text">
+                                AniTriggerの画像共有で作成した、右上に共有カードマーカーがある画像だけ利用できます。
+                            </p>
+                        </div>
+
+                        <div className="mode-switcher-block share-card-target-block">
+                            <div className="mode-switcher-label">追加先</div>
+                            <div className="mode-switcher">
+                                <button
+                                    type="button"
+                                    className={`mode-button ${shareCardTarget === 'mylist' ? 'active' : ''}`}
+                                    onClick={() => setShareCardTarget('mylist')}
+                                    disabled={shareCardLoading}
+                                >
+                                    マイリスト
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`mode-button ${shareCardTarget === 'bookmark' ? 'active' : ''}`}
+                                    onClick={() => setShareCardTarget('bookmark')}
+                                    disabled={shareCardLoading}
+                                >
+                                    ブックマーク
+                                </button>
+                            </div>
+                        </div>
+
+                        <label className={`share-card-upload-box${shareCardLoading ? ' loading' : ''}`}>
+                            <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp,image/*"
+                                multiple
+                                onChange={handleShareCardFilesChange}
+                                disabled={shareCardLoading}
+                            />
+                            <span className="share-card-upload-title">
+                                {shareCardLoading ? '読み取り中...' : '共有画像を選択'}
+                            </span>
+                            <span className="share-card-upload-text">
+                                複数枚まとめて選択できます。スクショや加工済み画像は読み取れない場合があります。
+                            </span>
+                        </label>
+
+                        {shareCardStatus.message && (
+                            <div className={`share-card-import-status ${shareCardStatus.type || 'info'}`}>
+                                {shareCardStatus.message}
+                            </div>
+                        )}
+
+                        {(shareCardReadSummary.readableFiles > 0
+                            || shareCardReadSummary.invalidFiles > 0
+                            || shareCardReadSummary.duplicateIds > 0
+                            || shareCardReadSummary.missingDetails > 0) && (
+                            <div className="share-card-import-summary">
+                                <span>読取成功 {shareCardReadSummary.readableFiles} 枚</span>
+                                {shareCardReadSummary.invalidFiles > 0 && (
+                                    <span>読取不可 {shareCardReadSummary.invalidFiles} 枚</span>
+                                )}
+                                {shareCardReadSummary.duplicateIds > 0 && (
+                                    <span>重複 {shareCardReadSummary.duplicateIds} 件</span>
+                                )}
+                                {shareCardReadSummary.missingDetails > 0 && (
+                                    <span>取得失敗 {shareCardReadSummary.missingDetails} 件</span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {shareCardItems.length > 0 && (
+                        <div className="bulk-review-container share-card-review-container">
+                            <div className="bulk-review-header">
+                                <h3>読み取った作品</h3>
+                                <p>
+                                    {shareCardAlreadyRegisteredCount > 0
+                                        ? `${shareCardAlreadyRegisteredCount}件は登録済みのため追加時にスキップされます。`
+                                        : '内容を確認して追加してください。'}
+                                </p>
+                            </div>
+
+                            <div className="review-section">
+                                <div className="review-hits-grid share-card-review-grid">
+                                    {shareCardItems.map((anime) => {
+                                        const displayTitle = anime?.title?.native || anime?.title?.romaji || anime?.title?.english || '作品';
+                                        const isAlreadyRegistered = shareCardTarget === 'bookmark'
+                                            ? (animeList || []).some((item) => item.id === anime.id)
+                                                || (bookmarkList || []).some((item) => item.id === anime.id)
+                                            : (animeList || []).some((item) => item.id === anime.id);
+                                        return (
+                                            <div key={anime.id} className={`review-hit-item share-card-review-item${isAlreadyRegistered ? ' already-registered' : ''}`}>
+                                                <img src={anime.coverImage?.large} alt="" />
+                                                <div className="hit-info">
+                                                    <div className="hit-summary">
+                                                        <div className="hit-title">{displayTitle}</div>
+                                                        <div className="hit-meta">{anime.seasonYear || '-'}年 / {anime.episodes || '?'}話</div>
+                                                    </div>
+                                                    {isAlreadyRegistered && (
+                                                        <div className="share-card-skip-pill">登録済み</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="bulk-actions grouped share-card-import-actions">
+                                <button
+                                    type="button"
+                                    className="action-button primary-button"
+                                    onClick={handleConfirmShareCardImport}
+                                    disabled={shareCardAddableItems.length === 0}
+                                >
+                                    {`${shareCardAddableItems.length}件を${shareCardTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト'}に追加する`}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="action-button dismiss-button"
+                                    onClick={handleClearShareCardImport}
+                                >
+                                    読み取り結果をクリア
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </section>
+            )}
 
             {showSearchWorkspace && (mode === 'normal' ? (
                 !previewData && (

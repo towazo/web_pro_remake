@@ -17,6 +17,13 @@ import { translateGenre } from '../../constants/animeData';
 import { joinApiPath } from '../../services/apiBase';
 import useTagTranslationVersion from '../../hooks/useTagTranslationVersion';
 import { collectAnimeFilterOptions } from '../../utils/animeFilters';
+import {
+  SHARE_CARD_MARKER_LOGICAL_SIZE,
+  SHARE_CARD_MARKER_LOGICAL_X,
+  SHARE_CARD_MARKER_LOGICAL_Y,
+  createShareCardMarkerPayload,
+  drawShareCardMarker,
+} from '../../utils/shareCardMarker';
 
 const SHARE_IMAGE_WIDTH = 1800;
 const SHARE_IMAGE_HEIGHT = 2100;
@@ -717,15 +724,18 @@ const renderShareImageBlob = async (animePage, options) => {
       drawTintedImage(context, logoAsset, SHARE_IMAGE_PADDING, 56, logoWidth, logoHeight, '#ffffff', 0.96);
     }
 
-    const pageLabel = `${options.totalItems}作品中 ${options.pageNumber}/${options.totalPages}枚目`;
-    context.font = '900 28px sans-serif';
-    const pageLabelWidth = Math.ceil(context.measureText(pageLabel).width + 48);
-    const pageLabelX = outputWidth - SHARE_IMAGE_PADDING - pageLabelWidth;
-    context.strokeStyle = '#ffffff';
-    context.lineWidth = 2;
-    context.strokeRect(pageLabelX, 58, pageLabelWidth, 58);
-    context.fillStyle = '#ffffff';
-    context.fillText(pageLabel, pageLabelX + 24, 96);
+    drawShareCardMarker(
+      context,
+      createShareCardMarkerPayload({
+        animeIds: animePage.map((anime) => anime?.id),
+        pageNumber: options.pageNumber,
+        totalPages: options.totalPages,
+        totalItems: options.totalItems,
+      }),
+      SHARE_CARD_MARKER_LOGICAL_X,
+      SHARE_CARD_MARKER_LOGICAL_Y,
+      SHARE_CARD_MARKER_LOGICAL_SIZE
+    );
 
     context.fillStyle = '#ffffff';
     context.font = '900 48px sans-serif';
