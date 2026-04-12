@@ -530,10 +530,12 @@ body {
 
 .logo-button:focus-visible,
 .header-home-link:focus-visible,
+.header-add-link:focus-visible,
 .header-menu-trigger:focus-visible,
 .header-shortcut-item:focus-visible,
 .global-view-nav-button:focus-visible,
-.app-footer-shortcut:focus-visible {
+.app-footer-shortcut:focus-visible,
+.global-back-button:focus-visible {
     outline: 2px solid #000;
     outline-offset: 3px;
 }
@@ -561,7 +563,8 @@ body {
     gap: 20px;
 }
 
-.header-home-link {
+.header-home-link,
+.header-add-link {
     position: relative;
     width: 40px;
     height: 40px;
@@ -573,12 +576,14 @@ body {
     text-decoration: none;
 }
 
-.header-home-link.disabled {
+.header-home-link.disabled,
+.header-add-link.disabled {
     color: #8a8a8a;
     pointer-events: none;
 }
 
-.header-home-illustration {
+.header-home-illustration,
+.header-search-illustration {
     width: 34px;
     height: 34px;
     fill: none;
@@ -588,15 +593,18 @@ body {
     stroke-linejoin: round;
 }
 
-.header-home-link.active .header-home-illustration {
+.header-home-link.active .header-home-illustration,
+.header-add-link.active .header-search-illustration {
     stroke-width: 2.6;
 }
 
-.header-home-link:hover .header-home-illustration {
+.header-home-link:hover .header-home-illustration,
+.header-add-link:hover .header-search-illustration {
     opacity: 0.68;
 }
 
-.header-home-link.active {
+.header-home-link.active,
+.header-add-link.active {
     background: #f1f1f1;
 }
 
@@ -875,7 +883,8 @@ body {
         align-items: center;
     }
 
-    .header-home-link {
+    .header-home-link,
+    .header-add-link {
         width: 42px;
         height: 42px;
     }
@@ -885,7 +894,8 @@ body {
         height: 42px;
     }
 
-    .header-home-illustration {
+    .header-home-illustration,
+    .header-search-illustration {
         width: 30px;
         height: 30px;
     }
@@ -946,7 +956,12 @@ body {
         padding-left: 8px;
     }
 
-    .header-home-link {
+    .header-actions {
+        gap: 8px;
+    }
+
+    .header-home-link,
+    .header-add-link {
         width: 40px;
         height: 40px;
     }
@@ -956,7 +971,8 @@ body {
         height: 40px;
     }
 
-    .header-home-illustration {
+    .header-home-illustration,
+    .header-search-illustration {
         width: 28px;
         height: 28px;
     }
@@ -3251,12 +3267,70 @@ button.card-watch-summary {
     transition: opacity 0.18s ease, visibility 0.18s ease;
 }
 
+.global-back-button {
+    position: fixed;
+    left: max(14px, calc(12px + env(safe-area-inset-left)));
+    bottom: max(14px, calc(12px + env(safe-area-inset-bottom)));
+    z-index: 2180;
+    width: 66px;
+    height: 42px;
+    border: 1px solid rgba(0, 0, 0, 0.82);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.58);
+    color: #fff;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.78;
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.5),
+        0 10px 26px rgba(0, 0, 0, 0.72);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+}
+
+@media (max-width: 768px) {
+    .global-back-button {
+        display: inline-flex;
+    }
+}
+
+.global-back-button:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+}
+
+.global-back-icon {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
 .app-container.footer-touching-viewport .selection-action-dock,
 .app-container.footer-touching-viewport .bookmark-selection-dock,
-.app-container.footer-touching-viewport .share-action-dock {
+.app-container.footer-touching-viewport .share-action-dock,
+body.filter-modal-open .global-back-button,
+body.trailer-modal-open .global-back-button {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+}
+
+.app-container:has(.selection-action-dock) .global-back-button,
+.app-container:has(.bookmark-selection-dock) .global-back-button,
+.app-container:has(.share-action-dock) .global-back-button {
+    bottom: max(86px, calc(76px + env(safe-area-inset-bottom)));
+}
+
+.app-container.footer-touching-viewport .global-back-button {
+    position: absolute;
+    bottom: calc(var(--global-back-footer-height, 0px) + 12px);
 }
 
 /* Add Anime Controls */
@@ -9515,6 +9589,25 @@ body.trailer-modal-open .add-toast {
 .share-card-review-grid {
     grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
     gap: 14px;
+    max-height: min(52vh, 470px);
+    max-height: min(52dvh, 470px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 8px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.share-card-review-grid::-webkit-scrollbar {
+    width: 8px;
+}
+
+.share-card-review-grid::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.share-card-review-grid::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.06);
 }
 
 .share-card-review-item {
@@ -9737,9 +9830,10 @@ body.trailer-modal-open .add-toast {
 
     .share-card-review-container .share-card-review-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        max-height: none;
-        overflow: visible;
-        padding-right: 0;
+        max-height: min(56vh, 430px);
+        max-height: min(56dvh, 430px);
+        overflow-y: auto;
+        padding-right: 6px;
     }
 
     .share-card-import-summary {

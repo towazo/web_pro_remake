@@ -85,6 +85,16 @@ import {
   TRAILER_PROBE_PRIORITY_USER_INITIATED,
 } from './hooks/useTrailerPlaybackStatus';
 
+const scrollDocumentToTop = (behavior = 'auto') => {
+  if (typeof window === 'undefined') return;
+
+  window.scrollTo({ top: 0, left: 0, behavior });
+  if (behavior !== 'smooth' && typeof document !== 'undefined') {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
+};
+
 const ONBOARDING_STEPS = [
   {
     key: 'intro',
@@ -447,6 +457,8 @@ function App() {
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [isFooterHiddenDuringTransition, setIsFooterHiddenDuringTransition] = useState(false);
   const [isFooterTouchingViewport, setIsFooterTouchingViewport] = useState(false);
+  const [globalBackFooterHeight, setGlobalBackFooterHeight] = useState(0);
+  const [localBackAction, setLocalBackAction] = useState(null);
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
@@ -462,6 +474,7 @@ function App() {
   const headerMenuRef = useRef(null);
   const footerRef = useRef(null);
   const hasCompletedInitialViewRenderRef = useRef(false);
+  const pendingGlobalBackHomeScrollRef = useRef(false);
   const myListResultsRef = useRef(null);
   const pendingMyListPageScrollRef = useRef(false);
   const onboardingStepListRef = useRef(null);
@@ -572,17 +585,27 @@ function App() {
       return;
     }
 
-    const { replace = false, force = false } = options;
+    const { replace = false, force = false, scrollToTopOnSameView = false } = options;
     if (isOnboardingActive && !force && nextView !== 'home') {
       return;
     }
     const targetHash = APP_VIEW_HASHES[nextView] || '#/';
     const currentHash = window.location.hash || '#/';
     const isSameView = view === nextView && currentHash === targetHash;
-    if (isSameView) return;
+    if (isSameView) {
+      if (scrollToTopOnSameView) {
+        scrollDocumentToTop('smooth');
+      }
+      return;
+    }
 
     navigationTypeRef.current = 'push';
-    const state = { ...(window.history.state || {}), appView: nextView };
+    const currentState = window.history.state || {};
+    const state = {
+      ...currentState,
+      appView: nextView,
+      appBackTarget: replace ? currentState.appBackTarget : view,
+    };
     if (replace) {
       window.history.replaceState(state, '', targetHash);
     } else {
@@ -753,6 +776,20 @@ function App() {
     setIsHeaderMenuOpen(false);
   }, [view]);
 
+  const handleLocalBackActionChange = useCallback((nextAction) => {
+    setLocalBackAction(() => {
+      if (!nextAction || typeof nextAction.onBack !== 'function') return null;
+      return {
+        label: nextAction.label || '前の画面に戻る',
+        onBack: nextAction.onBack,
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    setLocalBackAction(null);
+  }, [view]);
+
   useEffect(() => {
     if (!hasCompletedInitialViewRenderRef.current) {
       hasCompletedInitialViewRenderRef.current = true;
@@ -788,13 +825,18 @@ function App() {
       const footerElement = footerRef.current;
       if (!footerElement) {
         setIsFooterTouchingViewport(false);
+        setGlobalBackFooterHeight(0);
         return;
       }
 
       const footerRect = footerElement.getBoundingClientRect();
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
       const isTouching = footerRect.top <= viewportHeight && footerRect.bottom >= 0;
+      const nextFooterHeight = Math.max(0, Math.ceil(footerElement.offsetHeight || footerRect.height || 0));
       setIsFooterTouchingViewport((current) => (current === isTouching ? current : isTouching));
+      setGlobalBackFooterHeight((current) => (
+        current === nextFooterHeight ? current : nextFooterHeight
+      ));
     };
 
     const scheduleFooterTouchStateUpdate = () => {
@@ -1021,23 +1063,36 @@ function App() {
     }
     navigationTypeRef.current = 'idle';
 
-    // Immediate scroll
-    window.scrollTo(0, 0);
+    scrollDocumentToTop();
 
-    // Also try on the next animation frame to ensure layout has settled
     const scrollReset = () => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
+      scrollDocumentToTop();
     };
 
     const animId = requestAnimationFrame(scrollReset);
 
-    // One more check after a short delay for good measure (some browsers/layouts need this)
     const timeoutId = setTimeout(scrollReset, 10);
 
     return () => {
       cancelAnimationFrame(animId);
+      clearTimeout(timeoutId);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== 'home' || !pendingGlobalBackHomeScrollRef.current) return undefined;
+    pendingGlobalBackHomeScrollRef.current = false;
+
+    scrollDocumentToTop();
+    const frameId = requestAnimationFrame(() => {
+      scrollDocumentToTop();
+    });
+    const timeoutId = setTimeout(() => {
+      scrollDocumentToTop();
+    }, 80);
+
+    return () => {
+      cancelAnimationFrame(frameId);
       clearTimeout(timeoutId);
     };
   }, [view]);
@@ -1304,6 +1359,7 @@ function App() {
   const handleOpenAddView = () => {
     if (view === 'add') {
       setAddScreenResetNonce((prev) => prev + 1);
+      scrollDocumentToTop('smooth');
       return;
     }
     navigateTo('add');
@@ -1829,21 +1885,21 @@ function App() {
           key: 'home',
           label: 'ホーム',
           active: view === 'home',
-          onClick: () => navigateTo('home'),
+          onClick: () => navigateTo('home', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
         {
           key: 'mylist',
           label: 'マイリスト',
           active: isMyListView,
-          onClick: () => navigateTo('mylist'),
+          onClick: () => navigateTo('mylist', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
         {
           key: 'bookmarks',
           label: 'ブックマーク',
           active: view === 'bookmarks',
-          onClick: () => navigateTo('bookmarks'),
+          onClick: () => navigateTo('bookmarks', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
       ],
@@ -1863,14 +1919,14 @@ function App() {
           key: 'add-current',
           label: '今期放送中',
           active: view === 'addCurrent',
-          onClick: () => openSeasonalAddView('addCurrent'),
+          onClick: () => openSeasonalAddView('addCurrent', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
         {
           key: 'add-next',
           label: '来季放送予定',
           active: view === 'addNext',
-          onClick: () => openSeasonalAddView('addNext'),
+          onClick: () => openSeasonalAddView('addNext', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
       ],
@@ -1905,29 +1961,60 @@ function App() {
           key: 'customize-slider',
           label: 'ホームスライド',
           active: view === 'homeCustomizeSlider',
-          onClick: () => navigateTo('homeCustomizeSlider'),
+          onClick: () => navigateTo('homeCustomizeSlider', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
         {
           key: 'customize-stats',
           label: '統計カード',
           active: view === 'homeCustomizeStats',
-          onClick: () => navigateTo('homeCustomizeStats'),
+          onClick: () => navigateTo('homeCustomizeStats', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
         {
           key: 'customize-quick',
           label: 'ショートカット背景',
           active: view === 'homeCustomizeQuick',
-          onClick: () => navigateTo('homeCustomizeQuick'),
+          onClick: () => navigateTo('homeCustomizeQuick', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
       ],
     },
   ];
+  const hasLocalBackAction = typeof localBackAction?.onBack === 'function';
+  const shouldShowOnboardingStepBack = shouldShowHomeOnboarding && onboardingStep > 0;
+  const shouldShowGlobalBackButton = !isFooterHiddenDuringTransition
+    && (view !== 'home' || hasLocalBackAction || shouldShowOnboardingStepBack);
+  const globalBackLabel = localBackAction?.label || '前の画面に戻る';
+  const handleGlobalBackClick = () => {
+    if (hasLocalBackAction) {
+      localBackAction.onBack();
+      return;
+    }
+
+    if (shouldShowOnboardingStepBack) {
+      handleOnboardingPrev();
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      const currentState = window.history.state || {};
+      if (currentState.appBackTarget && window.history.length > 1) {
+        pendingGlobalBackHomeScrollRef.current = currentState.appBackTarget === 'home';
+        window.history.back();
+        return;
+      }
+    }
+
+    pendingGlobalBackHomeScrollRef.current = true;
+    navigateTo('home', { replace: view !== 'home', force: true, scrollToTopOnSameView: true });
+  };
 
   return (
-    <div className={`app-container${isFooterTouchingViewport ? ' footer-touching-viewport' : ''}`}>
+    <div
+      className={`app-container${isFooterTouchingViewport ? ' footer-touching-viewport' : ''}`}
+      style={{ '--global-back-footer-height': `${globalBackFooterHeight}px` }}
+    >
       {showLaunchSplash && (
         <div className="site-launch-splash" aria-hidden="true">
           <div className="site-launch-splash-stage">
@@ -1959,7 +2046,7 @@ function App() {
               onClick={(event) => {
                 event.preventDefault();
                 if (isOnboardingNavigationLocked) return;
-                navigateTo('home');
+                navigateTo('home', { scrollToTopOnSameView: true });
                 setIsHeaderMenuOpen(false);
               }}
               aria-current={isHomeView ? 'page' : undefined}
@@ -1972,6 +2059,29 @@ function App() {
                 <path d="M5 15.2 16 6l11 9.2" />
                 <path d="M8.5 14.2v12.3h15V14.2" />
                 <path d="M13 26.5v-7h6v7" />
+              </svg>
+            </a>
+
+            <a
+              className={`header-add-link ${isAddView ? 'active' : ''}${isOnboardingNavigationLocked ? ' disabled' : ''}`}
+              href={APP_VIEW_HASHES.add}
+              onClick={(event) => {
+                event.preventDefault();
+                if (isOnboardingNavigationLocked) return;
+                handleOpenAddView();
+                setIsHeaderMenuOpen(false);
+              }}
+              aria-current={isAddView ? 'page' : undefined}
+              aria-disabled={isOnboardingNavigationLocked ? 'true' : undefined}
+              aria-label="作品の追加へ移動"
+              tabIndex={isOnboardingNavigationLocked ? -1 : undefined}
+              title="作品を追加"
+            >
+              <svg className="header-search-illustration" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                <circle cx="14" cy="14" r="7" />
+                <path d="M19.4 19.4 26 26" />
+                <path d="M14 10.6v6.8" />
+                <path d="M10.6 14h6.8" />
               </svg>
             </a>
 
@@ -2039,6 +2149,7 @@ function App() {
             screenSubtitle={addViewSubtitle}
             initialEntryTab={activeBrowsePreset ? 'browse' : 'search'}
             browsePreset={activeBrowsePreset}
+            onLocalBackStateChange={handleLocalBackActionChange}
           />
         </main>
       ) : view === 'bookmarks' ? (
@@ -2445,6 +2556,21 @@ function App() {
         </>
       )}
       </div>
+
+      {shouldShowGlobalBackButton && (
+        <button
+          type="button"
+          className="global-back-button"
+          onClick={handleGlobalBackClick}
+          aria-label={globalBackLabel}
+          title={globalBackLabel}
+        >
+          <svg className="global-back-icon" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+            <path d="M15.5 7.5 9 14l6.5 6.5" />
+            <path d="M9.8 14H21" />
+          </svg>
+        </button>
+      )}
 
       <footer ref={footerRef} className={`app-footer${isFooterHiddenDuringTransition ? ' hidden-during-transition' : ''}`}>
         <div className="app-footer-inner">

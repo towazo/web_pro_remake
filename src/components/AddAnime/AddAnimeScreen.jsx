@@ -432,7 +432,8 @@ function AddAnimeScreen({
     screenTitle = '作品の追加',
     screenSubtitle = 'マイリストやブックマークに追加する作品を探せます。',
     initialEntryTab = 'search',
-    browsePreset = null
+    browsePreset = null,
+    onLocalBackStateChange
 }) {
     const RECOMMENDED_BULK_TITLES = 20;
     const MAX_BULK_TITLES = 20;
@@ -1609,9 +1610,9 @@ function AddAnimeScreen({
         setEntryTab(nextTab);
     };
 
-    const scrollAddScreenToTop = () => {
+    const scrollAddScreenToTop = React.useCallback(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
+    }, []);
 
     const handleSelectEntryRoute = (nextTab) => {
         if (isBrowsePresetLocked && nextTab !== 'browse') return;
@@ -1638,23 +1639,23 @@ function AddAnimeScreen({
         });
     };
 
-    const handleReturnToEntrySelection = () => {
+    const handleReturnToEntrySelection = React.useCallback(() => {
         if (isBrowsePresetLocked) return;
         setShowSuggestions(false);
         setAddFlowStage('entry');
         requestAnimationFrame(() => {
             scrollAddScreenToTop();
         });
-    };
+    }, [isBrowsePresetLocked, scrollAddScreenToTop]);
 
-    const handleReturnToSearchModeSelection = () => {
+    const handleReturnToSearchModeSelection = React.useCallback(() => {
         if (isBrowsePresetLocked) return;
         setShowSuggestions(false);
         setAddFlowStage('search-mode');
         requestAnimationFrame(() => {
             scrollAddScreenToTop();
         });
-    };
+    }, [isBrowsePresetLocked, scrollAddScreenToTop]);
 
     const handleBrowseYearSubmit = () => {
         const resolvedYear = isBrowsePresetLocked
@@ -3488,6 +3489,37 @@ function AddAnimeScreen({
     const showBrowseWorkspace = entryTab === 'browse' && (isBrowsePresetLocked || addFlowStage === 'browse-work');
     const showShareCardWorkspace = entryTab === 'shareCard' && addFlowStage === 'share-card-work';
     const showWorkspaceControls = showSearchWorkspace || showBrowseWorkspace || showShareCardWorkspace;
+    const localStepBackAction = React.useMemo(() => {
+        if (isBrowsePresetLocked) return null;
+        if (showSearchWorkspace) {
+            return {
+                label: '前の手順に戻る',
+                onBack: handleReturnToSearchModeSelection
+            };
+        }
+        if (showSearchModeSelectionPage || showBrowseWorkspace || showShareCardWorkspace) {
+            return {
+                label: '前の手順に戻る',
+                onBack: handleReturnToEntrySelection
+            };
+        }
+        return null;
+    }, [
+        handleReturnToEntrySelection,
+        handleReturnToSearchModeSelection,
+        isBrowsePresetLocked,
+        showBrowseWorkspace,
+        showSearchModeSelectionPage,
+        showSearchWorkspace,
+        showShareCardWorkspace
+    ]);
+
+    useEffect(() => {
+        if (typeof onLocalBackStateChange !== 'function') return undefined;
+        onLocalBackStateChange(localStepBackAction);
+        return () => onLocalBackStateChange(null);
+    }, [localStepBackAction, onLocalBackStateChange]);
+
     const workspacePrimaryLabel = showSearchWorkspace
         ? 'タイトルから探す'
         : (showBrowseWorkspace ? '一覧から探す' : '共有カードから追加');
@@ -3621,15 +3653,6 @@ function AddAnimeScreen({
                                 <span className="add-step-choice-text">複数作品を一度に追加</span>
                             </button>
                         </div>
-                        <div className="add-step-page-actions">
-                            <button
-                                type="button"
-                                className="add-step-back-button"
-                                onClick={handleReturnToEntrySelection}
-                            >
-                                戻る
-                            </button>
-                        </div>
                     </div>
                 )}
 
@@ -3639,44 +3662,6 @@ function AddAnimeScreen({
                             <span className="entry-guide-badge">{workspacePrimaryLabel}</span>
                             {workspaceSecondaryLabel && (
                                 <span className="add-workspace-pill">{workspaceSecondaryLabel}</span>
-                            )}
-                        </div>
-                        <div className="add-workspace-toolbar-actions">
-                            {showSearchWorkspace && !isBrowsePresetLocked && (
-                                <button
-                                    type="button"
-                                    className="add-step-back-button subtle"
-                                    onClick={handleReturnToSearchModeSelection}
-                                >
-                                    戻る
-                                </button>
-                            )}
-                            {showBrowseWorkspace && !isBrowsePresetLocked && (
-                                <button
-                                    type="button"
-                                    className="add-step-back-button subtle"
-                                    onClick={handleReturnToEntrySelection}
-                                >
-                                    戻る
-                                </button>
-                            )}
-                            {showShareCardWorkspace && !isBrowsePresetLocked && (
-                                <button
-                                    type="button"
-                                    className="add-step-back-button subtle"
-                                    onClick={handleReturnToEntrySelection}
-                                >
-                                    戻る
-                                </button>
-                            )}
-                            {showSearchWorkspace && !isBrowsePresetLocked && (
-                                <button
-                                    type="button"
-                                    className="add-step-back-button subtle"
-                                    onClick={handleReturnToEntrySelection}
-                                >
-                                    最初に戻る
-                                </button>
                             )}
                         </div>
                     </div>
