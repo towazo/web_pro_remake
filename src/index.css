@@ -14255,6 +14255,24 @@ body.trailer-modal-open .add-toast {
     }
 }
 
+/* Mobile interaction guard */
+@media (max-width: 768px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    label {
+        touch-action: manipulation;
+    }
+}
+
 /* Persistent header guard: later page-level responsive rules also target this nav class. */
 .app-header .global-view-nav {
     display: flex;
