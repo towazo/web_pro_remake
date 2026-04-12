@@ -209,6 +209,7 @@ function HomeStatsCustomizeScreen({
                       animeList={animeList}
                       cardBackgrounds={draftBackgrounds}
                       visibleCardKeys={[key]}
+                      showHeader={false}
                     />
                   </div>
                   <div className="home-stats-customize-control-buttons">

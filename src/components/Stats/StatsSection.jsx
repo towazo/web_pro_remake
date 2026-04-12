@@ -39,7 +39,13 @@ const buildCardBackgroundStyle = (backgroundUrl, positionX = 50, positionY = 50)
     };
 };
 
-function StatsSection({ animeList, cardBackgrounds = null, visibleCardKeys = null }) {
+function StatsSection({
+    animeList,
+    cardBackgrounds = null,
+    visibleCardKeys = null,
+    title = '統計カード',
+    showHeader = true
+}) {
     const totalAnime = animeList.length;
     const totalEpisodes = animeList.reduce((sum, anime) => sum + (anime.episodes || 0), 0);
 
@@ -89,28 +95,36 @@ function StatsSection({ animeList, cardBackgrounds = null, visibleCardKeys = nul
         : cards;
 
     return (
-        <div className="stats-container">
-            {visibleCards.map((card) => {
-                const backgroundEntry = normalizedBackgrounds[card.key];
-                const backgroundUrl = backgroundEntry?.image || '';
-                const hasBackground = typeof backgroundUrl === 'string' && backgroundUrl.trim().length > 0;
-                return (
-                    <div
-                        key={card.key}
-                        className={`stat-card ${hasBackground ? 'has-background' : ''}`}
-                        style={hasBackground
-                            ? buildCardBackgroundStyle(backgroundUrl, backgroundEntry?.positionX, backgroundEntry?.positionY)
-                            : undefined}
-                    >
-                        <StatIcon src={card.iconSrc} alt={card.iconAlt} fallback={card.iconFallback} />
-                        <div className="stat-info">
-                            <span className="stat-value">{card.value}</span>
-                            <span className="stat-label">{card.label}</span>
+        <section className="stats-section" aria-label={title}>
+            {showHeader && (
+                <div className="stats-section-header">
+                    <h2 className="stats-section-title">{title}</h2>
+                </div>
+            )}
+
+            <div className="stats-container">
+                {visibleCards.map((card) => {
+                    const backgroundEntry = normalizedBackgrounds[card.key];
+                    const backgroundUrl = backgroundEntry?.image || '';
+                    const hasBackground = typeof backgroundUrl === 'string' && backgroundUrl.trim().length > 0;
+                    return (
+                        <div
+                            key={card.key}
+                            className={`stat-card ${hasBackground ? 'has-background' : ''}`}
+                            style={hasBackground
+                                ? buildCardBackgroundStyle(backgroundUrl, backgroundEntry?.positionX, backgroundEntry?.positionY)
+                                : undefined}
+                        >
+                            <StatIcon src={card.iconSrc} alt={card.iconAlt} fallback={card.iconFallback} />
+                            <div className="stat-info">
+                                <span className="stat-value">{card.value}</span>
+                                <span className="stat-label">{card.label}</span>
+                            </div>
                         </div>
-                    </div>
-                );
-            })}
-        </div>
+                    );
+                })}
+            </div>
+        </section>
     );
 }
 
