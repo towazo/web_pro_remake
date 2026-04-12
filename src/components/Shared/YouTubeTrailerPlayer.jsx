@@ -20,6 +20,7 @@ const USER_PLAYBACK_INTERACTION_GRACE_MS = 2200;
 const END_ADVANCE_REMAINING_SECONDS = 0.24;
 const AUTOPLAY_BLOCKED_STALL_REASON = 'autoplay-blocked';
 const AUTOPLAY_STARTUP_DELAYED_STALL_REASON = 'autoplay-startup-delayed';
+const DESIRED_UNMUTED_VOLUME = 100;
 
 const normalizeProgressRatio = (value) => Math.min(1, Math.max(0, Number(value) || 0));
 
@@ -422,9 +423,11 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
 
     const isMobileAutoplayEnvironment = isLikelyMobileAutoplayEnvironment();
     const isPlaybackActive = hasActivePlayback();
+    const hasRequestedUnmutedPlayback = !mutedRef.current && muteChangeToken > 0;
     const allowAutoplayUnmute = (
       options.userInitiated === true
       || hasRecentUserPlaybackInteraction()
+      || hasRequestedUnmutedPlayback
       || (!isMobileAutoplayEnvironment && allowPersistentAutoplayUnmuteRef.current && isPlaybackActive)
     );
     if (!allowAutoplayUnmute) {
@@ -436,6 +439,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
     const attemptUnmute = () => {
       try {
         player.unMute();
+        player.setVolume?.(DESIRED_UNMUTED_VOLUME);
       } catch (_) {
         // Ignore unmute failures.
       }
@@ -765,6 +769,7 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
         }
       } else {
         player.unMute();
+        player.setVolume?.(DESIRED_UNMUTED_VOLUME);
       }
       emitMuteState(player);
     } catch (_) {
@@ -814,14 +819,26 @@ const YouTubeTrailerPlayer = forwardRef(function YouTubeTrailerPlayer({
               resetProgressTracking();
               emitProgress(0, { allowDecrease: true });
               syncIframeAttributes(event.target);
-              syncDesiredMuteState(event.target);
+              const shouldUsePendingGesture = (
+                pendingTrustedPlaybackGestureRef.current
+                || hasRecentUserPlaybackInteraction()
+                || (!mutedRef.current && muteChangeToken > 0)
+              );
+              if (shouldUsePendingGesture) {
+                markUserPlaybackInteraction();
+              }
+              syncDesiredMuteState(event.target, {
+                userInitiated: shouldUsePendingGesture,
+              });
 
-              const shouldUsePendingGesture = pendingTrustedPlaybackGestureRef.current || hasRecentUserPlaybackInteraction();
               pendingTrustedPlaybackGestureRef.current = false;
               requestPlaybackResume(event.target, {
                 userInitiated: shouldUsePendingGesture,
                 loadVideoOnFirstAttempt: autoplayRef.current,
                 startSeconds: 0,
+              });
+              requestDeferredUnmute(event.target, {
+                userInitiated: shouldUsePendingGesture,
               });
               scheduleAutoplayStartupWatch(event.target);
               flushPendingSeekProgress(event.target, { resumePlayback: false });
