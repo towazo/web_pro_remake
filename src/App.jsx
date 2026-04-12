@@ -94,7 +94,7 @@ const ONBOARDING_STEPS = [
     features: [
       '視聴した作品をマイリストで整理できます。',
       '気になる作品はブックマークに分けて残せます。',
-      'あとから共有用の画像やテキストも作成できます。',
+      'あとから共有カードやテキストも作成できます。',
     ],
   },
   {
@@ -131,10 +131,10 @@ const ONBOARDING_STEPS = [
     key: 'share',
     eyebrow: 'SHARE',
     title: '共有機能',
-    description: '登録した作品を画像やテキストでSNSなどへ共有できます。',
+    description: '登録した作品を共有カードやテキストでSNSなどへ共有できます。',
     features: [
       '共有したい作品だけを選んで出力できます。',
-      '画像共有とテキスト共有を使い分けられます。',
+      '共有カードと文字共有を使い分けられます。',
     ],
   },
   {
@@ -1881,7 +1881,7 @@ function App() {
       items: [
         {
           key: 'share-image',
-          label: '画像で共有',
+          label: 'カードで共有',
           active: view === 'shareImage',
           onClick: () => openFooterShareView('shareImage'),
           disabled: footerShareDisabled,

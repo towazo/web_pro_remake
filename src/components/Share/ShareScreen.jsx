@@ -1092,7 +1092,7 @@ function ShareScreen({
       if (isImageMode && prev.length >= SHARE_IMAGE_SELECTION_LIMIT) {
         setNotice({
           type: 'error',
-          message: `画像共有は ${SHARE_IMAGE_SELECTION_LIMIT} 作品までです。`,
+          message: `共有カードは ${SHARE_IMAGE_SELECTION_LIMIT} 作品までです。`,
         });
         return prev;
       }
@@ -1173,14 +1173,14 @@ function ShareScreen({
       setGeneratedImages(imageItems);
       setNotice({
         type: 'success',
-        message: `${imageItems.length} 枚の画像を生成しました。`,
+        message: `${imageItems.length} 枚の共有カードを生成しました。`,
       });
     } catch (_) {
       pendingGalleryScrollRef.current = false;
       clearGeneratedImages();
       setNotice({
         type: 'error',
-        message: '画像の生成に失敗しました。時間を置いてもう一度お試しください。',
+        message: '共有カードの生成に失敗しました。時間を置いてもう一度お試しください。',
       });
     } finally {
       setIsGeneratingImages(false);
@@ -1273,8 +1273,8 @@ function ShareScreen({
 
           <section className="share-method-guide">
             <p className="share-method-guide-title">ガイド</p>
-            <p className="share-method-guide-text">1〜{SHARE_IMAGE_SELECTION_LIMIT}作品なら画像共有がおすすめです。</p>
-            <p className="share-method-guide-text">{SHARE_IMAGE_SELECTION_LIMIT + 1}作品以上なら文字共有がおすすめです。</p>
+            <p className="share-method-guide-text">カードは画像で渡せます。</p>
+            <p className="share-method-guide-text">文字は作品数を気にせず渡せます。</p>
             <p className="share-method-guide-note">現在の登録作品数: {animeList.length} 件</p>
             {hasInitialSelection && (
               <p className="share-method-guide-note">現在の選択作品数: {selectedAnimeIds.length} 件</p>
@@ -1288,10 +1288,10 @@ function ShareScreen({
               onClick={() => onSelectMode('image')}
               disabled={!canUseImageShare}
             >
-              <span className="share-method-card-badge">画像</span>
-              <strong className="share-method-card-title">画像で共有</strong>
+              <span className="share-method-card-badge">カード</span>
+              <strong className="share-method-card-title">カードで共有</strong>
               <span className="share-method-card-text">
-                24作品まで。6作品ごとに自動分割し、最大4枚の画像にまとめます。
+                24作品まで。6作品ごとに自動分割し、作品追加で読み込めるカードにまとめます。
               </span>
             </button>
 
@@ -1311,7 +1311,7 @@ function ShareScreen({
 
           {isImageSelectionOverLimit && (
             <div className="share-limit-warning" role="status" aria-live="polite">
-              画像で共有できる作品数の上限（{SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。文字共有を利用するか、選択数を減らしてください。
+              共有カードで選べる作品数の上限（{SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。文字共有を利用するか、選択数を減らしてください。
             </div>
           )}
 
@@ -1334,11 +1334,11 @@ function ShareScreen({
       <main className="main-content share-screen-main mylist-page-main page-shell has-selection-dock">
         <div className="mylist-section-header bookmark-screen-header">
           <div>
-            <h3 className="page-main-title">{isImageMode ? '画像で共有' : '文字で共有'}</h3>
+            <h3 className="page-main-title">{isImageMode ? 'カードで共有' : '文字で共有'}</h3>
             <p className="page-main-subtitle">
               {isImageMode
                 ? isImageSelectionOverLimit
-                  ? `画像共有の上限（${SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。選択数を減らしてください。`
+                  ? `共有カードの上限（${SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。選択数を減らしてください。`
                   : `共有したい作品を ${SHARE_IMAGE_SELECTION_LIMIT} 件まで選択してください。`
                 : '共有したい作品を選択してください。'}
             </p>
@@ -1368,13 +1368,13 @@ function ShareScreen({
 
         {isImageMode && isImageSelectionOverLimit && (
           <div className="share-limit-warning" role="status" aria-live="polite">
-            画像で共有できる作品数の上限（{SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。
+            共有カードで選べる作品数の上限（{SHARE_IMAGE_SELECTION_LIMIT}件）を超えています。
           </div>
         )}
 
         {isImageMode && isGeneratingImages && (
           <div className="share-progress-panel" role="status" aria-live="polite">
-            画像を生成中です ({imageProgress.current}/{imageProgress.total} 枚目)
+            共有カードを生成中です ({imageProgress.current}/{imageProgress.total} 枚目)
           </div>
         )}
 
@@ -1423,7 +1423,7 @@ function ShareScreen({
 
         <div className="selection-toolbar" role="region" aria-label="共有候補の選択">
           <div className="selection-toolbar-info">
-            <p className="selection-toolbar-title">{isImageMode ? '画像共有の選択' : '文字共有の選択'}</p>
+            <p className="selection-toolbar-title">{isImageMode ? '共有カードの選択' : '文字共有の選択'}</p>
             <p className="selection-toolbar-count">
               {isImageMode
                 ? `${selectedAnimeIds.length}/${SHARE_IMAGE_SELECTION_LIMIT} 件を選択中`
@@ -1431,7 +1431,7 @@ function ShareScreen({
             </p>
             <p className="selection-toolbar-sub">
               {isImageMode
-                ? `6作品ごとに1枚、最大${SHARE_IMAGE_MAX_PAGES}枚の画像を作成します。`
+                ? `6作品ごとに1枚、最大${SHARE_IMAGE_MAX_PAGES}枚の共有カードを作成します。`
                 : '検索や絞り込みで候補を減らしてから選択できます。'}
             </p>
           </div>
@@ -1474,9 +1474,9 @@ function ShareScreen({
           <section ref={generatedGalleryRef} className="share-generated-gallery">
             <div className="share-generated-gallery-header">
               <div>
-                <h4>生成した画像</h4>
+                <h4>生成した共有カード</h4>
                 <p>
-                  {generatedImages.length} 枚の画像を作成しました。
+                  {generatedImages.length} 枚の共有カードを作成しました。
                   {canUseNativeSaveGeneratedImages
                     ? ' スマホでは保存時に共有シートが開くので、「画像を保存」を選んでください。'
                     : ' 必要なら個別保存もできます。'}
@@ -1488,13 +1488,13 @@ function ShareScreen({
             >
               {generatedImages.map((item, index) => (
                 <article key={item.fileName} className="share-generated-card">
-                  <img src={item.previewUrl} alt={`共有画像 ${index + 1}`} />
+                  <img src={item.previewUrl} alt={`共有カード ${index + 1}`} />
                   <button
                     type="button"
                     className="share-generated-download"
                     onClick={() => handleDownloadGeneratedImage(item, index)}
                   >
-                    画像 {index + 1} を保存
+                    共有カード {index + 1} を保存
                   </button>
                 </article>
               ))}
@@ -1544,7 +1544,7 @@ function ShareScreen({
             generatedImages.length > 0 ? (
               <>
                 <button type="button" className="share-dock-primary" onClick={handleDownloadAllImages}>
-                  画像を保存
+                  共有カードを保存
                 </button>
                 <button type="button" className="share-dock-secondary" onClick={handleClearSelection}>
                   キャンセル
@@ -1558,7 +1558,7 @@ function ShareScreen({
                   onClick={handleGenerateImages}
                   disabled={selectedAnimeIds.length === 0 || isGeneratingImages || isImageSelectionOverLimit}
                 >
-                  {isGeneratingImages ? '画像を生成中...' : isImageSelectionOverLimit ? '上限超過で生成不可' : '画像を生成'}
+                  {isGeneratingImages ? '共有カードを生成中...' : isImageSelectionOverLimit ? '上限超過で生成不可' : '共有カードを生成'}
                 </button>
                 <button
                   type="button"
