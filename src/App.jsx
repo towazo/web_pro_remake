@@ -207,6 +207,8 @@ const DETAIL_ENRICHMENT_RETRY_BASE_MS = 4000;
 const DETAIL_ENRICHMENT_RETRY_MAX_MS = 60000;
 const FEATURED_SLIDER_CURRENT_SEASON_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
 const PAGE_TRANSITION_FOOTER_HIDE_MS = 1200;
+const LAUNCH_SPLASH_DURATION_MS = 4500;
+const REDUCED_MOTION_LAUNCH_SPLASH_DURATION_MS = 1400;
 
 const getFeaturedSliderBuildOptions = (source) => (
   source === HOME_FEATURED_SLIDER_SOURCES.currentSeason
@@ -809,21 +811,34 @@ function App() {
     });
   }, []);
 
+  const handleLaunchSplashSkip = useCallback((event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setShowLaunchSplash(false);
+  }, []);
+
+  const handleLaunchSplashKeyDown = useCallback((event) => {
+    if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+    handleLaunchSplashSkip(event);
+  }, [handleLaunchSplashSkip]);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       setShowLaunchSplash(false);
       return undefined;
     }
 
+    if (!showLaunchSplash) return undefined;
+
     const prefersReducedMotion = typeof window.matchMedia === 'function'
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const timeoutId = window.setTimeout(
       () => setShowLaunchSplash(false),
-      prefersReducedMotion ? 1400 : 3200
+      prefersReducedMotion ? REDUCED_MOTION_LAUNCH_SPLASH_DURATION_MS : LAUNCH_SPLASH_DURATION_MS
     );
 
     return () => window.clearTimeout(timeoutId);
-  }, []);
+  }, [showLaunchSplash]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2171,7 +2186,14 @@ function App() {
       style={{ '--global-back-footer-height': `${globalBackFooterHeight}px` }}
     >
       {showLaunchSplash && (
-        <div className="site-launch-splash" aria-hidden="true">
+        <div
+          className="site-launch-splash"
+          role="button"
+          tabIndex={0}
+          aria-label="起動アニメーションをスキップ"
+          onClick={handleLaunchSplashSkip}
+          onKeyDown={handleLaunchSplashKeyDown}
+        >
           <div className="site-launch-splash-stage">
             <img className="site-launch-splash-logo" src="/images/logo.png" alt="" />
             <p className="site-launch-splash-copy">

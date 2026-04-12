@@ -431,6 +431,7 @@ body {
 
 /* Header */
 .site-launch-splash {
+    --site-launch-duration: 4.35s;
     position: fixed;
     inset: 0;
     z-index: 3600;
@@ -438,8 +439,17 @@ body {
     align-items: center;
     justify-content: center;
     background: #fff;
-    pointer-events: none;
-    animation: siteLaunchSplashExit 3.05s ease both;
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    animation: siteLaunchSplashExit var(--site-launch-duration) ease both;
+}
+
+.site-launch-splash:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 3px rgba(20, 20, 20, 0.22);
 }
 
 .site-launch-splash-stage {
@@ -459,7 +469,7 @@ body {
     height: auto;
     opacity: 0;
     transform-origin: center;
-    animation: siteLaunchLogoAppear 3s cubic-bezier(0.2, 0.78, 0.22, 1) both;
+    animation: siteLaunchLogoAppear var(--site-launch-duration) cubic-bezier(0.2, 0.78, 0.22, 1) both;
     will-change: opacity, transform, filter;
 }
 
@@ -475,7 +485,7 @@ body {
     line-height: 2;
     letter-spacing: 0;
     opacity: 0;
-    animation: siteLaunchCopyAppear 3s cubic-bezier(0.2, 0.78, 0.22, 1) both;
+    animation: siteLaunchCopyAppear var(--site-launch-duration) cubic-bezier(0.2, 0.78, 0.22, 1) both;
     text-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
     text-wrap: balance;
     will-change: opacity, transform, filter;
@@ -767,7 +777,7 @@ body {
 
 @keyframes siteLaunchSplashExit {
     0%,
-    88% {
+    90% {
         opacity: 1;
         visibility: visible;
     }
@@ -780,19 +790,19 @@ body {
 
 @keyframes siteLaunchLogoAppear {
     0%,
-    20% {
+    16% {
         opacity: 0;
         transform: translateY(10px) scale(0.96);
         filter: blur(5px);
     }
 
-    42% {
+    36% {
         opacity: 1;
         transform: translateY(0) scale(1);
         filter: blur(0);
     }
 
-    76% {
+    84% {
         opacity: 1;
         transform: translateY(0) scale(1);
         filter: blur(0);
@@ -812,13 +822,13 @@ body {
         filter: blur(5px);
     }
 
-    26% {
+    18% {
         opacity: 1;
         transform: translateY(0);
         filter: blur(0);
     }
 
-    76% {
+    84% {
         opacity: 1;
         transform: translateY(0);
         filter: blur(0);
@@ -833,19 +843,19 @@ body {
 
 @keyframes siteLaunchLogoAppearMobile {
     0%,
-    22% {
+    18% {
         opacity: 0;
         transform: translateY(9px) scale(0.96);
         filter: blur(5px);
     }
 
-    44% {
+    38% {
         opacity: 1;
         transform: translateY(0) scale(1);
         filter: blur(0);
     }
 
-    76% {
+    84% {
         opacity: 1;
         transform: translateY(0) scale(1);
         filter: blur(0);
