@@ -36,7 +36,7 @@ const BROWSE_SPECIAL_PRESET_KEYS = Object.freeze({
 });
 const BROWSE_RESULTS_CACHE = new Map();
 const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
-const SHARE_CARD_IMPORT_MAX_FILES = 5;
+const SHARE_CARD_IMPORT_MAX_FILES = 4;
 const RATE_LIMIT_MESSAGE_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
 const BULK_RESULT_KIND = Object.freeze({
     HIT: 'hit',
