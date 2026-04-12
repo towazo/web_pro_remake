@@ -30,7 +30,7 @@ function HomeCustomizeHubScreen({
           <span className="home-customize-hub-card-kicker">背景</span>
           <strong className="home-customize-hub-card-title">クイック操作</strong>
           <span className="home-customize-hub-card-text">
-            下の背景を変える
+            クイック操作の背景を変える
           </span>
         </button>
 
