@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import StatsSection from './StatsSection';
 import {
   HOME_STATS_CARD_KEYS,
@@ -42,12 +42,17 @@ function HomeStatsCustomizeScreen({
   savedBackgrounds = null,
   onSave,
   onBackHome,
-  backButtonLabel = 'ホームに戻る',
+  onLocalBackStateChange,
 }) {
   const [draftBackgrounds, setDraftBackgrounds] = useState(() => sanitizeHomeStatsCardBackgrounds(savedBackgrounds));
   const [notice, setNotice] = useState({ type: '', message: '' });
   const [processingCardKey, setProcessingCardKey] = useState('');
   const fileInputRefs = useRef({});
+  const onBackHomeRef = useRef(onBackHome);
+
+  useEffect(() => {
+    onBackHomeRef.current = onBackHome;
+  }, [onBackHome]);
 
   useEffect(() => {
     setDraftBackgrounds(sanitizeHomeStatsCardBackgrounds(savedBackgrounds));
@@ -168,13 +173,22 @@ function HomeStatsCustomizeScreen({
     setNotice({ type: 'success', message: '背景設定を保存しました。' });
   };
 
-  const handleBackHome = () => {
+  const handleBackHome = useCallback(() => {
     if (isDirty) {
       const confirmed = window.confirm('未保存の変更があります。保存せずに前の画面へ戻りますか？');
       if (!confirmed) return;
     }
-    onBackHome?.();
-  };
+    onBackHomeRef.current?.();
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (typeof onLocalBackStateChange !== 'function') return undefined;
+    onLocalBackStateChange({
+      label: '前の画面に戻る',
+      onBack: handleBackHome,
+    });
+    return () => onLocalBackStateChange(null);
+  }, [handleBackHome, onLocalBackStateChange]);
 
   return (
     <main className="home-stats-customize-page page-shell">
@@ -299,9 +313,6 @@ function HomeStatsCustomizeScreen({
             disabled={!isDirty}
           >
             保存
-          </button>
-          <button type="button" className="home-stats-customize-back-button" onClick={handleBackHome}>
-            {backButtonLabel}
           </button>
           <button type="button" className="home-stats-customize-reset-button" onClick={handleResetAllBackgrounds}>
             背景をリセット

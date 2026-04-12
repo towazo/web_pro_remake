@@ -19,8 +19,6 @@ const FEATURED_SLIDER_SOURCE_OPTIONS = [
 function HomeFeaturedSliderCustomizeScreen({
   selectedSource = HOME_FEATURED_SLIDER_SOURCES.myList,
   onChangeSource,
-  onBackHome,
-  backButtonLabel = '設定に戻る',
   currentSeasonLabel = '',
   isCurrentSeasonLoading = false,
   isCurrentSeasonUnavailable = false,
@@ -85,11 +83,6 @@ function HomeFeaturedSliderCustomizeScreen({
         )}
       </section>
 
-      <div className="home-stats-customize-actions">
-        <button type="button" className="home-stats-customize-back-button" onClick={onBackHome}>
-          {backButtonLabel}
-        </button>
-      </div>
     </main>
   );
 }

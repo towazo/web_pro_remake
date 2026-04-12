@@ -833,7 +833,6 @@ function ShareScreen({
   initialSelectedAnimeIds = [],
   onUpdateRating,
   onUpdateWatchCount,
-  onBackToMethod,
   onSelectMode,
 }) {
   const isMethodMode = mode === 'method';
@@ -1354,9 +1353,6 @@ function ShareScreen({
                 <span>評価を含める</span>
               </label>
             )}
-            <button type="button" className="bookmark-screen-home" onClick={onBackToMethod}>
-              共有方法を選び直す
-            </button>
           </div>
         </div>
 

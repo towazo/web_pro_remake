@@ -3,7 +3,6 @@ function HomeCustomizeHubScreen({
   onOpenQuickActionsCustomize,
   onOpenFeaturedSliderCustomize,
   featuredSliderSourceLabel = 'マイリスト',
-  onBackHome,
 }) {
   return (
     <main className="home-customize-hub page-shell">
@@ -44,11 +43,6 @@ function HomeCustomizeHubScreen({
         </button>
       </div>
 
-      <div className="home-customize-hub-actions">
-        <button type="button" className="home-customize-hub-back" onClick={onBackHome}>
-          ホームに戻る
-        </button>
-      </div>
     </main>
   );
 }

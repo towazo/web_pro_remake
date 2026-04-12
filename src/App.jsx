@@ -95,6 +95,46 @@ const scrollDocumentToTop = (behavior = 'auto') => {
   }
 };
 
+const sanitizeAppBackStack = (value) => {
+  if (!Array.isArray(value)) return [];
+
+  const stack = [];
+  value.forEach((item) => {
+    if (!APP_VIEW_SET.has(item)) return;
+    if (stack.includes(item)) return;
+    stack.push(item);
+  });
+  return stack;
+};
+
+const getInitialAppBackStack = (targetView) => (
+  targetView === 'home' ? [] : ['home']
+);
+
+const buildNextAppBackStack = (currentStack, currentView, nextView, replace = false) => {
+  if (nextView === 'home') return [];
+
+  const stack = sanitizeAppBackStack(currentStack);
+  const targetIndex = stack.lastIndexOf(nextView);
+  if (targetIndex >= 0) {
+    return stack.slice(0, targetIndex);
+  }
+
+  if (replace) {
+    return stack.filter((item) => item !== nextView);
+  }
+
+  const currentIndex = stack.lastIndexOf(currentView);
+  const baseStack = currentIndex >= 0 ? stack.slice(0, currentIndex) : stack;
+  const nextStack = currentView === nextView ? baseStack : [...baseStack, currentView];
+  return sanitizeAppBackStack(nextStack).filter((item) => item !== nextView);
+};
+
+const getAppBackTarget = (stack) => {
+  const sanitizedStack = sanitizeAppBackStack(stack);
+  return sanitizedStack.length > 0 ? sanitizedStack[sanitizedStack.length - 1] : null;
+};
+
 const ONBOARDING_STEPS = [
   {
     key: 'intro',
@@ -601,10 +641,17 @@ function App() {
 
     navigationTypeRef.current = 'push';
     const currentState = window.history.state || {};
+    const appBackStack = buildNextAppBackStack(
+      currentState.appBackStack,
+      view,
+      nextView,
+      replace
+    );
     const state = {
       ...currentState,
       appView: nextView,
-      appBackTarget: replace ? currentState.appBackTarget : view,
+      appBackStack,
+      appBackTarget: getAppBackTarget(appBackStack),
     };
     if (replace) {
       window.history.replaceState(state, '', targetHash);
@@ -612,6 +659,47 @@ function App() {
       window.history.pushState(state, '', targetHash);
     }
     setView(nextView);
+  };
+
+  const replaceViewWithBackStack = (nextView, nextBackStack = []) => {
+    if (!APP_VIEW_SET.has(nextView)) return;
+    if (typeof window === 'undefined') {
+      setView(nextView);
+      return;
+    }
+
+    const appBackStack = sanitizeAppBackStack(nextBackStack);
+    navigationTypeRef.current = 'pop';
+    window.history.replaceState({
+      ...(window.history.state || {}),
+      appView: nextView,
+      appBackStack,
+      appBackTarget: getAppBackTarget(appBackStack),
+    }, '', APP_VIEW_HASHES[nextView] || '#/');
+    setView(nextView);
+  };
+
+  const navigateBackOneStep = () => {
+    if (typeof window === 'undefined') {
+      setView('home');
+      return;
+    }
+
+    const currentStack = sanitizeAppBackStack(window.history.state?.appBackStack);
+    while (currentStack.length > 0 && currentStack[currentStack.length - 1] === view) {
+      currentStack.pop();
+    }
+
+    const targetView = currentStack.length > 0 ? currentStack[currentStack.length - 1] : 'home';
+    if (!APP_VIEW_SET.has(targetView) || targetView === view) {
+      pendingGlobalBackHomeScrollRef.current = true;
+      replaceViewWithBackStack('home', []);
+      return;
+    }
+
+    const appBackStack = targetView === 'home' ? [] : currentStack.slice(0, -1);
+    pendingGlobalBackHomeScrollRef.current = targetView === 'home';
+    replaceViewWithBackStack(targetView, appBackStack);
   };
 
   useEffect(() => {
@@ -622,7 +710,17 @@ function App() {
     }
 
     const normalizedView = getViewFromLocation(window.location.hash, window.location.pathname);
-    const state = { ...(window.history.state || {}), appView: normalizedView };
+    const currentState = window.history.state || {};
+    const currentBackStack = sanitizeAppBackStack(currentState.appBackStack);
+    const appBackStack = currentBackStack.length > 0 || normalizedView === 'home'
+      ? currentBackStack
+      : getInitialAppBackStack(normalizedView);
+    const state = {
+      ...currentState,
+      appView: normalizedView,
+      appBackStack,
+      appBackTarget: getAppBackTarget(appBackStack),
+    };
     window.history.replaceState(state, '', APP_VIEW_HASHES[normalizedView] || '#/');
     if (normalizedView !== view) {
       navigationTypeRef.current = 'pop';
@@ -634,6 +732,17 @@ function App() {
       const nextView = APP_VIEW_SET.has(stateView)
         ? stateView
         : getViewFromLocation(window.location.hash, window.location.pathname);
+      const eventBackStack = sanitizeAppBackStack(event?.state?.appBackStack);
+      const appBackStack = eventBackStack.length > 0 || nextView === 'home'
+        ? eventBackStack
+        : getInitialAppBackStack(nextView);
+      const state = {
+        ...(event?.state || {}),
+        appView: nextView,
+        appBackStack,
+        appBackTarget: getAppBackTarget(appBackStack),
+      };
+      window.history.replaceState(state, '', APP_VIEW_HASHES[nextView] || '#/');
       navigationTypeRef.current = 'pop';
       setView(nextView);
     };
@@ -796,7 +905,7 @@ function App() {
     });
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setLocalBackAction(null);
   }, [view]);
 
@@ -1132,7 +1241,12 @@ function App() {
   useEffect(() => {
     if (!isOnboardingActive || view === 'home' || typeof window === 'undefined') return;
     const forcedHome = 'home';
-    const state = { ...(window.history.state || {}), appView: forcedHome };
+    const state = {
+      ...(window.history.state || {}),
+      appView: forcedHome,
+      appBackStack: [],
+      appBackTarget: null,
+    };
     window.history.replaceState(state, '', APP_VIEW_HASHES[forcedHome] || '#/');
     navigationTypeRef.current = 'pop';
     setView(forcedHome);
@@ -2004,17 +2118,7 @@ function App() {
       return;
     }
 
-    if (typeof window !== 'undefined') {
-      const currentState = window.history.state || {};
-      if (currentState.appBackTarget && window.history.length > 1) {
-        pendingGlobalBackHomeScrollRef.current = currentState.appBackTarget === 'home';
-        window.history.back();
-        return;
-      }
-    }
-
-    pendingGlobalBackHomeScrollRef.current = true;
-    navigateTo('home', { replace: view !== 'home', force: true, scrollToTopOnSameView: true });
+    navigateBackOneStep();
   };
 
   return (
@@ -2180,7 +2284,6 @@ function App() {
           onOpenFeaturedSliderCustomize={() => navigateTo('homeCustomizeSlider')}
           onOpenStatsCustomize={() => navigateTo('homeCustomizeStats')}
           onOpenQuickActionsCustomize={() => navigateTo('homeCustomizeQuick')}
-          onBackHome={() => navigateTo('home')}
         />
       ) : view === 'homeCustomizeSlider' ? (
         <HomeFeaturedSliderCustomizeScreen
@@ -2189,16 +2292,14 @@ function App() {
           isCurrentSeasonLoading={isCurrentSeasonFeaturedLoading}
           isCurrentSeasonUnavailable={isCurrentSeasonFeaturedUnavailable}
           onChangeSource={setHomeFeaturedSliderSource}
-          onBackHome={() => navigateTo('homeCustomize')}
-          backButtonLabel="設定に戻る"
         />
       ) : view === 'homeCustomizeStats' ? (
         <HomeStatsCustomizeScreen
           animeList={animeList}
           savedBackgrounds={homeStatsCardBackgrounds}
           onSave={handleSaveHomeStatsCardBackgrounds}
-          onBackHome={() => navigateTo('homeCustomize')}
-          backButtonLabel="設定に戻る"
+          onBackHome={navigateBackOneStep}
+          onLocalBackStateChange={handleLocalBackActionChange}
         />
       ) : view === 'homeCustomizeQuick' ? (
         <HomeQuickActionsCustomizeScreen
@@ -2206,8 +2307,8 @@ function App() {
           bookmarkCount={bookmarkList.length}
           savedBackgrounds={homeQuickActionBackgrounds}
           onSave={handleSaveHomeQuickActionBackgrounds}
-          onBackHome={() => navigateTo('homeCustomize')}
-          backButtonLabel="設定に戻る"
+          onBackHome={navigateBackOneStep}
+          onLocalBackStateChange={handleLocalBackActionChange}
         />
       ) : isShareView ? (
         <ShareScreen
@@ -2217,7 +2318,6 @@ function App() {
           initialSelectedAnimeIds={sharePresetAnimeIds}
           onUpdateRating={handleUpdateAnimeRating}
           onUpdateWatchCount={handleUpdateAnimeWatchCount}
-          onBackToMethod={() => navigateTo('shareMethod')}
           onSelectMode={(mode) => navigateTo(mode === 'image' ? 'shareImage' : 'shareText')}
         />
       ) : view === 'mylist' ? (
