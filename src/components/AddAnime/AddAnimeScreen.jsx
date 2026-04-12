@@ -2041,6 +2041,15 @@ function AddAnimeScreen({
         setSuggestionReloadToken((prev) => prev + 1);
     };
 
+    const handleNormalSuggestionSubmit = (e) => {
+        if (e) e.preventDefault();
+        const normalizedQuery = query.trim();
+        if (normalizedQuery.length < 2 || previewData) return;
+        setShowSuggestions(true);
+        if (isSuggesting || suggestions.length > 0 || suggestionRetryCountdownSec > 0) return;
+        setSuggestionReloadToken((prev) => prev + 1);
+    };
+
     // 2. Search Logic (Manual Search)
     const handleSearch = async (e) => {
         if (e) e.preventDefault();
@@ -3483,7 +3492,7 @@ function AddAnimeScreen({
         ? 'タイトルから探す'
         : (showBrowseWorkspace ? '一覧から探す' : '共有カードから追加');
     const workspaceSecondaryLabel = showSearchWorkspace
-        ? (mode === 'bulk' ? 'まとめて追加' : '1つずつ追加')
+        ? (mode === 'bulk' ? 'まとめて検索' : '1つずつ検索')
         : (showBrowseWorkspace
             ? (normalizedBrowsePreset?.title || '')
             : (shareCardItems.length > 0 ? (shareCardTarget === 'bookmark' ? 'ブックマーク' : 'マイリスト') : ''));
@@ -3599,7 +3608,7 @@ function AddAnimeScreen({
                                 onClick={() => handleSelectSearchMode('normal')}
                                 disabled={isSearching}
                             >
-                                <strong className="add-step-choice-title">1つずつ追加</strong>
+                                <strong className="add-step-choice-title">1つずつ検索</strong>
                                 <span className="add-step-choice-text">候補を見ながら選ぶ</span>
                             </button>
                             <button
@@ -3608,7 +3617,7 @@ function AddAnimeScreen({
                                 onClick={() => handleSelectSearchMode('bulk')}
                                 disabled={isSearching}
                             >
-                                <strong className="add-step-choice-title">まとめて追加</strong>
+                                <strong className="add-step-choice-title">まとめて検索</strong>
                                 <span className="add-step-choice-text">複数作品を一度に追加</span>
                             </button>
                         </div>
@@ -3837,7 +3846,7 @@ function AddAnimeScreen({
 
             {showSearchWorkspace && (mode === 'normal' ? (
                 !previewData && (
-                    <form onSubmit={handleSearch} className="add-form normal-add-form">
+                    <form onSubmit={handleNormalSuggestionSubmit} className="add-form normal-add-form">
                         <div className="normal-add-search-area" ref={searchFieldWrapperRef}>
                             <section className="normal-add-surface normal-add-search-surface">
                                 <div className="normal-add-surface-head">

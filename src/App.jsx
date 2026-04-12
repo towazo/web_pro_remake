@@ -677,7 +677,7 @@ function App() {
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const timeoutId = window.setTimeout(
       () => setShowLaunchSplash(false),
-      prefersReducedMotion ? 1400 : 3900
+      prefersReducedMotion ? 1400 : 3200
     );
 
     return () => window.clearTimeout(timeoutId);
@@ -1931,9 +1931,10 @@ function App() {
       {showLaunchSplash && (
         <div className="site-launch-splash" aria-hidden="true">
           <div className="site-launch-splash-stage">
-            <div className="site-launch-splash-mark">
-              <img src="/images/logo.png" alt="" />
-            </div>
+            <img className="site-launch-splash-logo" src="/images/logo.png" alt="" />
+            <p className="site-launch-splash-copy">
+              あなたのアニメの記憶を呼び起こすトリガー
+            </p>
           </div>
         </div>
       )}
@@ -2415,8 +2416,6 @@ function App() {
           />
 
         <main className="main-content">
-            <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
-
             <HomeQuickActionsSection
               animeCount={animeList.length}
               bookmarkCount={bookmarkList.length}
@@ -2428,6 +2427,8 @@ function App() {
               onOpenShare={() => handleOpenShareMethod()}
               shareDisabled={animeList.length === 0}
             />
+
+            <StatsSection animeList={animeList} cardBackgrounds={homeStatsCardBackgrounds} />
 
             <WatchRankingSection animeList={animeList} />
 

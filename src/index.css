@@ -430,62 +430,58 @@ body {
     justify-content: center;
     background: #fff;
     pointer-events: none;
-    animation: siteLaunchSplashExit 3.45s ease both;
+    animation: siteLaunchSplashExit 3.05s ease both;
 }
 
 .site-launch-splash-stage {
-    position: relative;
-    width: min(280px, 62vw);
-    min-height: 120px;
-    display: grid;
-    place-items: center;
-    isolation: isolate;
-    overflow: visible;
+    width: min(700px, calc(100vw - 48px));
+    padding: 34px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    text-align: center;
 }
 
-.site-launch-splash-mark {
-    position: relative;
-    width: min(240px, 56vw);
-    padding: 0;
-    display: grid;
-    place-items: center;
+.site-launch-splash-logo {
+    display: block;
+    width: min(360px, 68vw);
+    height: auto;
     opacity: 0;
     transform-origin: center;
-    animation: siteLaunchLogoAppear 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both;
-    isolation: isolate;
+    animation: siteLaunchLogoAppear 3s cubic-bezier(0.2, 0.78, 0.22, 1) both;
     will-change: opacity, transform, filter;
 }
 
-.site-launch-splash-mark::before {
+.site-launch-splash-copy {
+    position: relative;
+    margin: 0;
+    max-width: 34rem;
+    padding-top: 16px;
+    color: #141414;
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP", "Times New Roman", serif;
+    font-size: 1.16rem;
+    font-weight: 600;
+    line-height: 2;
+    letter-spacing: 0;
+    opacity: 0;
+    animation: siteLaunchCopyAppear 3s cubic-bezier(0.2, 0.78, 0.22, 1) both;
+    text-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    text-wrap: balance;
+    will-change: opacity, transform, filter;
+}
+
+.site-launch-splash-copy::before {
     content: "";
     position: absolute;
-    inset: 0;
-    z-index: 2;
-    background: #000;
-    opacity: 0;
-    pointer-events: none;
-}
-
-.site-launch-splash-mark img {
-    position: relative;
-    z-index: 1;
-    display: block;
-    width: 100%;
-    height: auto;
-}
-
-@supports ((-webkit-mask: url("/images/logo.png") center / contain no-repeat) or (mask: url("/images/logo.png") center / contain no-repeat)) {
-    .site-launch-splash-mark::before {
-        opacity: 1;
-        background: #000;
-        -webkit-mask: url("/images/logo.png") center / contain no-repeat;
-        mask: url("/images/logo.png") center / contain no-repeat;
-        animation: siteLaunchLogoColorShift 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both;
-    }
-
-    .site-launch-splash-mark img {
-        opacity: 0;
-    }
+    top: 0;
+    left: 50%;
+    width: 72px;
+    height: 1px;
+    background: #111;
+    opacity: 0.28;
+    transform: translateX(-50%);
 }
 
 .app-header {
@@ -754,7 +750,7 @@ body {
 
 @keyframes siteLaunchSplashExit {
     0%,
-    94% {
+    88% {
         opacity: 1;
         visibility: visible;
     }
@@ -766,177 +762,82 @@ body {
 }
 
 @keyframes siteLaunchLogoAppear {
-    0% {
+    0%,
+    20% {
         opacity: 0;
-        transform: translateY(0) scale(0.965);
+        transform: translateY(10px) scale(0.96);
         filter: blur(5px);
     }
 
-    14% {
-        opacity: 0.48;
-        transform: translateY(0) scale(0.982);
-        filter: blur(1.5px);
-    }
-
-    24% {
-        opacity: 0.76;
-        transform: translateY(0) scale(0.992);
-        filter: blur(0);
-    }
-
-    46%,
-    74% {
+    42% {
         opacity: 1;
         transform: translateY(0) scale(1);
         filter: blur(0);
     }
 
-    78% {
+    76% {
         opacity: 1;
-        transform: translateX(-4px) scale(1);
-        filter: blur(0);
-    }
-
-    81% {
-        opacity: 1;
-        transform: translateX(4px) scale(1);
-        filter: blur(0);
-    }
-
-    84% {
-        opacity: 1;
-        transform: translateX(-2px) scale(1);
-        filter: blur(0);
-    }
-
-    88%,
-    92% {
-        opacity: 1;
-        transform: translateX(0) scale(1);
+        transform: translateY(0) scale(1);
         filter: blur(0);
     }
 
     100% {
         opacity: 0;
-        transform: translateY(0) scale(1);
-        filter: blur(0);
+        transform: translateY(-10px) scale(1.03);
+        filter: blur(6px);
     }
 }
 
-@keyframes siteLaunchLogoColorShift {
+@keyframes siteLaunchCopyAppear {
     0% {
-        background: #8ff7df;
+        opacity: 0;
+        transform: translateY(10px);
+        filter: blur(5px);
     }
 
-    6% {
-        background: #4ed8ff;
+    26% {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
     }
 
-    12% {
-        background: #5b7cff;
+    76% {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
     }
 
-    18% {
-        background: #a05cff;
-    }
-
-    24% {
-        background: #ff66c4;
-    }
-
-    30% {
-        background: #ff8a3d;
-    }
-
-    36% {
-        background: #d6425f;
-    }
-
-    40% {
-        background: #7b4dff;
-    }
-
-    43% {
-        background: #00a8a8;
-    }
-
-    50% {
-        background: #68d83f;
-    }
-
-    56% {
-        background: #f6d445;
-    }
-
-    62% {
-        background: #ff5757;
-    }
-
-    65% {
-        background: #bf57ff;
-    }
-
-    68%,
     100% {
-        background: #000000;
+        opacity: 0;
+        transform: translateY(-10px);
+        filter: blur(5px);
     }
 }
 
 @keyframes siteLaunchLogoAppearMobile {
-    0% {
+    0%,
+    22% {
         opacity: 0;
-        transform: translateX(0) scale(0.965);
+        transform: translateY(9px) scale(0.96);
         filter: blur(5px);
     }
 
-    14% {
-        opacity: 0.48;
-        transform: translateX(0) scale(0.982);
-        filter: blur(1.5px);
-    }
-
-    24% {
-        opacity: 0.76;
-        transform: translateX(0) scale(0.992);
+    44% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
         filter: blur(0);
     }
 
-    46%,
-    74% {
+    76% {
         opacity: 1;
-        transform: translateX(0) scale(1);
-        filter: blur(0);
-    }
-
-    78% {
-        opacity: 1;
-        transform: translateX(-9px) rotate(-1.2deg) scale(1);
-        filter: blur(0);
-    }
-
-    81% {
-        opacity: 1;
-        transform: translateX(9px) rotate(1.2deg) scale(1);
-        filter: blur(0);
-    }
-
-    84% {
-        opacity: 1;
-        transform: translateX(-5px) rotate(-0.6deg) scale(1);
-        filter: blur(0);
-    }
-
-    88%,
-    92% {
-        opacity: 1;
-        transform: translateX(0) rotate(0deg) scale(1);
+        transform: translateY(0) scale(1);
         filter: blur(0);
     }
 
     100% {
         opacity: 0;
-        transform: translateX(0) rotate(0deg) scale(1);
-        filter: blur(0);
+        transform: translateY(-9px) scale(1.025);
+        filter: blur(5px);
     }
 }
 
@@ -952,7 +853,8 @@ body {
         grid-template-columns: auto auto;
         justify-content: space-between;
         gap: 10px;
-        padding-right: 12px;
+        padding-left: max(18px, env(safe-area-inset-left));
+        padding-right: max(18px, env(safe-area-inset-right));
     }
 
     .logo-button {
@@ -974,13 +876,13 @@ body {
     }
 
     .header-home-link {
-        width: 36px;
-        height: 36px;
+        width: 42px;
+        height: 42px;
     }
 
     .header-menu-trigger {
-        width: 36px;
-        height: 36px;
+        width: 42px;
+        height: 42px;
     }
 
     .header-home-illustration {
@@ -992,47 +894,43 @@ body {
         width: 30px;
     }
 
-    .site-launch-splash-mark {
+    .site-launch-splash-stage {
+        width: min(100%, calc(100vw - 32px));
+        padding: 26px 16px;
+        gap: 24px;
+    }
+
+    .site-launch-splash-logo {
+        width: min(300px, 76vw);
         animation-name: siteLaunchLogoAppearMobile;
     }
 
-    @supports ((-webkit-mask: url("/images/logo.png") center / contain no-repeat) or (mask: url("/images/logo.png") center / contain no-repeat)) {
-        .site-launch-splash-mark::before {
-            animation:
-                siteLaunchLogoColorShift 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both,
-                siteLaunchLogoMaskShakeMobile 3.25s cubic-bezier(0.2, 0.78, 0.22, 1) both;
-            will-change: transform, background;
-        }
+    .site-launch-splash-copy {
+        max-width: 22rem;
+        font-size: 1.02rem;
+        line-height: 1.95;
     }
 }
 
-@keyframes siteLaunchLogoMaskShakeMobile {
-    0%,
-    74% {
-        transform: translateX(0) rotate(0deg);
+@media (max-width: 480px) {
+    .site-launch-splash-stage {
+        gap: 22px;
     }
 
-    78% {
-        transform: translateX(-10px) rotate(-1.4deg);
+    .site-launch-splash-logo {
+        width: min(276px, 78vw);
     }
 
-    81% {
-        transform: translateX(10px) rotate(1.4deg);
-    }
-
-    84% {
-        transform: translateX(-6px) rotate(-0.7deg);
-    }
-
-    88%,
-    100% {
-        transform: translateX(0) rotate(0deg);
+    .site-launch-splash-copy {
+        max-width: 20rem;
+        font-size: 0.98rem;
     }
 }
 
 @media (max-width: 480px) {
     .app-header-inner {
-        padding-right: 10px;
+        padding-left: max(16px, env(safe-area-inset-left));
+        padding-right: max(16px, env(safe-area-inset-right));
     }
 
     .logo-button {
@@ -1049,13 +947,13 @@ body {
     }
 
     .header-home-link {
-        width: 34px;
-        height: 34px;
+        width: 40px;
+        height: 40px;
     }
 
     .header-menu-trigger {
-        width: 34px;
-        height: 34px;
+        width: 40px;
+        height: 40px;
     }
 
     .header-home-illustration {
@@ -1073,22 +971,12 @@ body {
         animation: siteLaunchSplashExit 1.2s ease both;
     }
 
-    .site-launch-splash-mark {
+    .site-launch-splash-logo,
+    .site-launch-splash-copy {
         opacity: 1;
         transform: none;
         filter: none;
         animation: none;
-    }
-
-    .site-launch-splash-mark img {
-        opacity: 1;
-        transform: none;
-        filter: none;
-        animation: none;
-    }
-
-    .site-launch-splash-mark::before {
-        display: none;
     }
 }
 
