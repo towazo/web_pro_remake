@@ -233,6 +233,28 @@ const drawObjectFitContain = (context, image, x, y, width, height) => {
   context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
 };
 
+const drawTintedImage = (context, image, x, y, width, height, color, alpha = 1) => {
+  const imageWidth = image.width || image.naturalWidth || width;
+  const imageHeight = image.height || image.naturalHeight || height;
+  if (!imageWidth || !imageHeight || typeof document === 'undefined') return;
+
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = imageWidth;
+  maskCanvas.height = imageHeight;
+  const maskContext = maskCanvas.getContext('2d');
+  if (!maskContext) return;
+
+  maskContext.drawImage(image, 0, 0, imageWidth, imageHeight);
+  maskContext.globalCompositeOperation = 'source-in';
+  maskContext.fillStyle = color;
+  maskContext.fillRect(0, 0, imageWidth, imageHeight);
+
+  context.save();
+  context.globalAlpha = alpha;
+  context.drawImage(maskCanvas, x, y, width, height);
+  context.restore();
+};
+
 const drawShareCardImage = (context, image, x, y, width, height) => {
   context.save();
   context.beginPath();
@@ -692,11 +714,7 @@ const renderShareImageBlob = async (animePage, options) => {
       const naturalWidth = logoAsset.width || logoAsset.naturalWidth || 1;
       const naturalHeight = logoAsset.height || logoAsset.naturalHeight || 1;
       const logoWidth = Math.round(logoHeight * (naturalWidth / naturalHeight));
-      context.save();
-      context.filter = 'brightness(0) invert(1)';
-      context.globalAlpha = 0.96;
-      context.drawImage(logoAsset, SHARE_IMAGE_PADDING, 56, logoWidth, logoHeight);
-      context.restore();
+      drawTintedImage(context, logoAsset, SHARE_IMAGE_PADDING, 56, logoWidth, logoHeight, '#ffffff', 0.96);
     }
 
     const pageLabel = `${options.totalItems}作品中 ${options.pageNumber}/${options.totalPages}枚目`;
