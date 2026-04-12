@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import useTrailerPlaybackStatus from '../../hooks/useTrailerPlaybackStatus';
 import { resolveAnimeTitle } from '../../utils/animeList';
 import { getAnimeTrailerWatchUrl } from '../../utils/trailer';
@@ -46,13 +47,13 @@ function TrailerModal({ anime, onClose }) {
     setIsAudioToggleReady(false);
   }, [animeId]);
 
-  if (!anime || !trailer) return null;
+  if (!anime || !trailer || typeof document === 'undefined') return null;
 
   const title = resolveAnimeTitle(anime);
   const titleId = `trailer-modal-title-${animeId}`;
   const watchUrl = getAnimeTrailerWatchUrl(trailer);
 
-  return (
+  return createPortal(
     <div className="trailer-modal-backdrop" onClick={() => onClose?.()}>
       <section
         className="trailer-modal"
@@ -126,7 +127,8 @@ function TrailerModal({ anime, onClose }) {
           )}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 

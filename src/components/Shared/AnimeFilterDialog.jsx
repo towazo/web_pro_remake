@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { translateGenre, translateTag } from '../../constants/animeData';
 import {
   FILTER_MATCH_MODE_OPTIONS,
@@ -307,7 +308,7 @@ function AnimeFilterDialog({
         <p className="anime-filter-empty-summary">{emptySummaryText}</p>
       )}
 
-      {isOpen && (
+      {isOpen && typeof document !== 'undefined' && createPortal(
         <div
           className="anime-filter-modal-backdrop"
           onClick={() => setIsOpen(false)}
@@ -516,7 +517,8 @@ function AnimeFilterDialog({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

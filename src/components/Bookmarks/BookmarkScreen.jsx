@@ -17,6 +17,9 @@ import {
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
 const COLLECTION_PAGE_SIZE = 30;
+const BOOKMARK_SORT_OPTIONS = ANIME_SORT_OPTIONS.filter(
+  (option) => option.value !== 'rating' && option.value !== 'watchCount'
+);
 
 const normalizeRating = (value) => {
   const parsed = Number(value);
@@ -78,6 +81,14 @@ function BookmarkScreen({
     () => sortedBookmarks.some((anime) => anime?.id && !Array.isArray(anime?.tags)),
     [sortedBookmarks]
   );
+  const activeSortKey = useMemo(
+    () => (
+      BOOKMARK_SORT_OPTIONS.some((option) => option.value === sortKey)
+        ? sortKey
+        : 'added'
+    ),
+    [sortKey]
+  );
 
   const filteredBookmarks = useMemo(() => {
     return sortAnimeCollection(filterAnimeCollection(sortedBookmarks, {
@@ -87,11 +98,11 @@ function BookmarkScreen({
       selectedYear,
       matchMode: filterMatchMode,
     }), {
-      sortKey,
+      sortKey: activeSortKey,
       sortOrder,
       addedAtFields: ['bookmarkedAt', 'addedAt'],
     });
-  }, [sortedBookmarks, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, sortKey, sortOrder]);
+  }, [sortedBookmarks, searchQuery, selectedGenres, selectedTags, selectedYear, filterMatchMode, activeSortKey, sortOrder]);
   const totalPages = Math.max(1, Math.ceil(filteredBookmarks.length / COLLECTION_PAGE_SIZE));
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
   const pagedBookmarks = useMemo(() => {
@@ -493,9 +504,9 @@ function BookmarkScreen({
             showMinRating={false}
             toolbarSupplement={(
               <AnimeSortControl
-                sortKey={sortKey}
+                sortKey={activeSortKey}
                 sortOrder={sortOrder}
-                options={ANIME_SORT_OPTIONS}
+                options={BOOKMARK_SORT_OPTIONS}
                 onSortKeyChange={handleSortKeyChange}
                 onSortOrderChange={handleSortOrderChange}
                 selectAriaLabel="ブックマークの並び替え"

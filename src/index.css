@@ -6626,19 +6626,25 @@ button.card-watch-summary {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding:
+        max(20px, calc(16px + env(safe-area-inset-top)))
+        max(20px, calc(16px + env(safe-area-inset-right)))
+        max(20px, calc(16px + env(safe-area-inset-bottom)))
+        max(20px, calc(16px + env(safe-area-inset-left)));
     z-index: 3200;
 }
 
 .anime-filter-modal {
     width: min(760px, 100%);
     max-height: min(82vh, 780px);
+    max-height: min(82dvh, 780px);
     background: #fff;
     border: 1px solid #d8d8d8;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
     display: flex;
     flex-direction: column;
     position: relative;
+    overflow: hidden;
     z-index: 3201;
 }
 
@@ -6665,6 +6671,8 @@ body.filter-modal-open .add-toast {
 
 .trailer-modal {
     width: min(980px, 100%);
+    max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
     background: #050505;
     color: #fff;
     border: 1px solid rgba(255, 255, 255, 0.18);
@@ -6673,6 +6681,7 @@ body.filter-modal-open .add-toast {
     flex-direction: column;
     gap: 18px;
     padding: 20px;
+    overflow-y: auto;
 }
 
 body.trailer-modal-open {
@@ -6871,6 +6880,7 @@ body.trailer-modal-open .add-toast {
 .anime-filter-modal-body {
     padding: 18px 20px;
     overflow-y: auto;
+    min-height: 0;
     display: grid;
     gap: 14px;
 }
@@ -7129,13 +7139,18 @@ body.trailer-modal-open .add-toast {
     }
 
     .anime-filter-modal-backdrop {
-        padding: 12px;
+        padding:
+            max(12px, env(safe-area-inset-top))
+            max(12px, env(safe-area-inset-right))
+            max(12px, calc(12px + env(safe-area-inset-bottom)))
+            max(12px, env(safe-area-inset-left));
         align-items: flex-end;
     }
 
     .anime-filter-modal {
         width: 100%;
-        max-height: 88vh;
+        max-height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     }
 
     .anime-filter-modal-header,
@@ -7664,7 +7679,7 @@ body.trailer-modal-open .add-toast {
     top: max(16px, calc(12px + env(safe-area-inset-top)));
     left: 50%;
     transform: translateX(-50%);
-    z-index: 2300;
+    z-index: 3150;
     width: min(calc(100% - 24px), 520px);
     border: 1px solid #1f6a2a;
     background: rgba(245, 251, 246, 0.98);
