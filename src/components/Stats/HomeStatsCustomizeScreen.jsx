@@ -159,7 +159,7 @@ function HomeStatsCustomizeScreen({
   };
 
   const handleResetAllBackgrounds = () => {
-    const confirmed = window.confirm('上部バナー背景の設定をすべてリセットしますか？');
+    const confirmed = window.confirm('統計カード背景の設定をすべてリセットしますか？');
     if (!confirmed) return;
 
     setDraftBackgrounds(createEmptyHomeStatsCardBackgrounds());
@@ -193,9 +193,9 @@ function HomeStatsCustomizeScreen({
   return (
     <main className="home-stats-customize-page page-shell">
       <header className="home-stats-customize-header">
-        <h2 className="page-main-title">上部バナー背景カスタマイズ</h2>
+        <h2 className="page-main-title">統計カード背景カスタマイズ</h2>
         <p className="home-stats-customize-subtitle">
-          登録作品数・総エピソード数・最も見たジャンルの背景画像を設定できます。プレビューはその場で更新されます。
+          登録作品数・総エピソード数・最も見たジャンルの統計カード背景を設定できます。プレビューはその場で更新されます。
         </p>
       </header>
 

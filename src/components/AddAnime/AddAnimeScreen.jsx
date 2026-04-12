@@ -3673,15 +3673,6 @@ function AddAnimeScreen({
                 <section className="share-card-import-workspace">
                     {shareCardItems.length === 0 && (
                         <div className="normal-add-surface share-card-import-surface">
-                            <div className="normal-add-surface-head">
-                                <div className="normal-add-surface-heading">
-                                    <h3 className="normal-add-surface-title">共有カードから追加</h3>
-                                </div>
-                                <p className="normal-add-surface-text share-card-import-lead">
-                                    受け取ったカードを選択してください。右上のマーカーがあるカードだけ読み取れます。
-                                </p>
-                            </div>
-
                             <div className="share-card-import-body">
                                 <label className={`share-card-upload-box${shareCardLoading ? ' loading' : ''}`}>
                                     <input
@@ -3698,6 +3689,12 @@ function AddAnimeScreen({
                                         最大{SHARE_CARD_IMPORT_MAX_FILES}枚まで。読み取り後に追加先を選べます。
                                     </span>
                                 </label>
+                            </div>
+
+                            <div className="normal-add-surface-head">
+                                <p className="normal-add-surface-text share-card-import-lead">
+                                    受け取ったカードを選択してください。右上のマーカーがあるカードだけ読み取れます。
+                                </p>
                             </div>
 
                             <p className="share-card-creator-note">

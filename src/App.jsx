@@ -938,6 +938,13 @@ function App() {
     if (typeof window === 'undefined') return undefined;
 
     let animationFrameId = null;
+    const delayedUpdateTimeoutIds = new Set();
+
+    const getViewportHeight = () => {
+      const visualViewportHeight = Number(window.visualViewport?.height);
+      if (visualViewportHeight > 0) return visualViewportHeight;
+      return window.innerHeight || document.documentElement.clientHeight || 0;
+    };
 
     const updateFooterTouchState = () => {
       animationFrameId = null;
@@ -949,7 +956,7 @@ function App() {
       }
 
       const footerRect = footerElement.getBoundingClientRect();
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportHeight = getViewportHeight();
       const isTouching = footerRect.top <= viewportHeight && footerRect.bottom >= 0;
       const nextFooterHeight = Math.max(0, Math.ceil(footerElement.offsetHeight || footerRect.height || 0));
       setIsFooterTouchingViewport((current) => (current === isTouching ? current : isTouching));
@@ -963,9 +970,33 @@ function App() {
       animationFrameId = window.requestAnimationFrame(updateFooterTouchState);
     };
 
+    const clearDelayedFooterTouchStateUpdates = () => {
+      delayedUpdateTimeoutIds.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId);
+      });
+      delayedUpdateTimeoutIds.clear();
+    };
+
+    const scheduleSettledFooterTouchStateUpdate = () => {
+      clearDelayedFooterTouchStateUpdates();
+      scheduleFooterTouchStateUpdate();
+
+      [80, 220, 520].forEach((delay) => {
+        const timeoutId = window.setTimeout(() => {
+          delayedUpdateTimeoutIds.delete(timeoutId);
+          scheduleFooterTouchStateUpdate();
+        }, delay);
+        delayedUpdateTimeoutIds.add(timeoutId);
+      });
+    };
+
     updateFooterTouchState();
     window.addEventListener('scroll', scheduleFooterTouchStateUpdate, { passive: true });
-    window.addEventListener('resize', scheduleFooterTouchStateUpdate);
+    window.addEventListener('resize', scheduleSettledFooterTouchStateUpdate);
+    window.addEventListener('orientationchange', scheduleSettledFooterTouchStateUpdate);
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener('resize', scheduleSettledFooterTouchStateUpdate);
+    visualViewport?.addEventListener('scroll', scheduleFooterTouchStateUpdate, { passive: true });
     const resizeObserver = typeof window.ResizeObserver === 'function'
       ? new window.ResizeObserver(scheduleFooterTouchStateUpdate)
       : null;
@@ -979,8 +1010,12 @@ function App() {
       if (animationFrameId !== null) {
         window.cancelAnimationFrame(animationFrameId);
       }
+      clearDelayedFooterTouchStateUpdates();
       window.removeEventListener('scroll', scheduleFooterTouchStateUpdate);
-      window.removeEventListener('resize', scheduleFooterTouchStateUpdate);
+      window.removeEventListener('resize', scheduleSettledFooterTouchStateUpdate);
+      window.removeEventListener('orientationchange', scheduleSettledFooterTouchStateUpdate);
+      visualViewport?.removeEventListener('resize', scheduleSettledFooterTouchStateUpdate);
+      visualViewport?.removeEventListener('scroll', scheduleFooterTouchStateUpdate);
       resizeObserver?.disconnect();
     };
   }, [view, isFooterHiddenDuringTransition]);
@@ -1871,11 +1906,11 @@ function App() {
   };
 
   const isAddView = view === 'add' || view === 'addCurrent' || view === 'addNext';
-  const isHomeView = view === 'home'
-    || view === 'homeCustomize'
+  const isHomeCustomizeView = view === 'homeCustomize'
     || view === 'homeCustomizeSlider'
     || view === 'homeCustomizeStats'
     || view === 'homeCustomizeQuick';
+  const isHomeView = view === 'home' || isHomeCustomizeView;
   const isShareView = view === 'shareMethod' || view === 'shareImage' || view === 'shareText';
   const isMyListView = view === 'mylist';
   const shouldShowHomeOnboarding = view === 'home' && isOnboardingActive;
@@ -1955,7 +1990,7 @@ function App() {
     {
       key: 'home',
       label: 'ホーム',
-      active: isHomeView,
+      active: view === 'home',
       onClick: () => navigateTo('home'),
       disabled: isOnboardingNavigationLocked,
     },
@@ -1989,7 +2024,16 @@ function App() {
       disabledReason: 'マイリストに作品を追加すると使えます',
     },
   ];
-  const headerShortcutItems = shortcutItems;
+  const headerShortcutItems = [
+    ...shortcutItems,
+    {
+      key: 'settings',
+      label: '設定',
+      active: isHomeCustomizeView,
+      onClick: () => navigateTo('homeCustomize', { scrollToTopOnSameView: true }),
+      disabled: isOnboardingNavigationLocked,
+    },
+  ];
   const footerShareDisabled = isOnboardingNavigationLocked || animeList.length === 0;
   const footerShareDisabledReason = 'マイリストに作品を追加すると使えます';
   const openFooterShareView = (nextShareView) => {
@@ -2086,17 +2130,17 @@ function App() {
           disabled: isOnboardingNavigationLocked,
         },
         {
+          key: 'customize-quick',
+          label: 'クイック操作',
+          active: view === 'homeCustomizeQuick',
+          onClick: () => navigateTo('homeCustomizeQuick', { scrollToTopOnSameView: true }),
+          disabled: isOnboardingNavigationLocked,
+        },
+        {
           key: 'customize-stats',
           label: '統計カード',
           active: view === 'homeCustomizeStats',
           onClick: () => navigateTo('homeCustomizeStats', { scrollToTopOnSameView: true }),
-          disabled: isOnboardingNavigationLocked,
-        },
-        {
-          key: 'customize-quick',
-          label: 'ショートカット背景',
-          active: view === 'homeCustomizeQuick',
-          onClick: () => navigateTo('homeCustomizeQuick', { scrollToTopOnSameView: true }),
           disabled: isOnboardingNavigationLocked,
         },
       ],

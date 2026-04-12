@@ -22,6 +22,8 @@
     --page-transition-mid: #d6d6d6;
     --page-transition-soft: #b5b5b5;
     --page-transition-glow: #747474;
+    --app-safe-left: env(safe-area-inset-left);
+    --app-safe-right: env(safe-area-inset-right);
 }
 
 @media (max-width: 768px) {
@@ -32,6 +34,13 @@
         --fs-body-md: 0.9rem;
         --fs-body-sm: 0.8rem;
         --fs-caption: 0.74rem;
+    }
+}
+
+@media (max-width: 768px) and (orientation: portrait) {
+    :root {
+        --app-safe-left: 0px;
+        --app-safe-right: 0px;
     }
 }
 
@@ -88,8 +97,8 @@ body {
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding-left: max(40px, env(safe-area-inset-left));
-    padding-right: max(40px, env(safe-area-inset-right));
+    padding-left: max(40px, var(--app-safe-left));
+    padding-right: max(40px, var(--app-safe-right));
     position: relative;
 }
 
@@ -408,15 +417,15 @@ body {
 
 @media (max-width: 768px) {
     .app-container {
-        padding-left: max(20px, env(safe-area-inset-left));
-        padding-right: max(20px, env(safe-area-inset-right));
+        padding-left: max(20px, var(--app-safe-left));
+        padding-right: max(20px, var(--app-safe-right));
     }
 }
 
 @media (max-width: 480px) {
     .app-container {
-        padding-left: max(12px, env(safe-area-inset-left));
-        padding-right: max(12px, env(safe-area-inset-right));
+        padding-left: max(12px, var(--app-safe-left));
+        padding-right: max(12px, var(--app-safe-right));
     }
 }
 
@@ -861,8 +870,8 @@ body {
         grid-template-columns: auto auto;
         justify-content: space-between;
         gap: 10px;
-        padding-left: max(18px, env(safe-area-inset-left));
-        padding-right: max(18px, env(safe-area-inset-right));
+        padding-left: max(18px, var(--app-safe-left));
+        padding-right: max(18px, var(--app-safe-right));
     }
 
     .logo-button {
@@ -939,8 +948,8 @@ body {
 
 @media (max-width: 480px) {
     .app-header-inner {
-        padding-left: max(16px, env(safe-area-inset-left));
-        padding-right: max(16px, env(safe-area-inset-right));
+        padding-left: max(16px, var(--app-safe-left));
+        padding-right: max(16px, var(--app-safe-right));
     }
 
     .logo-button {
@@ -3013,7 +3022,7 @@ button.card-watch-summary {
 .app-footer {
     width: 100vw;
     margin: 72px calc(50% - 50vw) 0;
-    padding: 36px max(24px, env(safe-area-inset-right)) max(38px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+    padding: 36px max(24px, var(--app-safe-right)) max(38px, env(safe-area-inset-bottom)) max(24px, var(--app-safe-left));
     border-top: 3px solid #000;
     background: #111;
     color: #f5f5f5;
@@ -3190,7 +3199,7 @@ button.card-watch-summary {
 @media (max-width: 560px) {
     .app-footer {
         margin-top: 36px;
-        padding: 22px max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+        padding: 22px max(16px, var(--app-safe-right)) max(24px, env(safe-area-inset-bottom)) max(16px, var(--app-safe-left));
     }
 
     .app-footer-heading {
@@ -3247,8 +3256,8 @@ button.card-watch-summary {
 }
 
 .global-back-button {
-    --global-back-fixed-left: max(14px, calc(12px + env(safe-area-inset-left)));
-    --global-back-absolute-left: max(14px, calc(12px + env(safe-area-inset-left)));
+    --global-back-fixed-left: max(14px, calc(12px + var(--app-safe-left)));
+    --global-back-absolute-left: max(14px, calc(12px + var(--app-safe-left)));
     position: fixed;
     left: var(--global-back-fixed-left);
     bottom: max(14px, calc(12px + env(safe-area-inset-bottom)));
@@ -6633,9 +6642,9 @@ body.trailer-modal-open .global-back-button {
     justify-content: center;
     padding:
         max(20px, calc(16px + env(safe-area-inset-top)))
-        max(20px, calc(16px + env(safe-area-inset-right)))
+        max(20px, calc(16px + var(--app-safe-right)))
         max(20px, calc(16px + env(safe-area-inset-bottom)))
-        max(20px, calc(16px + env(safe-area-inset-left)));
+        max(20px, calc(16px + var(--app-safe-left)));
     z-index: 3200;
 }
 
@@ -7146,9 +7155,9 @@ body.trailer-modal-open .add-toast {
     .anime-filter-modal-backdrop {
         padding:
             max(12px, env(safe-area-inset-top))
-            max(12px, env(safe-area-inset-right))
+            max(12px, var(--app-safe-right))
             max(12px, calc(12px + env(safe-area-inset-bottom)))
-            max(12px, env(safe-area-inset-left));
+            max(12px, var(--app-safe-left));
         align-items: flex-end;
     }
 
@@ -8347,8 +8356,8 @@ body.trailer-modal-open .add-toast {
 
     .selection-action-dock,
     .bookmark-selection-dock {
-        left: max(0px, env(safe-area-inset-left));
-        right: max(0px, env(safe-area-inset-right));
+        left: max(0px, var(--app-safe-left));
+        right: max(0px, var(--app-safe-right));
         width: auto;
         transform: none;
     }
@@ -9332,16 +9341,8 @@ body.trailer-modal-open .add-toast {
     display: block;
 }
 
-.share-card-import-surface .normal-add-surface-heading {
-    display: block;
-}
-
-.share-card-import-surface .normal-add-surface-title {
-    display: block;
-}
-
 .share-card-import-lead {
-    margin-top: 7px;
+    margin-top: 0;
     max-width: 620px;
 }
 
@@ -9675,29 +9676,28 @@ body.trailer-modal-open .add-toast {
 
 @media (max-width: 768px) {
     .share-card-workspace-toolbar {
-        padding: 10px;
+        padding: 8px;
         gap: 10px;
     }
 
     .share-card-workspace-toolbar .add-workspace-toolbar-summary {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
         gap: 6px;
     }
 
     .share-card-workspace-toolbar .entry-guide-badge,
     .share-card-workspace-toolbar .add-workspace-pill {
         min-width: 0;
-        min-height: 34px;
-        padding: 7px 8px;
-        display: flex;
+        min-height: 0;
+        padding: 4px 8px;
+        display: inline-flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         text-align: center;
-        line-height: 1.25;
-        white-space: normal;
-        word-break: keep-all;
-        overflow-wrap: normal;
+        line-height: 1;
+        white-space: nowrap;
     }
 
     .share-card-workspace-toolbar .add-workspace-toolbar-actions {
@@ -9717,15 +9717,8 @@ body.trailer-modal-open .add-toast {
         padding: 14px;
     }
 
-    .share-card-import-surface .normal-add-surface-title {
-        border-left: 4px solid #000;
-        padding-left: 10px;
-        font-size: 1rem;
-        line-height: 1.35;
-    }
-
     .share-card-import-lead {
-        margin-top: 10px;
+        margin-top: 0;
     }
 
     .share-card-target-block {
@@ -9788,14 +9781,15 @@ body.trailer-modal-open .add-toast {
 
 @media (max-width: 480px) {
     .share-card-workspace-toolbar {
-        padding: 9px;
+        padding: 8px;
     }
 
     .share-card-workspace-toolbar .entry-guide-badge,
     .share-card-workspace-toolbar .add-workspace-pill {
-        min-height: 32px;
-        font-size: 0.68rem;
-        padding: 6px;
+        min-height: 0;
+        font-size: 0.64rem;
+        padding: 4px 6px;
+        line-height: 1;
     }
 
     .share-card-import-workspace {
