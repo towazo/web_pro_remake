@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 import { startTransition } from 'react';
 
@@ -616,6 +616,11 @@ function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const previousScrollRestoration = window.history.scrollRestoration;
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+
     const normalizedView = getViewFromLocation(window.location.hash, window.location.pathname);
     const state = { ...(window.history.state || {}), appView: normalizedView };
     window.history.replaceState(state, '', APP_VIEW_HASHES[normalizedView] || '#/');
@@ -634,7 +639,12 @@ function App() {
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if ('scrollRestoration' in window.history) {
+        window.history.scrollRestoration = previousScrollRestoration;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -1056,11 +1066,7 @@ function App() {
   }, []);
 
   // 3. Scroll Reset on View Change
-  useEffect(() => {
-    if (navigationTypeRef.current === 'pop') {
-      navigationTypeRef.current = 'idle';
-      return;
-    }
+  useLayoutEffect(() => {
     navigationTypeRef.current = 'idle';
 
     scrollDocumentToTop();
@@ -1070,12 +1076,13 @@ function App() {
     };
 
     const animId = requestAnimationFrame(scrollReset);
-
     const timeoutId = setTimeout(scrollReset, 10);
+    const lateTimeoutId = setTimeout(scrollReset, 120);
 
     return () => {
       cancelAnimationFrame(animId);
       clearTimeout(timeoutId);
+      clearTimeout(lateTimeoutId);
     };
   }, [view]);
 
