@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 import { startTransition } from 'react';
 
@@ -2255,10 +2255,8 @@ function App() {
               title="作品を追加"
             >
               <svg className="header-search-illustration" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-                <circle cx="14" cy="14" r="7" />
-                <path d="M19.4 19.4 26 26" />
-                <path d="M14 10.6v6.8" />
-                <path d="M10.6 14h6.8" />
+                <path d="M16 8v16" />
+                <path d="M8 16h16" />
               </svg>
             </a>
 
