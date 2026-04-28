@@ -535,7 +535,11 @@ function BookmarkScreen({
       )}
 
       {actionNotice.message && (
-        <div className={`bookmark-action-notice ${actionNotice.type}`}>
+        <div
+          className={`bookmark-action-notice ${actionNotice.type}`}
+          role={actionNotice.type === 'error' ? 'alert' : 'status'}
+          aria-live={actionNotice.type === 'error' ? 'assertive' : 'polite'}
+        >
           {actionNotice.message}
         </div>
       )}

@@ -78,7 +78,7 @@ function HomeFeaturedSliderCustomizeScreen({
 
         {selectedSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason && isCurrentSeasonUnavailable && !isCurrentSeasonLoading && (
           <div className="home-featured-slider-source-note warning" role="status" aria-live="polite">
-            今季放送中の一覧を取得できなかったため、スライドを表示できません。時間を置いて再度お試しください。
+            今季放送中の一覧が空、または取得できなかったため、ホームではマイリストの作品を代わりに表示しています。時間を置いて再度お試しください。
           </div>
         )}
       </section>

@@ -6,9 +6,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/anilist': {
-        target: 'https://graphql.anilist.co',
+        target: 'http://localhost:8787',
         changeOrigin: true,
-        secure: true,
+        secure: false,
         configure: (proxy) => {
           proxy.on('error', (err, _req, _res) => {
             console.log('[proxy:/anilist] error', err?.message || err);
@@ -21,8 +21,8 @@ export default defineConfig({
           });
         },
         rewrite: (path) => {
-          const rewritten = path.replace(/^\/anilist(?=\/|$)/, '');
-          return rewritten === '' ? '/' : rewritten;
+          const rewritten = path.replace(/^\/anilist(?=\/|$)/, '/anilist');
+          return rewritten || '/anilist';
         },
       },
       '/api': {

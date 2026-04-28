@@ -7,10 +7,21 @@ import {
 } from '../utils/contentFilters';
 import { normalizeAnimeTrailer } from '../utils/trailer';
 
-const ANILIST_ENDPOINT = String(
+const ANILIST_DIRECT_ENDPOINT = 'https://graphql.anilist.co';
+const ANILIST_PRIMARY_ENDPOINT = String(
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ANILIST_ENDPOINT)
     || '/anilist/'
 ).trim() || '/anilist/';
+const normalizeAniListEndpoint = (value = '') => String(value || '').trim().replace(/\/+$/, '') || '';
+const ANILIST_ENDPOINTS = [
+  ANILIST_PRIMARY_ENDPOINT,
+  ANILIST_DIRECT_ENDPOINT,
+].reduce((list, endpoint) => {
+  const normalizedKey = normalizeAniListEndpoint(endpoint);
+  if (!normalizedKey || list.some((item) => normalizeAniListEndpoint(item) === normalizedKey)) return list;
+  return [...list, endpoint];
+}, []);
+const ANILIST_ENDPOINT_FALLBACK_STATUSES = new Set([403, 404, 405]);
 
 const ANIME_QUERY = `
   query ($search: String, $formatIn: [MediaFormat], $countryOfOrigin: CountryCode) {
@@ -408,6 +419,24 @@ const parseRetryAfterMs = (response) => {
   return null;
 };
 
+const parseRateLimitResetMs = (response) => {
+  const resetAfter = response.headers?.get?.('X-RateLimit-Reset-After');
+  const resetAfterSeconds = Number(resetAfter);
+  if (Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0) {
+    return resetAfterSeconds * 1000;
+  }
+
+  const reset = response.headers?.get?.('X-RateLimit-Reset');
+  const resetValue = Number(reset);
+  if (Number.isFinite(resetValue) && resetValue > 0) {
+    const resetMs = resetValue > 1000000000000 ? resetValue : resetValue * 1000;
+    const waitMs = resetMs - Date.now();
+    return waitMs > 0 ? waitMs : 0;
+  }
+
+  return null;
+};
+
 const readHeaderValue = (response, name) => {
   const value = response?.headers?.get?.(name);
   if (typeof value !== 'string') return null;
@@ -417,7 +446,7 @@ const readHeaderValue = (response, name) => {
 
 const extractRateLimitMeta = (response) => ({
   retryAfter: readHeaderValue(response, 'Retry-After'),
-  retryAfterMs: parseRetryAfterMs(response),
+  retryAfterMs: parseRetryAfterMs(response) ?? parseRateLimitResetMs(response),
   remaining: readHeaderValue(response, 'X-RateLimit-Remaining'),
   limit: readHeaderValue(response, 'X-RateLimit-Limit'),
   reset: readHeaderValue(response, 'X-RateLimit-Reset'),
@@ -668,20 +697,74 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (signal?.aborted) throw createAbortError();
     try {
-      const response = await fetchWithTimeout(
-        ANILIST_ENDPOINT,
-        {
-          method: 'POST',
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({ query, variables }),
-          signal,
-        },
-        timeoutMs
-      );
+      let response = null;
+      let endpointUsed = ANILIST_ENDPOINTS[0] || ANILIST_DIRECT_ENDPOINT;
+      for (let endpointIndex = 0; endpointIndex < ANILIST_ENDPOINTS.length; endpointIndex += 1) {
+        const endpoint = ANILIST_ENDPOINTS[endpointIndex];
+        try {
+          const endpointResponse = await fetchWithTimeout(
+            endpoint,
+            {
+              method: 'POST',
+              cache: 'no-store',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({ query, variables }),
+              signal,
+            },
+            timeoutMs
+          );
+
+          const canFallbackEndpoint = endpointIndex < ANILIST_ENDPOINTS.length - 1
+            && ANILIST_ENDPOINT_FALLBACK_STATUSES.has(Number(endpointResponse.status));
+          if (canFallbackEndpoint) {
+            const fallbackRateLimitMeta = extractRateLimitMeta(endpointResponse);
+            const fallbackRetryAfterMs = Number.isFinite(Number(fallbackRateLimitMeta.retryAfterMs))
+              ? Number(fallbackRateLimitMeta.retryAfterMs)
+              : null;
+            emitAttemptInfo({
+              kind: 'endpoint',
+              status: endpointResponse.status,
+              attempt,
+              maxAttempts,
+              waitMs: 0,
+              retryAfterMs: fallbackRetryAfterMs,
+              rateLimit: fallbackRateLimitMeta,
+              endpoint,
+              willRetry: true,
+            });
+            continue;
+          }
+
+          response = endpointResponse;
+          endpointUsed = endpoint;
+          break;
+        } catch (endpointError) {
+          if (isAbortError(endpointError) || signal?.aborted) {
+            throw endpointError;
+          }
+          const canFallbackEndpoint = endpointIndex < ANILIST_ENDPOINTS.length - 1;
+          if (!canFallbackEndpoint) {
+            throw endpointError;
+          }
+          emitAttemptInfo({
+            kind: 'endpoint',
+            status: Number(endpointError?.status) || null,
+            attempt,
+            maxAttempts,
+            waitMs: 0,
+            error: endpointError,
+            endpoint,
+            willRetry: true,
+          });
+        }
+      }
+
+      if (!response) {
+        throw new Error('AniList endpoint unavailable');
+      }
       const rateLimitMeta = extractRateLimitMeta(response);
       const retryAfterMs = Number.isFinite(Number(rateLimitMeta.retryAfterMs))
         ? Number(rateLimitMeta.retryAfterMs)
@@ -707,6 +790,7 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
               errors: result.errors,
               retryAfterMs,
               rateLimit: rateLimitMeta,
+              endpoint: endpointUsed,
               willRetry: true,
             });
             if (signal?.aborted) throw createAbortError();
@@ -724,6 +808,7 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
               errors: result.errors,
               retryAfterMs,
               rateLimit: rateLimitMeta,
+              endpoint: endpointUsed,
               willRetry: false,
             });
           }
@@ -735,13 +820,14 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
             errors: result.errors,
             retryAfterMs,
             rateLimit: rateLimitMeta,
+            endpoint: endpointUsed,
           };
         }
-        return { ok: true, status: 200, data: result?.data ?? null, retryAfterMs, rateLimit: rateLimitMeta };
+        return { ok: true, status: 200, data: result?.data ?? null, retryAfterMs, rateLimit: rateLimitMeta, endpoint: endpointUsed };
       }
 
       const status = response.status;
-      const retryable = status === 404 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+      const retryable = status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
       if (!retryable || attempt === maxAttempts) {
         emitAttemptInfo({
           kind: 'http',
@@ -751,6 +837,7 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
           waitMs: 0,
           retryAfterMs,
           rateLimit: rateLimitMeta,
+          endpoint: endpointUsed,
           willRetry: false,
         });
         return {
@@ -760,6 +847,7 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
           errors: null,
           retryAfterMs,
           rateLimit: rateLimitMeta,
+          endpoint: endpointUsed,
         };
       }
 
@@ -775,6 +863,7 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
         waitMs,
         retryAfterMs,
         rateLimit: rateLimitMeta,
+        endpoint: endpointUsed,
         willRetry: true,
       });
       if (signal?.aborted) throw createAbortError();

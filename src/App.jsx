@@ -62,7 +62,7 @@ import {
   writeHomeFeaturedSliderSourceToStorage,
 } from './utils/homeFeaturedSliderSource';
 import {
-  readHomeCurrentSeasonFeaturedAnimeListFromStorage,
+  readHomeCurrentSeasonFeaturedCacheStateFromStorage,
   writeHomeCurrentSeasonFeaturedAnimeListToStorage,
 } from './utils/homeCurrentSeasonFeaturedCache';
 import {
@@ -277,6 +277,7 @@ const COLLECTION_PAGE_SIZE = 30;
 const DETAIL_ENRICHMENT_RETRY_BASE_MS = 4000;
 const DETAIL_ENRICHMENT_RETRY_MAX_MS = 60000;
 const FEATURED_SLIDER_CURRENT_SEASON_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
+const FEATURED_SLIDER_CURRENT_SEASON_MAX_PAGES = 4;
 const PAGE_TRANSITION_FOOTER_HIDE_MS = 1200;
 const LAUNCH_SPLASH_DURATION_MS = 4500;
 const REDUCED_MOTION_LAUNCH_SPLASH_DURATION_MS = 1400;
@@ -549,21 +550,30 @@ function App() {
     description: '来季に放送予定の作品を表示しています。気になる作品を先にブックマークできます。',
     locked: true,
   }), [nextSeasonInfo, nextSeasonLabel]);
-  const cachedCurrentSeasonFeaturedAnimeList = useMemo(() => (
-    sanitizeAnimeList(readHomeCurrentSeasonFeaturedAnimeListFromStorage(currentSeasonInfo), {
-      applyDisplayFilter: true,
-    })
-  ), [currentSeasonInfo]);
+  const cachedCurrentSeasonFeaturedCacheState = useMemo(() => {
+    const cacheState = readHomeCurrentSeasonFeaturedCacheStateFromStorage(currentSeasonInfo);
+    return {
+      ...cacheState,
+      items: sanitizeAnimeList(cacheState.items, {
+        applyDisplayFilter: true,
+      }),
+    };
+  }, [currentSeasonInfo]);
   const [homeFeaturedSliderSource, setHomeFeaturedSliderSource] = useState(() =>
     readHomeFeaturedSliderSourceFromStorage()
   );
-  const [currentSeasonFeaturedAnimeList, setCurrentSeasonFeaturedAnimeList] = useState(() => cachedCurrentSeasonFeaturedAnimeList);
+  const [currentSeasonFeaturedAnimeList, setCurrentSeasonFeaturedAnimeList] = useState(() => cachedCurrentSeasonFeaturedCacheState.items);
   const [isCurrentSeasonFeaturedLoading, setIsCurrentSeasonFeaturedLoading] = useState(false);
-  const [hasCurrentSeasonFeaturedLoaded, setHasCurrentSeasonFeaturedLoaded] = useState(() => cachedCurrentSeasonFeaturedAnimeList.length > 0);
-  const [hasCurrentSeasonFeaturedError, setHasCurrentSeasonFeaturedError] = useState(false);
+  const [hasCurrentSeasonFeaturedLoaded, setHasCurrentSeasonFeaturedLoaded] = useState(() => cachedCurrentSeasonFeaturedCacheState.items.length > 0);
+  const [isCurrentSeasonFeaturedCacheFresh, setIsCurrentSeasonFeaturedCacheFresh] = useState(() => (
+    cachedCurrentSeasonFeaturedCacheState.isFresh
+  ));
   const [featuredSliderState, setFeaturedSliderState] = useState(() => (
     homeFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
-      ? buildFeaturedSliderState([], getFeaturedSliderBuildOptions(HOME_FEATURED_SLIDER_SOURCES.currentSeason))
+      ? buildFeaturedSliderState(
+        cachedCurrentSeasonFeaturedCacheState.items,
+        getFeaturedSliderBuildOptions(HOME_FEATURED_SLIDER_SOURCES.currentSeason)
+      )
       : buildFeaturedSliderState(animeList, getFeaturedSliderBuildOptions(HOME_FEATURED_SLIDER_SOURCES.myList))
   ));
   const [searchQuery, setSearchQuery] = useState("");
@@ -607,6 +617,7 @@ function App() {
   const featuredShuffleTokenRef = useRef(0);
   const featuredSourceAnimeListRef = useRef(animeList);
   const currentSeasonFeaturedRequestIdRef = useRef(0);
+  const currentSeasonFeaturedFetchAttemptedRef = useRef(new Set());
   const detailEnrichmentStateRef = useRef(new Map());
   const detailEnrichmentRequestInFlightRef = useRef(false);
   const detailEnrichmentAbortControllerRef = useRef(null);
@@ -634,7 +645,13 @@ function App() {
   const tagTranslationVersion = useTagTranslationVersion();
   const isPageScrollIdle = usePageScrollIdle();
   const hasCurrentSeasonFeaturedSlides = currentSeasonFeaturedAnimeList.length > 0;
-  const effectiveFeaturedSliderSource = homeFeaturedSliderSource;
+  const shouldFallbackCurrentSeasonFeaturedToMyList = homeFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
+    && hasCurrentSeasonFeaturedLoaded
+    && !isCurrentSeasonFeaturedLoading
+    && !hasCurrentSeasonFeaturedSlides;
+  const effectiveFeaturedSliderSource = shouldFallbackCurrentSeasonFeaturedToMyList
+    ? HOME_FEATURED_SLIDER_SOURCES.myList
+    : homeFeaturedSliderSource;
   const featuredSourceAnimeList = useMemo(
     () => (effectiveFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
       ? currentSeasonFeaturedAnimeList
@@ -661,13 +678,20 @@ function App() {
     () => `${effectiveFeaturedSliderSource}:${featuredSourceAnimeList.map((anime) => String(anime?.id ?? '')).join('|')}`,
     [effectiveFeaturedSliderSource, featuredSourceAnimeList]
   );
-  const isCurrentSeasonFeaturedUnavailable = homeFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
-    && hasCurrentSeasonFeaturedLoaded
-    && !isCurrentSeasonFeaturedLoading
-    && !hasCurrentSeasonFeaturedSlides
-    && hasCurrentSeasonFeaturedError;
+  const isCurrentSeasonFeaturedUnavailable = shouldFallbackCurrentSeasonFeaturedToMyList;
   const shouldShowFeaturedSliderLoading = homeFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
     && !hasCurrentSeasonFeaturedLoaded;
+  const shouldUseImmediateFeaturedFallback = shouldFallbackCurrentSeasonFeaturedToMyList
+    && (!Array.isArray(featuredSliderState?.slides) || featuredSliderState.slides.length === 0);
+  const immediateFeaturedFallbackState = useMemo(() => {
+    if (!shouldUseImmediateFeaturedFallback) return null;
+
+    return buildFeaturedSliderState(animeList, {
+      ...getFeaturedSliderBuildOptions(HOME_FEATURED_SLIDER_SOURCES.myList),
+      shuffleToken: `current-season-fallback-${animeList.map((anime) => String(anime?.id ?? '')).join('|')}`,
+    });
+  }, [animeList, shouldUseImmediateFeaturedFallback]);
+  const visibleFeaturedSliderState = immediateFeaturedFallbackState || featuredSliderState;
 
   const buildNextFeaturedSliderState = useCallback((options = {}) => {
     featuredShuffleTokenRef.current += 1;
@@ -1438,19 +1462,28 @@ function App() {
   // 2. Home Featured Source
   useEffect(() => {
     if (homeFeaturedSliderSource !== HOME_FEATURED_SLIDER_SOURCES.currentSeason) return undefined;
-    if (hasCurrentSeasonFeaturedLoaded) return undefined;
+    if (hasCurrentSeasonFeaturedLoaded && isCurrentSeasonFeaturedCacheFresh) return undefined;
+
+    const fetchKey = `${currentSeasonAddPreset.year}:${currentSeasonAddPreset.mediaSeason}`;
+    if (
+      hasCurrentSeasonFeaturedLoaded
+      && !isCurrentSeasonFeaturedCacheFresh
+      && currentSeasonFeaturedFetchAttemptedRef.current.has(fetchKey)
+    ) {
+      return undefined;
+    }
+    currentSeasonFeaturedFetchAttemptedRef.current.add(fetchKey);
 
     const controller = new AbortController();
     const requestId = currentSeasonFeaturedRequestIdRef.current + 1;
     currentSeasonFeaturedRequestIdRef.current = requestId;
-    setIsCurrentSeasonFeaturedLoading(true);
-    setHasCurrentSeasonFeaturedError(false);
+    setIsCurrentSeasonFeaturedLoading(currentSeasonFeaturedAnimeList.length === 0);
 
     const run = async () => {
       try {
         const result = await fetchAnimeByYearAllPages(currentSeasonAddPreset.year, {
           perPage: 50,
-          maxPages: 140,
+          maxPages: FEATURED_SLIDER_CURRENT_SEASON_MAX_PAGES,
           formatIn: FEATURED_SLIDER_CURRENT_SEASON_FORMATS,
           timeoutMs: 10000,
           maxAttempts: 4,
@@ -1477,16 +1510,19 @@ function App() {
         );
 
         startTransition(() => {
-          setCurrentSeasonFeaturedAnimeList(nextItems);
+          setCurrentSeasonFeaturedAnimeList((currentItems) => (
+            nextItems.length > 0 ? nextItems : currentItems
+          ));
           setHasCurrentSeasonFeaturedLoaded(true);
-          setHasCurrentSeasonFeaturedError(Boolean(result?.error) && nextItems.length === 0);
+          setIsCurrentSeasonFeaturedCacheFresh(nextItems.length > 0);
         });
-        writeHomeCurrentSeasonFeaturedAnimeListToStorage(currentSeasonInfo, nextItems);
+        if (nextItems.length > 0) {
+          writeHomeCurrentSeasonFeaturedAnimeListToStorage(currentSeasonInfo, nextItems);
+        }
       } catch (error) {
         if (controller.signal.aborted || currentSeasonFeaturedRequestIdRef.current !== requestId) return;
-        setCurrentSeasonFeaturedAnimeList([]);
         setHasCurrentSeasonFeaturedLoaded(true);
-        setHasCurrentSeasonFeaturedError(true);
+        setIsCurrentSeasonFeaturedCacheFresh(false);
       } finally {
         if (!controller.signal.aborted && currentSeasonFeaturedRequestIdRef.current === requestId) {
           setIsCurrentSeasonFeaturedLoading(false);
@@ -1501,9 +1537,11 @@ function App() {
     };
   }, [
     currentSeasonAddPreset,
+    currentSeasonFeaturedAnimeList.length,
     currentSeasonInfo,
     hasCurrentSeasonFeaturedLoaded,
     homeFeaturedSliderSource,
+    isCurrentSeasonFeaturedCacheFresh,
   ]);
 
   // 3. Featured Content Selection
@@ -3090,8 +3128,8 @@ function App() {
       ) : (
         <>
           <HeroSlider
-            slides={featuredSliderState.slides}
-            sourceType={featuredSliderState.sourceType}
+            slides={visibleFeaturedSliderState.slides}
+            sourceType={visibleFeaturedSliderState.sourceType}
             myListIdSet={myListIdSet}
             bookmarkIdSet={bookmarkIdSet}
             onAddAnime={handleAddAnime}
@@ -3101,7 +3139,7 @@ function App() {
             onPlayTrailer={handleOpenTrailer}
             onCycleComplete={handleFeaturedSlideCycleComplete}
             onTutorialAction={handleTutorialSliderAction}
-            showRefreshButton={featuredSliderState.showRefreshButton}
+            showRefreshButton={visibleFeaturedSliderState.showRefreshButton}
             isRefreshing={isRefreshingFeatured}
             isLoading={shouldShowFeaturedSliderLoading}
           />

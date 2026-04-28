@@ -1,7 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
     fetchAnimeByYearAllPages,
-    fetchAnimeDetails,
     fetchAnimeDetailsById,
     fetchAnimeDetailsByIds,
     fetchAnimeDetailsBulk,
@@ -130,10 +129,16 @@ const createRequestIssueState = () => ({
     retryAfterMs: 0
 });
 
+const buildApiUnavailableMessage = (targetLabel = '作品情報') => (
+    `${targetLabel}を外部APIから取得できませんでした。`
+);
+
 const collectRequestIssue = (bucket, info) => {
     if (!bucket || !info) return;
     const statusCode = Number(info?.status);
+    const hasGraphQLErrors = Array.isArray(info?.errors) && info.errors.length > 0;
     const errorText = [
+        info?.message || '',
         info?.error?.message || '',
         Array.isArray(info?.errors)
             ? info.errors.map((item) => item?.message || '').join(' ')
@@ -144,10 +149,10 @@ const collectRequestIssue = (bucket, info) => {
     if (statusCode === 429 || hasRateLimitText) {
         bucket.rateLimited = true;
     }
-    if (!Number.isFinite(statusCode) || statusCode === 0 || statusCode >= 500) {
+    if (!Number.isFinite(statusCode) || statusCode === 0 || statusCode >= 400 || (hasGraphQLErrors && !hasRateLimitText)) {
         bucket.upstreamError = true;
     }
-    const retryAfterMs = Number(info?.retryAfterMs ?? info?.rateLimit?.retryAfterMs);
+    const retryAfterMs = extractRetryAfterMsFromInfo(info);
     if (Number.isFinite(retryAfterMs) && retryAfterMs > bucket.retryAfterMs) {
         bucket.retryAfterMs = retryAfterMs;
     }
@@ -273,9 +278,9 @@ const clearBulkInterruptedHistory = () => {
 const buildApiRateLimitCountdownMessage = (countdownSec = 0) => {
     const safeCountdown = Math.max(0, Math.floor(Number(countdownSec) || 0));
     if (safeCountdown > 0) {
-        return `現在APIのアクセス制限中です。あと${safeCountdown}秒で再度利用可能になります。`;
+        return '現在APIのアクセス制限中です。';
     }
-    return '現在APIのアクセス制限中です。まもなく再度利用可能になります。';
+    return '現在APIのアクセス制限中です。';
 };
 
 const buildApiRateLimitMessage = (retryAfterMs = 0) => {
@@ -298,7 +303,29 @@ const getRetryUntilTs = (retryAfterMs = 0) => {
 };
 
 const hasRateLimitError = (value) => RATE_LIMIT_MESSAGE_PATTERN.test(String(value || ''));
-const extractRetryAfterMsFromInfo = (info) => parsePositiveMs(info?.retryAfterMs ?? info?.rateLimit?.retryAfterMs);
+const extractRetryAfterMsFromInfo = (info) => {
+    const directRetryAfterMs = parsePositiveMs(info?.retryAfterMs ?? info?.rateLimit?.retryAfterMs);
+    if (directRetryAfterMs > 0) return directRetryAfterMs;
+
+    const retryAfterSeconds = Number(info?.rateLimit?.retryAfter);
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+        return retryAfterSeconds * 1000;
+    }
+
+    const resetAfterSeconds = Number(info?.rateLimit?.resetAfter);
+    if (Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0) {
+        return resetAfterSeconds * 1000;
+    }
+
+    const resetValue = Number(info?.rateLimit?.reset);
+    if (Number.isFinite(resetValue) && resetValue > 0) {
+        const resetMs = resetValue > 1000000000000 ? resetValue : resetValue * 1000;
+        const waitMs = resetMs - Date.now();
+        return waitMs > 0 ? waitMs : 0;
+    }
+
+    return 0;
+};
 const isRateLimitRetryInfo = (info) => {
     if (!info || typeof info !== 'object') return false;
     const statusCode = Number(info?.status);
@@ -322,6 +349,32 @@ const buildRateLimitMessage = (
         ? `あと${Math.max(1, Math.ceil(waitMs / 1000))}秒後に再試行可能です。`
         : 'しばらくしてから再試行してください。';
     return `アクセスが集中しています。${detailMessage} ${retryText}`;
+};
+
+const cleanApiOperationMessage = (message = '', countdownSec = 0) => {
+    let text = String(message || '').trim();
+    if (!text) return '';
+
+    const safeCountdownSec = Math.max(0, Math.floor(Number(countdownSec) || 0));
+    if (safeCountdownSec > 0) {
+        const countdownPatterns = [
+            new RegExp(`あと${safeCountdownSec}秒(?:後)?(?:で|に)?再(?:度)?(?:試行|利用)可能(?:になります|です)?。?`, 'g'),
+            new RegExp(`あと${safeCountdownSec}秒(?:後)?(?:で|に)?再(?:度)?利用可能になります。?`, 'g'),
+        ];
+        countdownPatterns.forEach((pattern) => {
+            text = text.replace(pattern, '');
+        });
+    }
+
+    text = text
+        .replace(/回復時間はAPIから返っていないため不明です。?/g, '')
+        .replace(/時間をおいて再試行してください。?/g, '')
+        .replace(/しばらくしてから再試行してください。?/g, '')
+        .replace(/まもなく再度利用可能になります。?/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    return text;
 };
 
 const RATING_VALUES = [1, 2, 3, 4, 5];
@@ -373,6 +426,75 @@ const InlineRatingPicker = ({
         </div>
     );
 };
+
+function ApiOperationStatusPanel({
+    tone = 'unavailable',
+    title = '',
+    message = '',
+    countdownSec = 0,
+    recoveryText = '',
+    hint = '',
+    onRetry = null,
+    retryDisabled = false,
+    retryLabel = '再試行',
+    compact = false
+}) {
+    const isRateLimit = tone === 'rate-limit';
+    const safeCountdownSec = Math.max(0, Math.floor(Number(countdownSec) || 0));
+    const panelTitle = title || (isRateLimit ? 'APIアクセス制限中' : '外部APIから取得できません');
+    const defaultRecoveryText = isRateLimit
+        ? (
+            safeCountdownSec > 0
+                ? `あと${safeCountdownSec}秒で再試行できます。`
+                : '回復時間はAPIから返っていません。少し時間をおいて再試行してください。'
+        )
+        : '回復時間はAPIから返っていないため不明です。';
+    const resolvedRecoveryText = recoveryText || defaultRecoveryText;
+    const resolvedHint = hint || (
+        isRateLimit
+            ? '入力内容の問題ではありません。待機後に同じ操作を再試行できます。'
+            : '通信状況や外部サービス側の状態が原因の可能性があります。入力を消さずに時間をおいて再試行してください。'
+    );
+    const displayMessage = cleanApiOperationMessage(message, safeCountdownSec);
+    const canRetry = typeof onRetry === 'function';
+
+    return (
+        <div className={`api-operation-status ${isRateLimit ? 'rate-limit' : 'unavailable'}${compact ? ' compact' : ''}`}>
+            <div className="api-operation-status-main">
+                <div className="api-operation-status-label">
+                    {isRateLimit ? '一時停止' : '取得不可'}
+                </div>
+                <div className="api-operation-status-copy">
+                    <div className="api-operation-status-title">{panelTitle}</div>
+                    {displayMessage && (
+                        <div className="api-operation-status-message">{displayMessage}</div>
+                    )}
+                    <div className="api-operation-status-recovery">{resolvedRecoveryText}</div>
+                    <div className="api-operation-status-hint">
+                        {resolvedHint}
+                    </div>
+                </div>
+            </div>
+            {canRetry && (
+                <div className="api-operation-status-actions">
+                    {safeCountdownSec > 0 && (
+                        <span className="api-operation-status-countdown">
+                            再試行まで: {safeCountdownSec}秒
+                        </span>
+                    )}
+                    <button
+                        type="button"
+                        className="api-operation-status-retry"
+                        onClick={onRetry}
+                        disabled={retryDisabled || safeCountdownSec > 0}
+                    >
+                        {retryLabel}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
 
 const MiniStarRating = ({
     value = null,
@@ -873,7 +995,7 @@ function AddAnimeScreen({
             const requestIssue = createRequestIssueState();
             try {
                 const results = await searchAnimeList(normalizedQuery, 8, {
-                    maxTerms: 4,
+                    maxTerms: 2,
                     signal: requestController.signal,
                     onRetry: (info) => {
                         collectRequestIssue(requestIssue, info);
@@ -896,7 +1018,7 @@ function AddAnimeScreen({
                     } else if (requestIssue.upstreamError) {
                         setSuggestionFeedback({
                             type: 'error',
-                            message: '候補の取得に失敗しました。時間をおいて再入力してください。'
+                            message: buildApiUnavailableMessage('候補一覧')
                         });
                     } else {
                         setSuggestionFeedback({
@@ -939,7 +1061,7 @@ function AddAnimeScreen({
                     setSuggestionRetryCountdownSec(0);
                     setSuggestionFeedback({
                         type: 'error',
-                        message: '候補の取得に失敗しました。時間をおいて再入力してください。'
+                        message: buildApiUnavailableMessage('候補一覧')
                     });
                 }
             } finally {
@@ -1352,7 +1474,7 @@ function AddAnimeScreen({
                     const retryAfterMs = parsePositiveMs(error?.retryAfterMs) || parsePositiveMs(requestIssue.retryAfterMs);
                     const baseMessage = isRateLimit
                         ? buildApiRateLimitMessage(retryAfterMs)
-                        : `${sourceLabel}の取得に失敗しました。時間をおいて再試行してください。`;
+                        : buildApiUnavailableMessage(sourceLabel);
                     const debugMessage = (typeof import.meta !== 'undefined' && import.meta.env?.DEV)
                         ? ` (${error.message || 'unknown error'})`
                         : '';
@@ -2083,31 +2205,22 @@ function AddAnimeScreen({
         };
 
         try {
-            let data = await fetchAnimeDetails(normalizedQuery, {
-                adaptiveFallback: true,
-                adaptiveMaxTerms: 6,
-                adaptivePerPage: 12,
-                adaptiveMinScore: 0.28,
+            const candidates = await searchAnimeList(normalizedQuery, 8, {
+                maxTerms: 3,
                 signal: controller.signal,
                 onRetry: collectIssue
             });
+            let data = null;
 
-            if (!data && !controller.signal.aborted) {
-                const fallbackCandidates = await searchAnimeList(normalizedQuery, 8, {
-                    maxTerms: 6,
-                    signal: controller.signal,
-                    onRetry: collectIssue
-                });
-                if (Array.isArray(fallbackCandidates) && fallbackCandidates.length > 0) {
-                    const primaryCandidate = fallbackCandidates[0];
-                    const detail = primaryCandidate?.id
-                        ? await fetchAnimeDetailsById(primaryCandidate.id, {
-                            signal: controller.signal,
-                            onRetry: collectIssue
-                        })
-                        : null;
-                    data = detail || primaryCandidate;
-                }
+            if (Array.isArray(candidates) && candidates.length > 0 && !controller.signal.aborted) {
+                const primaryCandidate = candidates[0];
+                const detail = primaryCandidate?.id
+                    ? await fetchAnimeDetailsById(primaryCandidate.id, {
+                        signal: controller.signal,
+                        onRetry: collectIssue
+                    })
+                    : null;
+                data = detail || primaryCandidate;
             }
 
             if (data) {
@@ -2135,7 +2248,7 @@ function AddAnimeScreen({
                 setSearchErrorCanRetry(true);
                 setStatus({
                     type: 'error',
-                    message: '作品の取得に失敗しました。時間をおいて再試行してください。'
+                    message: buildApiUnavailableMessage('作品情報')
                 });
                 return;
             }
@@ -2169,7 +2282,7 @@ function AddAnimeScreen({
             setSearchErrorCanRetry(true);
             setStatus({
                 type: 'error',
-                message: '作品の取得に失敗しました。時間をおいて再試行してください。'
+                message: buildApiUnavailableMessage('作品情報')
             });
         } finally {
             if (searchAbortControllerRef.current === controller) {
@@ -3452,6 +3565,12 @@ function AddAnimeScreen({
         && status.type === 'error'
         && searchErrorCanRetry
         && !previewData;
+    const isNormalSearchApiStatus = canRetryNormalSearch
+        && (
+            status.message.includes('API')
+            || status.message.includes('外部')
+            || status.message.includes('アクセス制限')
+        );
     const shareCardAddableItems = React.useMemo(() => {
         const myListIdSet = new Set((animeList || []).map((anime) => anime.id));
         const bookmarkIdSet = new Set((bookmarkList || []).map((anime) => anime.id));
@@ -3472,12 +3591,9 @@ function AddAnimeScreen({
     const isBulkRateLimitedInterrupted = bulkResults.rateLimited.length > 0;
     const isBulkRetryWaiting = isBulkRateLimitedInterrupted && bulkRetryCountdownSec > 0;
     const showBulkHistoryRestoreNote = bulkHistoryRestored && isBulkRateLimitedInterrupted;
-    const bulkRetryWaitMessage = isBulkRetryWaiting
-        ? `あと${bulkRetryCountdownSec}秒後に再試行できます。`
-        : '検索可能になりました。';
-    const bulkRetryWaitMessageClassName = isBulkRetryWaiting
-        ? 'bulk-notfound-hint warning'
-        : 'bulk-notfound-hint ready';
+    const bulkRetryRecoveryText = isBulkRetryWaiting
+        ? `あと${bulkRetryCountdownSec}秒で再検索できます。`
+        : '検索可能になりました。下の「全作品を再検索」から再開できます。';
     const hasBulkAddableResults = bulkResults.hits.length > 0;
     const bulkReviewDismissLabel = !isBulkComplete && !hasBulkAddableResults
         ? '追加できる作品がないため次の検索へ'
@@ -3702,7 +3818,11 @@ function AddAnimeScreen({
                             </p>
 
                             {shareCardStatus.message && (shareCardItems.length === 0 || shareCardStatus.type !== 'info') && (
-                                <div className={`share-card-import-status ${shareCardStatus.type || 'info'}`}>
+                                <div
+                                    className={`share-card-import-status ${shareCardStatus.type || 'info'}`}
+                                    role={shareCardStatus.type === 'error' ? 'alert' : 'status'}
+                                    aria-live={shareCardStatus.type === 'error' ? 'assertive' : 'polite'}
+                                >
                                     {shareCardStatus.message}
                                 </div>
                             )}
@@ -3757,7 +3877,11 @@ function AddAnimeScreen({
                             </div>
 
                             {shareCardStatus.message && shareCardStatus.type !== 'info' && (
-                                <div className={`share-card-import-status ${shareCardStatus.type || 'info'}`}>
+                                <div
+                                    className={`share-card-import-status ${shareCardStatus.type || 'info'}`}
+                                    role={shareCardStatus.type === 'error' ? 'alert' : 'status'}
+                                    aria-live={shareCardStatus.type === 'error' ? 'assertive' : 'polite'}
+                                >
                                     {shareCardStatus.message}
                                 </div>
                             )}
@@ -3891,23 +4015,22 @@ function AddAnimeScreen({
                                             閉じる
                                         </button>
                                     </div>
-                                    <div className="suggestions-status-text">{suggestionFeedback.message}</div>
-                                    {suggestionFeedback.type === 'warning' && (
-                                        <div className="suggestions-status-actions">
-                                            {suggestionRetryCountdownSec > 0 && (
-                                                <div className="suggestions-status-meta">
-                                                    再試行まで: {suggestionRetryCountdownSec}秒
-                                                </div>
-                                            )}
-                                            <button
-                                                type="button"
-                                                className="suggestions-status-retry-button"
-                                                onClick={handleSuggestionRetry}
-                                                disabled={isSuggesting || suggestionRetryCountdownSec > 0 || query.trim().length < 2}
-                                            >
-                                                候補を再取得
-                                            </button>
-                                        </div>
+                                    {(suggestionFeedback.type === 'warning' || suggestionFeedback.type === 'error') && (
+                                        <ApiOperationStatusPanel
+                                            tone={suggestionFeedback.type === 'warning' ? 'rate-limit' : 'unavailable'}
+                                            title={suggestionFeedback.type === 'warning'
+                                                ? '候補検索が一時停止しています'
+                                                : '候補一覧を取得できません'}
+                                            message={suggestionFeedback.message}
+                                            countdownSec={suggestionRetryCountdownSec}
+                                            onRetry={handleSuggestionRetry}
+                                            retryDisabled={isSuggesting || query.trim().length < 2}
+                                            retryLabel="候補を再取得"
+                                            compact
+                                        />
+                                    )}
+                                    {suggestionFeedback.type !== 'warning' && suggestionFeedback.type !== 'error' && (
+                                        <div className="suggestions-status-text">{suggestionFeedback.message}</div>
                                     )}
                                     <div className="suggestions-close-row">
                                         <button
@@ -3940,26 +4063,18 @@ function AddAnimeScreen({
                                     </div>
                                     {suggestionFeedback.type === 'warning' && suggestionFeedback.message && (
                                         <div className="suggestions-inline-warning" role="status" aria-live="polite">
-                                            <div className="suggestions-inline-warning-text">
-                                                {suggestionRetryCountdownSec > 0
+                                            <ApiOperationStatusPanel
+                                                tone="rate-limit"
+                                                title="候補検索が一時停止しています"
+                                                message={suggestionRetryCountdownSec > 0
                                                     ? buildApiRateLimitCountdownMessage(suggestionRetryCountdownSec)
                                                     : suggestionFeedback.message}
-                                            </div>
-                                            <div className="suggestions-inline-warning-actions">
-                                                {suggestionRetryCountdownSec > 0 && (
-                                                    <div className="suggestions-status-meta">
-                                                        再試行まで: {suggestionRetryCountdownSec}秒
-                                                    </div>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    className="suggestions-status-retry-button"
-                                                    onClick={handleSuggestionRetry}
-                                                    disabled={isSuggesting || suggestionRetryCountdownSec > 0 || query.trim().length < 2}
-                                                >
-                                                    候補を再取得
-                                                </button>
-                                            </div>
+                                                countdownSec={suggestionRetryCountdownSec}
+                                                onRetry={handleSuggestionRetry}
+                                                retryDisabled={isSuggesting || query.trim().length < 2}
+                                                retryLabel="候補を再取得"
+                                                compact
+                                            />
                                         </div>
                                     )}
                                     {suggestions.map((anime) => {
@@ -4321,10 +4436,15 @@ function AddAnimeScreen({
                                             )}
                                             {bulkResults.rateLimited.length > 0 && (
                                                 <div className="bulk-failure-block rate-limit">
-                                                    <div className="bulk-review-subheading">アクセス制限で中断 ({bulkResults.rateLimited.length})</div>
-                                                    <div className="bulk-notfound-hint warning strong">検索途中でAPIのアクセス制限に達したため、最後まで検索を完了できませんでした。</div>
-                                                    <div className="bulk-notfound-hint warning">今回入力した全作品を再検索してください。</div>
-                                                    <div className={bulkRetryWaitMessageClassName}>{bulkRetryWaitMessage}</div>
+                                                    <ApiOperationStatusPanel
+                                                        tone="rate-limit"
+                                                        title={`一括検索がアクセス制限で中断しました (${bulkResults.rateLimited.length}件)`}
+                                                        message="検索途中でAPIのアクセス制限に達したため、最後まで検索を完了できませんでした。"
+                                                        countdownSec={bulkRetryCountdownSec}
+                                                        recoveryText={bulkRetryRecoveryText}
+                                                        hint="入力内容は保持しています。待機後に下の「全作品を再検索」から同じ内容で再開できます。"
+                                                        compact
+                                                    />
                                                     <details className="bulk-rate-limited-details">
                                                         <summary>中断時点までに検索された作品一覧を表示</summary>
                                                         <ul className="bulk-notfound-list">
@@ -4346,10 +4466,14 @@ function AddAnimeScreen({
                                             )}
                                             {bulkResults.fetchFailed.length > 0 && (
                                                 <div className="bulk-failure-block fetch-failed">
-                                                    <div className="bulk-review-subheading">サーバーエラー等で取得失敗 ({bulkResults.fetchFailed.length})</div>
-                                                    <div className="bulk-notfound-hint warning">
-                                                        サーバーエラー等により、一部の作品情報を取得できませんでした。時間をおいて再試行してください。
-                                                    </div>
+                                                    <ApiOperationStatusPanel
+                                                        tone="unavailable"
+                                                        title={`一部の作品情報を取得できません (${bulkResults.fetchFailed.length}件)`}
+                                                        message="外部APIや通信状況の影響で、一部の作品情報を取得できませんでした。"
+                                                        recoveryText="回復時間はAPIから返っていないため不明です。"
+                                                        hint="入力内容は保持しています。下の「要再試行分のみ再試行」または「全件を再試行」から再取得できます。"
+                                                        compact
+                                                    />
                                                     <details className="bulk-fetch-failed-details">
                                                         <summary>取得失敗の作品一覧を表示</summary>
                                                         <ul className="bulk-notfound-list">
@@ -4655,22 +4779,18 @@ function AddAnimeScreen({
                                     role={browseErrorType === 'rate_limit' ? 'status' : 'alert'}
                                     aria-live="polite"
                                 >
-                                    <div className="browse-error-text">{browseErrorMessage}</div>
-                                    <div className="browse-error-actions">
-                                        {browseRetryCountdownSec > 0 && (
-                                            <span className="browse-retry-countdown">
-                                                再試行まで: {browseRetryCountdownSec}秒
-                                            </span>
-                                        )}
-                                        <button
-                                            type="button"
-                                            className="browse-page-button browse-error-retry-button"
-                                            onClick={handleBrowseRetry}
-                                            disabled={browseLoading || browseRetryCountdownSec > 0}
-                                        >
-                                            再試行
-                                        </button>
-                                    </div>
+                                    <ApiOperationStatusPanel
+                                        tone={browseErrorType === 'rate_limit' ? 'rate-limit' : 'unavailable'}
+                                        title={browseErrorType === 'rate_limit'
+                                            ? '一覧取得が一時停止しています'
+                                            : '一覧を取得できません'}
+                                        message={browseErrorMessage}
+                                        countdownSec={browseRetryCountdownSec}
+                                        onRetry={handleBrowseRetry}
+                                        retryDisabled={browseLoading}
+                                        retryLabel="一覧を再取得"
+                                        compact
+                                    />
                                 </div>
                             )}
 
@@ -4809,9 +4929,27 @@ function AddAnimeScreen({
                 && !(mode === 'bulk' && showReview)
                 && !(mode === 'normal' && previewData)
                 && !(mode === 'normal' && isSearching) && (
-                <div className={`status-message-container ${status.type}`}>
-                    <div className="status-text">{status.message}</div>
-                    {canRetryNormalSearch && (
+                <div
+                    className={`status-message-container ${status.type}`}
+                    role={status.type === 'error' ? 'alert' : 'status'}
+                    aria-live={status.type === 'error' ? 'assertive' : 'polite'}
+                >
+                    {isNormalSearchApiStatus ? (
+                        <ApiOperationStatusPanel
+                            tone={status.message.includes('アクセス制限') ? 'rate-limit' : 'unavailable'}
+                            title={status.message.includes('アクセス制限')
+                                ? '作品検索が一時停止しています'
+                                : '作品情報を取得できません'}
+                            message={status.message}
+                            countdownSec={searchRetryCountdownSec}
+                            onRetry={handleSearchRetry}
+                            retryDisabled={isSearching || !query.trim()}
+                            retryLabel="検索を再試行"
+                        />
+                    ) : (
+                        <div className="status-text">{status.message}</div>
+                    )}
+                    {canRetryNormalSearch && !isNormalSearchApiStatus && (
                         <div className="status-message-actions">
                             {searchRetryCountdownSec > 0 && (
                                 <span className="status-retry-countdown">
@@ -4938,7 +5076,11 @@ function AddAnimeScreen({
             )}
 
             {toast.visible && (
-                <div className={`add-toast ${toast.type}`}>
+                <div
+                    className={`add-toast ${toast.type}`}
+                    role={toast.type === 'warning' ? 'alert' : 'status'}
+                    aria-live={toast.type === 'warning' ? 'assertive' : 'polite'}
+                >
                     {toast.message}
                 </div>
             )}

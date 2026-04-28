@@ -18,6 +18,14 @@ const ALLOWED_ORIGINS = (
 );
 const ALLOWED_ORIGIN_SET = new Set(ALLOWED_ORIGINS);
 const ALLOWED_SHARE_IMAGE_HOST_SUFFIXES = ['.anilist.co', '.anili.st'];
+const ANILIST_GRAPHQL_ENDPOINT = 'https://graphql.anilist.co';
+const ANILIST_RATE_LIMIT_HEADERS = [
+  'retry-after',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+  'x-ratelimit-reset-after',
+];
 
 const DATA_DIR = path.join(__dirname, 'data');
 const libraryStore = createLibraryStore({
@@ -120,6 +128,41 @@ app.use((req, res, next) => {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, at: nowIso() });
+});
+
+app.post(['/anilist', '/anilist/'], async (req, res, next) => {
+  if (!req.body || typeof req.body !== 'object') {
+    res.status(400).json({ error: 'GraphQL request body is required.', code: 'ANILIST_BODY_REQUIRED' });
+    return;
+  }
+
+  try {
+    const upstream = await fetch(ANILIST_GRAPHQL_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'AniTriggerAniListProxy/1.0',
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
+    ANILIST_RATE_LIMIT_HEADERS.forEach((name) => {
+      const value = upstream.headers.get(name);
+      if (value) res.setHeader(name, value);
+    });
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(upstream.status).send(await upstream.text());
+  } catch (error) {
+    logError('anilist_proxy_failed', error);
+    res.status(502).json({
+      error: 'AniList request failed.',
+      code: 'ANILIST_PROXY_FAILED',
+      detail: String(error?.message || error || 'unknown error'),
+    });
+  }
 });
 
 app.get('/api/library', async (_req, res, next) => {

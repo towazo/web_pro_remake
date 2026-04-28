@@ -1357,7 +1357,11 @@ function ShareScreen({
         </div>
 
         {notice.message && (
-          <div className={`bookmark-action-notice ${notice.type}`}>
+          <div
+            className={`bookmark-action-notice ${notice.type}`}
+            role={notice.type === 'error' ? 'alert' : 'status'}
+            aria-live={notice.type === 'error' ? 'assertive' : 'polite'}
+          >
             {notice.message}
           </div>
         )}

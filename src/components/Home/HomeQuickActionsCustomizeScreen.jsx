@@ -368,7 +368,11 @@ function HomeQuickActionsCustomizeScreen({
         </section>
 
         {notice.message && (
-          <div className={`home-stats-customize-notice ${notice.type}`}>
+          <div
+            className={`home-stats-customize-notice ${notice.type}`}
+            role={notice.type === 'error' ? 'alert' : 'status'}
+            aria-live={notice.type === 'error' ? 'assertive' : 'polite'}
+          >
             {notice.message}
           </div>
         )}
