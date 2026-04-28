@@ -16,7 +16,9 @@ import {
 import {
   deriveLibraryUpdatedAtFromLists,
   normalizeLibraryUpdatedAt,
+  readLibrarySnapshotFromPersistentStorage,
   readLibrarySnapshotFromStorage,
+  writeLibrarySnapshotToPersistentStorage,
   writeLibrarySnapshotToStorage,
 } from './utils/storage';
 import {
@@ -101,6 +103,52 @@ const buildLibrarySnapshotSignature = (animeList, bookmarkList) => JSON.stringif
   animeList: Array.isArray(animeList) ? animeList : [],
   bookmarkList: Array.isArray(bookmarkList) ? bookmarkList : [],
 });
+
+const buildLibrarySnapshotEntryKeySet = (animeList, bookmarkList) => {
+  const keys = new Set();
+  (Array.isArray(animeList) ? animeList : []).forEach((anime) => {
+    const id = Number(anime?.id);
+    if (Number.isFinite(id)) keys.add(`anime:${id}`);
+  });
+  (Array.isArray(bookmarkList) ? bookmarkList : []).forEach((anime) => {
+    const id = Number(anime?.id);
+    if (Number.isFinite(id)) keys.add(`bookmark:${id}`);
+  });
+  return keys;
+};
+
+const getLibrarySnapshotCoverage = (
+  leftAnimeList,
+  leftBookmarkList,
+  rightAnimeList,
+  rightBookmarkList
+) => {
+  const leftKeys = buildLibrarySnapshotEntryKeySet(leftAnimeList, leftBookmarkList);
+  const rightKeys = buildLibrarySnapshotEntryKeySet(rightAnimeList, rightBookmarkList);
+  let leftHasExtra = false;
+  let rightHasExtra = false;
+
+  for (const key of leftKeys) {
+    if (!rightKeys.has(key)) {
+      leftHasExtra = true;
+      break;
+    }
+  }
+
+  for (const key of rightKeys) {
+    if (!leftKeys.has(key)) {
+      rightHasExtra = true;
+      break;
+    }
+  }
+
+  return {
+    leftHasExtra,
+    rightHasExtra,
+    leftIsStrictSubset: !leftHasExtra && rightHasExtra,
+    rightIsStrictSubset: !rightHasExtra && leftHasExtra,
+  };
+};
 
 const getLibrarySnapshotUpdatedAtTime = (updatedAt) => {
   const normalizedUpdatedAt = normalizeLibraryUpdatedAt(updatedAt);
@@ -319,12 +367,21 @@ function App() {
       day: normalizeFiniteNumber(source.day),
     };
   };
-  const sanitizeAnimeList = (list, options = {}) => filterDisplayEligibleAnimeList(Array.isArray(list) ? list : [], {
-    // Keep legacy items that do not include format/country metadata.
-    allowUnknownFormat: true,
-    allowUnknownCountry: true,
-  }).map((anime) => {
+  const sanitizeAnimeList = (list, options = {}) => (Array.isArray(list) ? list : []).map((anime) => {
+    if (
+      options.applyDisplayFilter === true
+      && !isDisplayEligibleAnime(anime, {
+        // Keep legacy items that do not include format/country metadata.
+        allowUnknownFormat: true,
+        allowUnknownCountry: true,
+      })
+    ) {
+      return null;
+    }
+
     const normalizedId = normalizeFiniteNumber(anime?.id);
+    if (!Number.isFinite(normalizedId)) return null;
+
     const normalizedTitle = normalizeAnimeTitle(anime?.title);
     const normalizedCoverImage = normalizeAnimeCoverImage(anime?.coverImage);
     const normalizedStartDate = normalizeAnimeStartDate(anime?.startDate);
@@ -435,7 +492,7 @@ function App() {
       nextAnime.trailerChecked = normalizedTrailerChecked;
     }
     return nextAnime;
-  });
+  }).filter(Boolean);
   const sanitizeWatchedAnimeList = (list) => sanitizeAnimeList(list, {
     minimumWatchCount: 1,
     defaultWatchCount: 1,
@@ -485,7 +542,9 @@ function App() {
     locked: true,
   }), [nextSeasonInfo, nextSeasonLabel]);
   const cachedCurrentSeasonFeaturedAnimeList = useMemo(() => (
-    sanitizeAnimeList(readHomeCurrentSeasonFeaturedAnimeListFromStorage(currentSeasonInfo))
+    sanitizeAnimeList(readHomeCurrentSeasonFeaturedAnimeListFromStorage(currentSeasonInfo), {
+      applyDisplayFilter: true,
+    })
   ), [currentSeasonInfo]);
   const [homeFeaturedSliderSource, setHomeFeaturedSliderSource] = useState(() =>
     readHomeFeaturedSliderSourceFromStorage()
@@ -533,6 +592,7 @@ function App() {
   const [isFooterTouchingViewport, setIsFooterTouchingViewport] = useState(false);
   const [globalBackFooterHeight, setGlobalBackFooterHeight] = useState(0);
   const [localBackAction, setLocalBackAction] = useState(null);
+  const [isLibraryPersistentHydrated, setIsLibraryPersistentHydrated] = useState(() => typeof window === 'undefined');
   const navigationTypeRef = useRef('init');
   const serverSaveDebounceRef = useRef(null);
   const featuredRefreshTimerRef = useRef(null);
@@ -804,6 +864,101 @@ function App() {
   }, [animeList, bookmarkList]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      setIsLibraryPersistentHydrated(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    readLibrarySnapshotFromPersistentStorage()
+      .then((snapshot) => {
+        if (cancelled) return;
+
+        const persistentAnimeList = sanitizeWatchedAnimeList(snapshot?.animeList);
+        const persistentBookmarkList = sanitizeBookmarkAnimeList(snapshot?.bookmarkList);
+        const persistentUpdatedAt = normalizeLibraryUpdatedAt(snapshot?.updatedAt);
+        const localAnimeList = sanitizeWatchedAnimeList(libraryListsRef.current.animeList);
+        const localBookmarkList = sanitizeBookmarkAnimeList(libraryListsRef.current.bookmarkList);
+        const localUpdatedAt = pickNewerLibraryUpdatedAt(
+          libraryStorageSyncRef.current.updatedAt,
+          deriveLibraryUpdatedAtFromLists(localAnimeList, localBookmarkList)
+        );
+        const persistentSignature = buildLibrarySnapshotSignature(persistentAnimeList, persistentBookmarkList);
+        const localSignature = buildLibrarySnapshotSignature(localAnimeList, localBookmarkList);
+        const hasPersistentData = persistentAnimeList.length > 0 || persistentBookmarkList.length > 0;
+        const hasLocalData = localAnimeList.length > 0 || localBookmarkList.length > 0;
+        const snapshotCoverage = getLibrarySnapshotCoverage(
+          persistentAnimeList,
+          persistentBookmarkList,
+          localAnimeList,
+          localBookmarkList
+        );
+        const persistentUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(persistentUpdatedAt);
+        const localUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(localUpdatedAt);
+        const shouldAdoptPersistent = (
+          snapshotCoverage.rightIsStrictSubset
+          || (
+          persistentSignature !== localSignature
+          && !snapshotCoverage.leftIsStrictSubset
+          && (
+            persistentUpdatedAtTime > localUpdatedAtTime
+            || (
+              persistentUpdatedAtTime === localUpdatedAtTime
+              && hasPersistentData
+              && !hasLocalData
+            )
+          )
+          )
+        );
+
+        if (shouldAdoptPersistent) {
+          const nextUpdatedAt = persistentUpdatedAt || localUpdatedAt || nowIso();
+          libraryListsRef.current = {
+            animeList: persistentAnimeList,
+            bookmarkList: persistentBookmarkList,
+          };
+          libraryStorageSyncRef.current = {
+            signature: persistentSignature,
+            updatedAt: nextUpdatedAt,
+          };
+          writeLibrarySnapshotToStorage({
+            animeList: persistentAnimeList,
+            bookmarkList: persistentBookmarkList,
+            updatedAt: nextUpdatedAt,
+          });
+          setAnimeList(persistentAnimeList);
+          setBookmarkList(persistentBookmarkList);
+          return;
+        }
+
+        if (persistentSignature !== localSignature || persistentUpdatedAt !== localUpdatedAt) {
+          writeLibrarySnapshotToPersistentStorage({
+            animeList: localAnimeList,
+            bookmarkList: localBookmarkList,
+            updatedAt: localUpdatedAt || persistentUpdatedAt || nowIso(),
+          }).catch(() => {
+            // Ignore persistent hydration write failures and keep the current snapshot.
+          });
+        }
+      })
+      .catch(() => {
+        // Ignore persistent hydration failures and keep the localStorage snapshot.
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLibraryPersistentHydrated(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isLibraryPersistentHydrated) return;
+
     let cancelled = false;
 
     const initializeServerLibrary = async () => {
@@ -825,11 +980,20 @@ function App() {
         const localSignature = buildLibrarySnapshotSignature(localAnimeList, localBookmarkList);
         const hasRemoteData = remoteAnimeList.length > 0 || remoteBookmarkList.length > 0;
         const hasLocalData = localAnimeList.length > 0 || localBookmarkList.length > 0;
+        const snapshotCoverage = getLibrarySnapshotCoverage(
+          remoteAnimeList,
+          remoteBookmarkList,
+          localAnimeList,
+          localBookmarkList
+        );
         const remoteUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(remoteUpdatedAt);
         const localUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(localUpdatedAt);
         const isRemoteNewer = remoteUpdatedAtTime > localUpdatedAtTime;
         const shouldAdoptRemote = (
+          snapshotCoverage.rightIsStrictSubset
+          || (
           remoteSignature !== localSignature
+          && !snapshotCoverage.leftIsStrictSubset
           && (
             isRemoteNewer
             || (
@@ -837,6 +1001,7 @@ function App() {
               && hasRemoteData
               && !hasLocalData
             )
+          )
           )
         );
 
@@ -863,6 +1028,13 @@ function App() {
             bookmarkList: remoteBookmarkList,
             updatedAt: nextUpdatedAt,
           });
+          writeLibrarySnapshotToPersistentStorage({
+            animeList: remoteAnimeList,
+            bookmarkList: remoteBookmarkList,
+            updatedAt: nextUpdatedAt,
+          }).catch(() => {
+            // Ignore IndexedDB write failures and keep the local snapshot.
+          });
           setAnimeList(remoteAnimeList);
           setBookmarkList(remoteBookmarkList);
         } else if (remoteSignature !== localSignature || hasLocalData) {
@@ -883,6 +1055,13 @@ function App() {
             bookmarkList: localBookmarkList,
             updatedAt: nextUpdatedAt,
           });
+          writeLibrarySnapshotToPersistentStorage({
+            animeList: localAnimeList,
+            bookmarkList: localBookmarkList,
+            updatedAt: nextUpdatedAt,
+          }).catch(() => {
+            // Ignore IndexedDB write failures and keep the local snapshot.
+          });
         } else if (remoteUpdatedAt && remoteUpdatedAt !== localUpdatedAt) {
           libraryStorageSyncRef.current = {
             signature: localSignature,
@@ -892,6 +1071,13 @@ function App() {
             animeList: localAnimeList,
             bookmarkList: localBookmarkList,
             updatedAt: remoteUpdatedAt,
+          });
+          writeLibrarySnapshotToPersistentStorage({
+            animeList: localAnimeList,
+            bookmarkList: localBookmarkList,
+            updatedAt: remoteUpdatedAt,
+          }).catch(() => {
+            // Ignore IndexedDB write failures and keep the local snapshot.
           });
           if (cancelled) return;
         }
@@ -908,7 +1094,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isLibraryPersistentHydrated]);
 
   useEffect(() => {
     warmAniListTagTranslations().catch((error) => {
@@ -1169,6 +1355,13 @@ function App() {
       signature,
       updatedAt: persistedUpdatedAt,
     };
+    writeLibrarySnapshotToPersistentStorage({
+      animeList,
+      bookmarkList,
+      updatedAt: persistedUpdatedAt,
+    }).catch(() => {
+      // Ignore IndexedDB write failures and keep the local snapshot.
+    });
   }, [animeList, bookmarkList]);
 
   useEffect(() => {
@@ -1551,6 +1744,13 @@ function App() {
       signature,
       updatedAt: persistedUpdatedAt,
     };
+    writeLibrarySnapshotToPersistentStorage({
+      animeList: nextAnimeList,
+      bookmarkList: nextBookmarkList,
+      updatedAt: persistedUpdatedAt,
+    }).catch(() => {
+      // Ignore IndexedDB write failures and keep the local snapshot.
+    });
     setAnimeList(nextAnimeList);
     setBookmarkList(nextBookmarkList);
 

@@ -1,5 +1,5 @@
 import { normalizeAnimeTrailer } from './trailer';
-import { getSafeLocalStorage } from './browserStorage';
+import { getSafeIndexedDb, getSafeLocalStorage } from './browserStorage';
 
 export const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
 export const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
@@ -9,6 +9,10 @@ const STORAGE_SCHEMA_VERSION = 5;
 const MIN_SUPPORTED_STORAGE_SCHEMA_VERSION = 2;
 const LIBRARY_SYNC_META_SCHEMA_VERSION = 1;
 const STORAGE_WRITE_VARIANTS = ['full', 'compact', 'minimal'];
+const LIBRARY_PERSISTENT_DB_NAME = 'AniTriggerLibraryStorage';
+const LIBRARY_PERSISTENT_DB_VERSION = 1;
+const LIBRARY_PERSISTENT_STORE_NAME = 'librarySnapshots';
+const LIBRARY_PERSISTENT_SNAPSHOT_KEY = 'main';
 
 const normalizeString = (value) => {
   if (typeof value !== 'string') return '';
@@ -302,6 +306,163 @@ export const deriveLibraryUpdatedAtFromLists = (animeList, bookmarkList) => {
 
 export const normalizeLibraryUpdatedAt = (value) => normalizeIsoDateString(value);
 
+const getLibrarySnapshotUpdatedAtTime = (updatedAt) => {
+  const normalizedUpdatedAt = normalizeLibraryUpdatedAt(updatedAt);
+  if (!normalizedUpdatedAt) return 0;
+  const parsed = Date.parse(normalizedUpdatedAt);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const buildLibrarySnapshotEntryKeySet = (animeList, bookmarkList) => {
+  const keys = new Set();
+  (Array.isArray(animeList) ? animeList : []).forEach((anime) => {
+    const id = normalizeFiniteNumber(anime?.id);
+    if (Number.isFinite(id)) keys.add(`anime:${id}`);
+  });
+  (Array.isArray(bookmarkList) ? bookmarkList : []).forEach((anime) => {
+    const id = normalizeFiniteNumber(anime?.id);
+    if (Number.isFinite(id)) keys.add(`bookmark:${id}`);
+  });
+  return keys;
+};
+
+const getLibrarySnapshotCoverage = (leftSnapshot, rightSnapshot) => {
+  const leftKeys = buildLibrarySnapshotEntryKeySet(leftSnapshot?.animeList, leftSnapshot?.bookmarkList);
+  const rightKeys = buildLibrarySnapshotEntryKeySet(rightSnapshot?.animeList, rightSnapshot?.bookmarkList);
+  let leftHasExtra = false;
+  let rightHasExtra = false;
+
+  for (const key of leftKeys) {
+    if (!rightKeys.has(key)) {
+      leftHasExtra = true;
+      break;
+    }
+  }
+
+  for (const key of rightKeys) {
+    if (!leftKeys.has(key)) {
+      rightHasExtra = true;
+      break;
+    }
+  }
+
+  return {
+    leftIsStrictSubset: !leftHasExtra && rightHasExtra,
+    rightIsStrictSubset: !rightHasExtra && leftHasExtra,
+  };
+};
+
+const openLibraryPersistentDatabase = () => new Promise((resolve, reject) => {
+  const indexedDb = getSafeIndexedDb();
+  if (!indexedDb) {
+    resolve(null);
+    return;
+  }
+
+  try {
+    const request = indexedDb.open(
+      LIBRARY_PERSISTENT_DB_NAME,
+      LIBRARY_PERSISTENT_DB_VERSION
+    );
+
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(LIBRARY_PERSISTENT_STORE_NAME)) {
+        database.createObjectStore(LIBRARY_PERSISTENT_STORE_NAME, { keyPath: 'key' });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('IndexedDB open failed.'));
+  } catch (error) {
+    reject(error);
+  }
+});
+
+const normalizeLibrarySnapshotEnvelope = (value) => {
+  const animeList = Array.isArray(value?.animeList) ? value.animeList : [];
+  const bookmarkList = Array.isArray(value?.bookmarkList) ? value.bookmarkList : [];
+  return {
+    animeList,
+    bookmarkList,
+    updatedAt: normalizeLibraryUpdatedAt(value?.updatedAt)
+      || deriveLibraryUpdatedAtFromLists(animeList, bookmarkList),
+  };
+};
+
+const readLibrarySnapshotFromIndexedDb = async () => {
+  const database = await openLibraryPersistentDatabase();
+  if (!database) return null;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      try {
+        callback();
+      } finally {
+        database.close();
+      }
+    };
+
+    const transaction = database.transaction(LIBRARY_PERSISTENT_STORE_NAME, 'readonly');
+    const store = transaction.objectStore(LIBRARY_PERSISTENT_STORE_NAME);
+    const request = store.get(LIBRARY_PERSISTENT_SNAPSHOT_KEY);
+
+    request.onsuccess = () => {
+      finish(() => resolve(normalizeLibrarySnapshotEnvelope(request.result || null)));
+    };
+    request.onerror = () => {
+      finish(() => reject(request.error || new Error('IndexedDB read failed.')));
+    };
+    transaction.onabort = () => {
+      finish(() => reject(transaction.error || new Error('IndexedDB read aborted.')));
+    };
+  });
+};
+
+const writeLibrarySnapshotToIndexedDb = async ({ animeList, bookmarkList, updatedAt }) => {
+  const database = await openLibraryPersistentDatabase();
+  if (!database) return;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      try {
+        callback();
+      } finally {
+        database.close();
+      }
+    };
+
+    const transaction = database.transaction(LIBRARY_PERSISTENT_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(LIBRARY_PERSISTENT_STORE_NAME);
+    const request = store.put({
+      key: LIBRARY_PERSISTENT_SNAPSHOT_KEY,
+      animeList: Array.isArray(animeList) ? animeList : [],
+      bookmarkList: Array.isArray(bookmarkList) ? bookmarkList : [],
+      updatedAt: normalizeLibraryUpdatedAt(updatedAt)
+        || deriveLibraryUpdatedAtFromLists(animeList, bookmarkList),
+    });
+
+    request.onerror = () => {
+      finish(() => reject(request.error || new Error('IndexedDB write failed.')));
+    };
+    transaction.oncomplete = () => {
+      finish(() => resolve());
+    };
+    transaction.onerror = () => {
+      finish(() => reject(transaction.error || new Error('IndexedDB write failed.')));
+    };
+    transaction.onabort = () => {
+      finish(() => reject(transaction.error || new Error('IndexedDB write aborted.')));
+    };
+  });
+};
+
 export const readLibrarySnapshotFromStorage = () => {
   const animeList = readListFromStorage(ANIME_LIST_STORAGE_KEY);
   const bookmarkList = readListFromStorage(BOOKMARK_LIST_STORAGE_KEY);
@@ -348,6 +509,38 @@ export const readLibrarySnapshotFromStorage = () => {
       updatedAt: fallbackUpdatedAt,
     };
   }
+};
+
+export const readLibrarySnapshotFromPersistentStorage = async () => {
+  const localSnapshot = readLibrarySnapshotFromStorage();
+  let indexedDbSnapshot = null;
+
+  try {
+    indexedDbSnapshot = await readLibrarySnapshotFromIndexedDb();
+  } catch (_) {
+    indexedDbSnapshot = null;
+  }
+
+  const localUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(localSnapshot?.updatedAt);
+  const indexedDbUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(indexedDbSnapshot?.updatedAt);
+  const localHasData = (localSnapshot?.animeList?.length || 0) > 0 || (localSnapshot?.bookmarkList?.length || 0) > 0;
+  const indexedDbHasData = (indexedDbSnapshot?.animeList?.length || 0) > 0 || (indexedDbSnapshot?.bookmarkList?.length || 0) > 0;
+  const snapshotCoverage = getLibrarySnapshotCoverage(indexedDbSnapshot, localSnapshot);
+  const shouldPreferIndexedDb = Boolean(indexedDbSnapshot) && (
+    snapshotCoverage.rightIsStrictSubset
+    || (
+    indexedDbUpdatedAtTime > localUpdatedAtTime
+    || (
+      indexedDbUpdatedAtTime === localUpdatedAtTime
+      && indexedDbHasData
+      && !localHasData
+    )
+    )
+  );
+
+  return shouldPreferIndexedDb
+    ? indexedDbSnapshot
+    : localSnapshot;
 };
 
 export const writeListToStorage = (key, list) => {
@@ -411,4 +604,24 @@ export const writeLibrarySnapshotToStorage = ({ animeList, bookmarkList, updated
     console.warn('Storage access failed for library sync metadata:', error);
     return null;
   }
+};
+
+export const writeLibrarySnapshotToPersistentStorage = async ({ animeList, bookmarkList, updatedAt }) => {
+  const normalizedUpdatedAt = writeLibrarySnapshotToStorage({
+    animeList,
+    bookmarkList,
+    updatedAt,
+  });
+
+  try {
+    await writeLibrarySnapshotToIndexedDb({
+      animeList,
+      bookmarkList,
+      updatedAt: normalizedUpdatedAt || updatedAt,
+    });
+  } catch (_) {
+    // Ignore IndexedDB write failures and keep the localStorage snapshot.
+  }
+
+  return normalizedUpdatedAt;
 };
