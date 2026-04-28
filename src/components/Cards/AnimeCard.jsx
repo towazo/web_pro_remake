@@ -333,7 +333,7 @@ function AnimeCard({
         />
         <div className="episodes-badge">{anime.episodes || '?'} 話</div>
         {hasExternalUrl && supportsImageTapShortcut && (
-          <div className="card-external-url-badge" aria-hidden="true">URL</div>
+          <div className="card-external-url-badge" aria-hidden="true">U</div>
         )}
         {isSelectionMode && (
           <div className={`selection-indicator${isSelected ? ' active' : ''}`} aria-hidden="true">
