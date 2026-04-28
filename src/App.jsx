@@ -14,10 +14,10 @@ import {
   SEASON_LABELS,
 } from './utils/season';
 import {
-  ANIME_LIST_STORAGE_KEY,
-  BOOKMARK_LIST_STORAGE_KEY,
-  readListFromStorage,
-  writeListToStorage,
+  deriveLibraryUpdatedAtFromLists,
+  normalizeLibraryUpdatedAt,
+  readLibrarySnapshotFromStorage,
+  writeLibrarySnapshotToStorage,
 } from './utils/storage';
 import {
   filterDisplayEligibleAnimeList,
@@ -93,6 +93,28 @@ const scrollDocumentToTop = (behavior = 'auto') => {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   }
+};
+
+const nowIso = () => new Date().toISOString();
+
+const buildLibrarySnapshotSignature = (animeList, bookmarkList) => JSON.stringify({
+  animeList: Array.isArray(animeList) ? animeList : [],
+  bookmarkList: Array.isArray(bookmarkList) ? bookmarkList : [],
+});
+
+const getLibrarySnapshotUpdatedAtTime = (updatedAt) => {
+  const normalizedUpdatedAt = normalizeLibraryUpdatedAt(updatedAt);
+  if (!normalizedUpdatedAt) return 0;
+  const parsed = Date.parse(normalizedUpdatedAt);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const pickNewerLibraryUpdatedAt = (leftUpdatedAt, rightUpdatedAt) => {
+  const leftTime = getLibrarySnapshotUpdatedAtTime(leftUpdatedAt);
+  const rightTime = getLibrarySnapshotUpdatedAtTime(rightUpdatedAt);
+  return rightTime > leftTime
+    ? normalizeLibraryUpdatedAt(rightUpdatedAt)
+    : normalizeLibraryUpdatedAt(leftUpdatedAt);
 };
 
 const sanitizeAppBackStack = (value) => {
@@ -419,10 +441,20 @@ function App() {
     defaultWatchCount: 1,
   });
   const sanitizeBookmarkAnimeList = (list) => sanitizeAnimeList(list);
+  const initialLibrarySnapshotRef = useRef(null);
+  if (!initialLibrarySnapshotRef.current) {
+    const snapshot = readLibrarySnapshotFromStorage();
+    initialLibrarySnapshotRef.current = {
+      animeList: sanitizeWatchedAnimeList(snapshot?.animeList),
+      bookmarkList: sanitizeBookmarkAnimeList(snapshot?.bookmarkList),
+      updatedAt: normalizeLibraryUpdatedAt(snapshot?.updatedAt),
+    };
+  }
+  const initialLibrarySnapshot = initialLibrarySnapshotRef.current;
 
-  // Initialize state from localStorage if available
-  const [animeList, setAnimeList] = useState(() => sanitizeWatchedAnimeList(readListFromStorage(ANIME_LIST_STORAGE_KEY)));
-  const [bookmarkList, setBookmarkList] = useState(() => sanitizeBookmarkAnimeList(readListFromStorage(BOOKMARK_LIST_STORAGE_KEY)));
+  // Initialize state from the latest local snapshot if available.
+  const [animeList, setAnimeList] = useState(() => initialLibrarySnapshot.animeList);
+  const [bookmarkList, setBookmarkList] = useState(() => initialLibrarySnapshot.bookmarkList);
 
   const [view, setView] = useState(() => {
     if (typeof window === 'undefined') return 'home';
@@ -519,8 +551,17 @@ function App() {
   const pendingGlobalBackHomeScrollRef = useRef(false);
   const myListResultsRef = useRef(null);
   const pendingMyListPageScrollRef = useRef(false);
-  const onboardingStepListRef = useRef(null);
-  const onboardingStepItemRefs = useRef([]);
+  const libraryListsRef = useRef({
+    animeList: initialLibrarySnapshot.animeList,
+    bookmarkList: initialLibrarySnapshot.bookmarkList,
+  });
+  const libraryStorageSyncRef = useRef({
+    signature: buildLibrarySnapshotSignature(
+      initialLibrarySnapshot.animeList,
+      initialLibrarySnapshot.bookmarkList
+    ),
+    updatedAt: initialLibrarySnapshot.updatedAt,
+  });
   const isOnboardingActive = animeList.length === 0 && !isOnboardingDismissed;
   const tagTranslationVersion = useTagTranslationVersion();
   const isPageScrollIdle = usePageScrollIdle();
@@ -758,6 +799,10 @@ function App() {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    libraryListsRef.current = { animeList, bookmarkList };
+  }, [animeList, bookmarkList]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -769,10 +814,33 @@ function App() {
 
         const remoteAnimeList = sanitizeWatchedAnimeList(payload?.animeList);
         const remoteBookmarkList = sanitizeBookmarkAnimeList(payload?.bookmarkList);
+        const remoteUpdatedAt = normalizeLibraryUpdatedAt(payload?.updatedAt);
+        const localAnimeList = sanitizeWatchedAnimeList(libraryListsRef.current.animeList);
+        const localBookmarkList = sanitizeBookmarkAnimeList(libraryListsRef.current.bookmarkList);
+        const localUpdatedAt = pickNewerLibraryUpdatedAt(
+          libraryStorageSyncRef.current.updatedAt,
+          deriveLibraryUpdatedAtFromLists(localAnimeList, localBookmarkList)
+        );
+        const remoteSignature = buildLibrarySnapshotSignature(remoteAnimeList, remoteBookmarkList);
+        const localSignature = buildLibrarySnapshotSignature(localAnimeList, localBookmarkList);
         const hasRemoteData = remoteAnimeList.length > 0 || remoteBookmarkList.length > 0;
-        const hasLocalData = animeList.length > 0 || bookmarkList.length > 0;
+        const hasLocalData = localAnimeList.length > 0 || localBookmarkList.length > 0;
+        const remoteUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(remoteUpdatedAt);
+        const localUpdatedAtTime = getLibrarySnapshotUpdatedAtTime(localUpdatedAt);
+        const isRemoteNewer = remoteUpdatedAtTime > localUpdatedAtTime;
+        const shouldAdoptRemote = (
+          remoteSignature !== localSignature
+          && (
+            isRemoteNewer
+            || (
+              remoteUpdatedAtTime === localUpdatedAtTime
+              && hasRemoteData
+              && !hasLocalData
+            )
+          )
+        );
 
-        if (hasRemoteData) {
+        if (shouldAdoptRemote) {
           detailEnrichmentAbortControllerRef.current?.abort();
           detailEnrichmentAbortControllerRef.current = null;
           detailEnrichmentRequestInFlightRef.current = false;
@@ -781,12 +849,49 @@ function App() {
             clearTimeout(detailEnrichmentRetryTimerRef.current);
             detailEnrichmentRetryTimerRef.current = null;
           }
+          const nextUpdatedAt = remoteUpdatedAt || localUpdatedAt || nowIso();
+          libraryListsRef.current = {
+            animeList: remoteAnimeList,
+            bookmarkList: remoteBookmarkList,
+          };
+          libraryStorageSyncRef.current = {
+            signature: remoteSignature,
+            updatedAt: nextUpdatedAt,
+          };
+          writeLibrarySnapshotToStorage({
+            animeList: remoteAnimeList,
+            bookmarkList: remoteBookmarkList,
+            updatedAt: nextUpdatedAt,
+          });
           setAnimeList(remoteAnimeList);
           setBookmarkList(remoteBookmarkList);
-        } else if (hasLocalData) {
-          await saveLibrarySnapshot({
-            animeList: sanitizeWatchedAnimeList(animeList),
-            bookmarkList: sanitizeBookmarkAnimeList(bookmarkList),
+        } else if (remoteSignature !== localSignature || hasLocalData) {
+          const savedSnapshot = await saveLibrarySnapshot({
+            animeList: localAnimeList,
+            bookmarkList: localBookmarkList,
+          });
+          if (cancelled) return;
+          const nextUpdatedAt = normalizeLibraryUpdatedAt(savedSnapshot?.updatedAt)
+            || localUpdatedAt
+            || nowIso();
+          libraryStorageSyncRef.current = {
+            signature: localSignature,
+            updatedAt: nextUpdatedAt,
+          };
+          writeLibrarySnapshotToStorage({
+            animeList: localAnimeList,
+            bookmarkList: localBookmarkList,
+            updatedAt: nextUpdatedAt,
+          });
+        } else if (remoteUpdatedAt && remoteUpdatedAt !== localUpdatedAt) {
+          libraryStorageSyncRef.current = {
+            signature: localSignature,
+            updatedAt: remoteUpdatedAt,
+          };
+          writeLibrarySnapshotToStorage({
+            animeList: localAnimeList,
+            bookmarkList: localBookmarkList,
+            updatedAt: remoteUpdatedAt,
           });
           if (cancelled) return;
         }
@@ -1047,16 +1152,28 @@ function App() {
 
   // 1. Storage Persistence
   useEffect(() => {
-    writeListToStorage(ANIME_LIST_STORAGE_KEY, animeList);
-  }, [animeList]);
+    const signature = buildLibrarySnapshotSignature(animeList, bookmarkList);
+    const previousSignature = libraryStorageSyncRef.current.signature;
+    const nextUpdatedAt = previousSignature === signature
+      ? libraryStorageSyncRef.current.updatedAt
+      : nowIso();
+    const persistedUpdatedAt = normalizeLibraryUpdatedAt(
+      writeLibrarySnapshotToStorage({
+        animeList,
+        bookmarkList,
+        updatedAt: nextUpdatedAt,
+      })
+    ) || nextUpdatedAt || null;
+
+    libraryStorageSyncRef.current = {
+      signature,
+      updatedAt: persistedUpdatedAt,
+    };
+  }, [animeList, bookmarkList]);
 
   useEffect(() => {
     featuredSourceAnimeListRef.current = featuredSourceAnimeList;
   }, [featuredSourceAnimeList]);
-
-  useEffect(() => {
-    writeListToStorage(BOOKMARK_LIST_STORAGE_KEY, bookmarkList);
-  }, [bookmarkList]);
 
   useEffect(() => {
     writeHomeFeaturedSliderSourceToStorage(homeFeaturedSliderSource);
@@ -1081,11 +1198,30 @@ function App() {
       clearTimeout(serverSaveDebounceRef.current);
     }
 
+    const localAnimeList = sanitizeWatchedAnimeList(animeList);
+    const localBookmarkList = sanitizeBookmarkAnimeList(bookmarkList);
+    const expectedSignature = buildLibrarySnapshotSignature(localAnimeList, localBookmarkList);
+
     serverSaveDebounceRef.current = setTimeout(() => {
       saveLibrarySnapshot({
-        animeList: sanitizeWatchedAnimeList(animeList),
-        bookmarkList: sanitizeBookmarkAnimeList(bookmarkList),
+        animeList: localAnimeList,
+        bookmarkList: localBookmarkList,
       })
+        .then((savedSnapshot) => {
+          const syncedUpdatedAt = normalizeLibraryUpdatedAt(savedSnapshot?.updatedAt);
+          if (!syncedUpdatedAt) return;
+          if (libraryStorageSyncRef.current.signature !== expectedSignature) return;
+
+          libraryStorageSyncRef.current = {
+            signature: expectedSignature,
+            updatedAt: syncedUpdatedAt,
+          };
+          writeLibrarySnapshotToStorage({
+            animeList: localAnimeList,
+            bookmarkList: localBookmarkList,
+            updatedAt: syncedUpdatedAt,
+          });
+        })
         .catch((syncError) => {
           console.error('Failed to save server library:', syncError);
         });
@@ -1387,6 +1523,45 @@ function App() {
     setActiveTrailerAnime(null);
   };
 
+  const commitLibrarySnapshot = (nextAnimeListInput, nextBookmarkListInput, options = {}) => {
+    const nextAnimeList = sanitizeWatchedAnimeList(nextAnimeListInput);
+    const nextBookmarkList = sanitizeBookmarkAnimeList(nextBookmarkListInput);
+    const fallbackUpdatedAt = pickNewerLibraryUpdatedAt(
+      libraryStorageSyncRef.current.updatedAt,
+      deriveLibraryUpdatedAtFromLists(nextAnimeList, nextBookmarkList)
+    );
+    const requestedUpdatedAt = normalizeLibraryUpdatedAt(options.updatedAt);
+    const nextUpdatedAt = options.touchUpdatedAt === false
+      ? (requestedUpdatedAt || fallbackUpdatedAt)
+      : (requestedUpdatedAt || nowIso());
+    const persistedUpdatedAt = normalizeLibraryUpdatedAt(
+      writeLibrarySnapshotToStorage({
+        animeList: nextAnimeList,
+        bookmarkList: nextBookmarkList,
+        updatedAt: nextUpdatedAt,
+      })
+    ) || nextUpdatedAt || fallbackUpdatedAt || null;
+    const signature = buildLibrarySnapshotSignature(nextAnimeList, nextBookmarkList);
+
+    libraryListsRef.current = {
+      animeList: nextAnimeList,
+      bookmarkList: nextBookmarkList,
+    };
+    libraryStorageSyncRef.current = {
+      signature,
+      updatedAt: persistedUpdatedAt,
+    };
+    setAnimeList(nextAnimeList);
+    setBookmarkList(nextBookmarkList);
+
+    return {
+      animeList: nextAnimeList,
+      bookmarkList: nextBookmarkList,
+      updatedAt: persistedUpdatedAt,
+      signature,
+    };
+  };
+
   const handleAddAnime = (data, options = {}) => {
     if (!data || typeof data.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
@@ -1394,7 +1569,13 @@ function App() {
     if (!isDisplayEligibleAnime(data, { allowUnknownFormat: true, allowUnknownCountry: true })) {
       return { success: false, message: 'この作品は表示対象外です。' };
     }
-    if (animeList.some(a => a.id === data.id)) {
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+    if (currentAnimeList.some((anime) => anime.id === data.id)) {
       return { success: false, message: 'その作品は既に追加されています。' };
     }
     const rating = normalizeAnimeRating(options?.rating ?? data?.rating);
@@ -1410,30 +1591,44 @@ function App() {
       addedAt: Date.now(),
       trailerChecked: data?.trailerChecked === true || Object.prototype.hasOwnProperty.call(data || {}, 'trailer'),
     };
-    setAnimeList(prev => sanitizeWatchedAnimeList([animeWithDate, ...prev]));
-    setBookmarkList(prev => sanitizeBookmarkAnimeList(prev.filter((anime) => anime.id !== data.id)));
+    commitLibrarySnapshot(
+      [animeWithDate, ...currentAnimeList],
+      currentBookmarkList.filter((anime) => anime.id !== data.id)
+    );
     return { success: true };
   };
 
   const handleRemoveAnime = (id) => {
-    setAnimeList(prev => {
-      return prev.filter(anime => anime.id !== id);
-    });
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+    commitLibrarySnapshot(
+      currentAnimeList.filter((anime) => anime.id !== id),
+      currentBookmarkList
+    );
   };
 
   const handleUpdateAnimeRating = (id, rating) => {
     const normalizedRating = normalizeAnimeRating(rating);
-    setAnimeList((prev) => {
-      let changed = false;
-      const next = prev.map((anime) => {
-        if (anime.id !== id) return anime;
-        const currentRating = normalizeAnimeRating(anime.rating);
-        if (currentRating === normalizedRating) return anime;
-        changed = true;
-        return { ...anime, rating: normalizedRating };
-      });
-      return changed ? next : prev;
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+    let changed = false;
+    const nextAnimeList = currentAnimeList.map((anime) => {
+      if (anime.id !== id) return anime;
+      const currentRating = normalizeAnimeRating(anime.rating);
+      if (currentRating === normalizedRating) return anime;
+      changed = true;
+      return { ...anime, rating: normalizedRating };
     });
+    if (!changed) return;
+    commitLibrarySnapshot(nextAnimeList, currentBookmarkList);
   };
 
   const handleUpdateAnimeWatchCount = (id, watchCount) => {
@@ -1441,20 +1636,25 @@ function App() {
       minimum: 1,
       defaultValue: 1,
     });
-    setAnimeList((prev) => {
-      let changed = false;
-      const next = prev.map((anime) => {
-        if (anime.id !== id) return anime;
-        const currentWatchCount = normalizeAnimeWatchCount(anime?.watchCount, {
-          minimum: 1,
-          defaultValue: 1,
-        });
-        if (currentWatchCount === normalizedWatchCount) return anime;
-        changed = true;
-        return { ...anime, watchCount: normalizedWatchCount };
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+    let changed = false;
+    const nextAnimeList = currentAnimeList.map((anime) => {
+      if (anime.id !== id) return anime;
+      const currentWatchCount = normalizeAnimeWatchCount(anime?.watchCount, {
+        minimum: 1,
+        defaultValue: 1,
       });
-      return changed ? sanitizeWatchedAnimeList(next) : prev;
+      if (currentWatchCount === normalizedWatchCount) return anime;
+      changed = true;
+      return { ...anime, watchCount: normalizedWatchCount };
     });
+    if (!changed) return;
+    commitLibrarySnapshot(nextAnimeList, currentBookmarkList);
   };
 
   const handleToggleBookmark = (data) => {
@@ -1465,13 +1665,23 @@ function App() {
       return { success: false, action: 'blocked', message: 'この作品は表示対象外です。' };
     }
 
-    if (animeList.some((anime) => anime.id === data.id)) {
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+
+    if (currentAnimeList.some((anime) => anime.id === data.id)) {
       return { success: false, action: 'blocked', message: '視聴済み作品はブックマークできません。' };
     }
 
-    const exists = bookmarkList.some((anime) => anime.id === data.id);
+    const exists = currentBookmarkList.some((anime) => anime.id === data.id);
     if (exists) {
-      setBookmarkList((prev) => sanitizeBookmarkAnimeList(prev.filter((anime) => anime.id !== data.id)));
+      commitLibrarySnapshot(
+        currentAnimeList,
+        currentBookmarkList.filter((anime) => anime.id !== data.id)
+      );
       return { success: true, action: 'removed' };
     }
 
@@ -1480,14 +1690,26 @@ function App() {
       bookmarkedAt: Date.now(),
       trailerChecked: data?.trailerChecked === true || Object.prototype.hasOwnProperty.call(data || {}, 'trailer'),
     };
-    setBookmarkList((prev) => sanitizeBookmarkAnimeList([bookmarkItem, ...prev.filter((anime) => anime.id !== data.id)]));
+    commitLibrarySnapshot(
+      currentAnimeList,
+      [bookmarkItem, ...currentBookmarkList.filter((anime) => anime.id !== data.id)]
+    );
     return { success: true, action: 'added' };
   };
 
   const handleBulkRemoveBookmarks = (ids) => {
     if (!Array.isArray(ids) || ids.length === 0) return;
     const removeIdSet = new Set(ids);
-    setBookmarkList((prev) => prev.filter((anime) => !removeIdSet.has(anime.id)));
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+    commitLibrarySnapshot(
+      currentAnimeList,
+      currentBookmarkList.filter((anime) => !removeIdSet.has(anime.id))
+    );
   };
 
   const handleMarkBookmarkAsWatched = (anime, options = {}) => {
@@ -1544,12 +1766,6 @@ function App() {
     setOnboardingStep((prev) => Math.min(ONBOARDING_STEPS.length - 1, prev + 1));
   };
 
-  const handleOnboardingStepSelect = (nextStepIndex) => {
-    const numericIndex = Number(nextStepIndex);
-    if (!Number.isFinite(numericIndex)) return;
-    setOnboardingStep(Math.min(ONBOARDING_STEPS.length - 1, Math.max(0, numericIndex)));
-  };
-
   const handleOnboardingAddCurrent = () => {
     setIsOnboardingDismissed(true);
     openSeasonalAddView('addCurrent', { force: true });
@@ -1572,10 +1788,17 @@ function App() {
       return;
     }
 
-    setAnimeList((prev) => {
-      const selectedSet = new Set(selectedAnimeIds);
-      return prev.filter((anime) => !selectedSet.has(anime.id));
-    });
+    const selectedSet = new Set(selectedAnimeIds);
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+    commitLibrarySnapshot(
+      currentAnimeList.filter((anime) => !selectedSet.has(anime.id)),
+      currentBookmarkList
+    );
 
     setIsSelectionMode(false);
     setSelectedAnimeIds([]);
@@ -1963,41 +2186,6 @@ function App() {
     if (!shouldShowHomeOnboarding) return;
     setOnboardingStep(0);
   }, [view, shouldShowHomeOnboarding]);
-
-  useEffect(() => {
-    if (!shouldShowHomeOnboarding || typeof window === 'undefined') return undefined;
-
-    const stepList = onboardingStepListRef.current;
-    const activeStepItem = onboardingStepItemRefs.current[onboardingStep];
-    if (!stepList || !activeStepItem) return undefined;
-
-    const prefersReducedMotion = typeof window.matchMedia === 'function'
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const behavior = prefersReducedMotion ? 'auto' : 'smooth';
-    const rafId = window.requestAnimationFrame(() => {
-      const maxScrollLeft = Math.max(0, stepList.scrollWidth - stepList.clientWidth);
-      if (maxScrollLeft > 0) {
-        const itemLeft = activeStepItem.offsetLeft;
-        const itemWidth = activeStepItem.offsetWidth;
-        const targetLeft = Math.min(
-          maxScrollLeft,
-          Math.max(0, itemLeft - ((stepList.clientWidth - itemWidth) / 2))
-        );
-        stepList.scrollTo({ left: targetLeft, behavior });
-        return;
-      }
-
-      activeStepItem.scrollIntoView({
-        block: 'nearest',
-        inline: 'nearest',
-        behavior,
-      });
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [onboardingStep, shouldShowHomeOnboarding]);
 
   // 6. UI Render
   const pageTransitionDirection = navigationTypeRef.current === 'pop' ? 'backward' : 'forward';
@@ -2573,12 +2761,21 @@ function App() {
               <div className="onboarding-primary">
                 <div className="onboarding-panel-header">
                   <div className="onboarding-panel-meta">
-                    <p className="onboarding-step-badge">
-                      {activeOnboardingStep.eyebrow || 'GUIDE'}
-                    </p>
-                    <p className="onboarding-step-counter">
-                      初回ガイド {onboardingStep + 1}/{ONBOARDING_STEPS.length}
-                    </p>
+                    <div className="onboarding-panel-meta-copy">
+                      <p className="onboarding-step-badge">
+                        {activeOnboardingStep.eyebrow || 'GUIDE'}
+                      </p>
+                      <p className="onboarding-step-counter">
+                        初回ガイド {onboardingStep + 1}/{ONBOARDING_STEPS.length}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="onboarding-action-cancel onboarding-skip-button"
+                      onClick={handleOnboardingCancel}
+                    >
+                      スキップ
+                    </button>
                   </div>
                   <div className="onboarding-progress" aria-hidden="true">
                     <span
@@ -2635,46 +2832,6 @@ function App() {
                   </div>
                 )}
               </div>
-
-              <aside className="onboarding-sidebar" aria-label="ガイドの流れ">
-                <div className="onboarding-sidebar-card">
-                  <p className="onboarding-sidebar-title">ガイドの流れ</p>
-                  <ol className="onboarding-step-list" ref={onboardingStepListRef}>
-                    {ONBOARDING_STEPS.map((step, index) => {
-                      const isActiveStep = index === onboardingStep;
-                      const isCompletedStep = index < onboardingStep;
-                      return (
-                        <li
-                          key={step.key}
-                          ref={(element) => {
-                            onboardingStepItemRefs.current[index] = element;
-                          }}
-                          className={`onboarding-step-item${isActiveStep ? ' active' : ''}${isCompletedStep ? ' completed' : ''}`}
-                        >
-                          <button
-                            type="button"
-                            className="onboarding-step-link"
-                            onClick={() => handleOnboardingStepSelect(index)}
-                            aria-current={isActiveStep ? 'step' : undefined}
-                          >
-                            <span className="onboarding-step-index">{String(index + 1).padStart(2, '0')}</span>
-                            <span className="onboarding-step-link-copy">
-                              {isActiveStep && (
-                                <span className="onboarding-step-link-state">現在</span>
-                              )}
-                              <span className="onboarding-step-link-title">{step.title}</span>
-                              <span className="onboarding-step-link-description">{step.description}</span>
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                  <p className="onboarding-sidebar-note">
-                    気になる機能から先に見ても大丈夫です。最後の画面からすぐ追加を始められます。
-                  </p>
-                </div>
-              </aside>
             </div>
           </section>
         </main>

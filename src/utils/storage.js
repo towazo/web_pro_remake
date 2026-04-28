@@ -3,9 +3,11 @@ import { getSafeLocalStorage } from './browserStorage';
 
 export const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
 export const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
+export const LIBRARY_SYNC_META_STORAGE_KEY = 'myAnimeLibraryMeta';
 
 const STORAGE_SCHEMA_VERSION = 5;
 const MIN_SUPPORTED_STORAGE_SCHEMA_VERSION = 2;
+const LIBRARY_SYNC_META_SCHEMA_VERSION = 1;
 const STORAGE_WRITE_VARIANTS = ['full', 'compact', 'minimal'];
 
 const normalizeString = (value) => {
@@ -16,6 +18,12 @@ const normalizeString = (value) => {
 const normalizeFiniteNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeIsoDateString = (value) => {
+  if (typeof value !== 'string') return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 };
 
 const normalizeStringArray = (value) => (
@@ -270,6 +278,78 @@ export const readListFromStorage = (key) => {
   }
 };
 
+export const deriveLibraryUpdatedAtFromLists = (animeList, bookmarkList) => {
+  const getLatestTimestamp = (list, fieldName) => {
+    if (!Array.isArray(list)) return 0;
+
+    let latestTimestamp = 0;
+    list.forEach((item) => {
+      const timestamp = normalizeFiniteNumber(item?.[fieldName]);
+      if (Number.isFinite(timestamp) && timestamp > latestTimestamp) {
+        latestTimestamp = timestamp;
+      }
+    });
+    return latestTimestamp;
+  };
+
+  const latestTimestamp = Math.max(
+    getLatestTimestamp(animeList, 'addedAt'),
+    getLatestTimestamp(bookmarkList, 'bookmarkedAt')
+  );
+
+  return latestTimestamp > 0 ? new Date(latestTimestamp).toISOString() : null;
+};
+
+export const normalizeLibraryUpdatedAt = (value) => normalizeIsoDateString(value);
+
+export const readLibrarySnapshotFromStorage = () => {
+  const animeList = readListFromStorage(ANIME_LIST_STORAGE_KEY);
+  const bookmarkList = readListFromStorage(BOOKMARK_LIST_STORAGE_KEY);
+  const storage = getSafeLocalStorage();
+  const fallbackUpdatedAt = deriveLibraryUpdatedAtFromLists(animeList, bookmarkList);
+
+  if (!storage) {
+    return {
+      animeList,
+      bookmarkList,
+      updatedAt: fallbackUpdatedAt,
+    };
+  }
+
+  try {
+    const saved = storage.getItem(LIBRARY_SYNC_META_STORAGE_KEY);
+    if (!saved) {
+      return {
+        animeList,
+        bookmarkList,
+        updatedAt: fallbackUpdatedAt,
+      };
+    }
+
+    const parsed = JSON.parse(saved);
+    const isSupported = (
+      parsed
+      && typeof parsed === 'object'
+      && Number(parsed.version) >= 1
+      && Number(parsed.version) <= LIBRARY_SYNC_META_SCHEMA_VERSION
+    );
+
+    return {
+      animeList,
+      bookmarkList,
+      updatedAt: isSupported
+        ? (normalizeLibraryUpdatedAt(parsed.updatedAt) || fallbackUpdatedAt)
+        : fallbackUpdatedAt,
+    };
+  } catch (_) {
+    return {
+      animeList,
+      bookmarkList,
+      updatedAt: fallbackUpdatedAt,
+    };
+  }
+};
+
 export const writeListToStorage = (key, list) => {
   const storage = getSafeLocalStorage();
   if (!storage) return;
@@ -296,5 +376,39 @@ export const writeListToStorage = (key, list) => {
     }
   } catch (error) {
     console.warn(`Storage access failed for ${key}:`, error);
+  }
+};
+
+export const writeLibrarySnapshotToStorage = ({ animeList, bookmarkList, updatedAt }) => {
+  writeListToStorage(ANIME_LIST_STORAGE_KEY, animeList);
+  writeListToStorage(BOOKMARK_LIST_STORAGE_KEY, bookmarkList);
+
+  const storage = getSafeLocalStorage();
+  if (!storage) return null;
+
+  try {
+    const normalizedUpdatedAt = (
+      normalizeLibraryUpdatedAt(updatedAt)
+      || deriveLibraryUpdatedAtFromLists(animeList, bookmarkList)
+    );
+
+    if (!normalizedUpdatedAt) {
+      storage.removeItem(LIBRARY_SYNC_META_STORAGE_KEY);
+      return null;
+    }
+
+    const payload = JSON.stringify({
+      version: LIBRARY_SYNC_META_SCHEMA_VERSION,
+      updatedAt: normalizedUpdatedAt,
+    });
+
+    if (storage.getItem(LIBRARY_SYNC_META_STORAGE_KEY) !== payload) {
+      storage.setItem(LIBRARY_SYNC_META_STORAGE_KEY, payload);
+    }
+
+    return normalizedUpdatedAt;
+  } catch (error) {
+    console.warn('Storage access failed for library sync metadata:', error);
+    return null;
   }
 };

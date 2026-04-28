@@ -1808,8 +1808,8 @@ body {
 }
 
 .onboarding-main {
-    width: min(94vw, 1120px);
-    max-width: 1120px;
+    width: min(94vw, 920px);
+    max-width: 920px;
     margin: 34px auto 110px;
     padding: 34px 36px;
     position: relative;
@@ -1823,16 +1823,17 @@ body {
 }
 
 .onboarding-panel {
+    max-width: 860px;
+    margin: 0 auto;
     padding: 0;
     border: none;
     background: transparent;
 }
 
 .onboarding-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(290px, 0.8fr);
+    display: flex;
+    flex-direction: column;
     gap: 18px;
-    align-items: start;
 }
 
 .onboarding-primary {
@@ -1852,8 +1853,16 @@ body {
 
 .onboarding-panel-meta {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.onboarding-panel-meta-copy {
+    min-width: 0;
+    display: flex;
+    align-items: center;
     gap: 12px;
     flex-wrap: wrap;
 }
@@ -1906,8 +1915,8 @@ body {
 
 .onboarding-copy-surface {
     min-width: 0;
-    min-height: 100%;
-    padding: 28px 28px 24px;
+    height: 430px;
+    padding: 30px 30px 26px;
     border: 1px solid rgba(0, 0, 0, 0.92);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.995) 0%, rgba(246, 246, 246, 0.985) 100%),
@@ -1916,6 +1925,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
 }
 
 .onboarding-title {
@@ -2185,6 +2196,9 @@ body {
 }
 
 .onboarding-action-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 50px;
     border: 1px solid #000;
     background:
@@ -2201,6 +2215,14 @@ body {
 .onboarding-action-cancel:hover {
     background: #efefef;
     transform: translateY(-1px);
+}
+
+.onboarding-skip-button {
+    min-height: 42px;
+    padding: 0 18px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
 }
 
 .mylist-page-main .mylist-section-header {
@@ -8550,7 +8572,6 @@ body.trailer-modal-open .add-toast {
     }
 
     .onboarding-layout {
-        grid-template-columns: 1fr;
         gap: 14px;
     }
 
@@ -8559,13 +8580,28 @@ body.trailer-modal-open .add-toast {
         padding-bottom: 14px;
     }
 
-    .onboarding-copy-surface {
-        padding: 22px 18px 18px;
-        gap: 14px;
+    .onboarding-panel-meta {
+        align-items: center;
+        flex-wrap: nowrap;
     }
 
-    .onboarding-sidebar-card {
-        padding: 18px 16px;
+    .onboarding-panel-meta-copy {
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .onboarding-step-counter {
+        margin-left: auto;
+    }
+
+    .onboarding-copy-surface {
+        height: 440px;
+        padding: 22px 18px 18px;
+        gap: 14px;
     }
 
     .onboarding-title {
@@ -8586,20 +8622,6 @@ body.trailer-modal-open .add-toast {
     .onboarding-feature-list li {
         font-size: 0.84rem;
         padding: 11px 12px 11px 30px;
-    }
-
-    .onboarding-step-list {
-        gap: 8px;
-    }
-
-    .onboarding-step-link {
-        padding: 11px 12px;
-    }
-
-    .onboarding-step-index {
-        min-width: 34px;
-        min-height: 34px;
-        font-size: 0.72rem;
     }
 
     .onboarding-actions {
@@ -8630,6 +8652,18 @@ body.trailer-modal-open .add-toast {
         padding: 6px 12px;
     }
 
+    .onboarding-skip-button {
+        flex: 0 0 auto;
+        width: auto;
+        min-height: 34px;
+        padding: 0 10px;
+        font-size: 0.72rem;
+        line-height: 1.2;
+        white-space: nowrap;
+        margin-left: auto;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+    }
+
 }
 
 @media (max-width: 480px) {
@@ -8643,12 +8677,17 @@ body.trailer-modal-open .add-toast {
     }
 
     .onboarding-copy-surface {
+        height: 440px;
         padding: 18px 14px 16px;
         gap: 12px;
     }
 
     .onboarding-panel-meta {
         align-items: flex-start;
+    }
+
+    .onboarding-panel-meta-copy {
+        gap: 6px;
     }
 
     .onboarding-step-counter {
@@ -8669,72 +8708,19 @@ body.trailer-modal-open .add-toast {
         line-height: 1.62;
     }
 
-    .onboarding-sidebar-card {
-        padding: 0;
-        border: none;
-        background: transparent;
-        box-shadow: none;
-    }
-
-    .onboarding-sidebar-title {
-        margin-bottom: 8px;
-        padding: 0 2px;
-        font-size: 0.74rem;
-    }
-
-    .onboarding-step-list {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding-bottom: 4px;
-        scroll-snap-type: x proximity;
-        scroll-padding-inline: 10px;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .onboarding-step-item {
-        flex: 0 0 min(72vw, 220px);
-        scroll-snap-align: start;
-    }
-
-    .onboarding-step-link {
-        grid-template-columns: auto 1fr;
-        gap: 10px;
-        padding: 10px 11px;
-        min-height: 72px;
-        align-items: center;
-    }
-
-    .onboarding-step-item.active .onboarding-step-link {
-        box-shadow: 0 12px 20px rgba(0, 0, 0, 0.12);
-        transform: translateY(-1px);
-    }
-
-    .onboarding-step-link-description {
-        display: none;
-    }
-
-    .onboarding-step-link-state {
-        min-height: 18px;
-        padding: 0 6px;
-        font-size: 0.58rem;
-    }
-
-    .onboarding-step-link-title {
-        font-size: 0.82rem;
-        line-height: 1.45;
-    }
-
-    .onboarding-sidebar-note {
-        display: none;
-    }
-
     .onboarding-actions {
         gap: 10px;
     }
 
     .onboarding-actions:not(.final-step) .onboarding-action-secondary:disabled {
-        display: none;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .onboarding-skip-button {
+        min-height: 32px;
+        padding: 0 8px;
+        font-size: 0.68rem;
     }
 }
 
