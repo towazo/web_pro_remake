@@ -21,6 +21,7 @@ import {
   writeLibrarySnapshotToPersistentStorage,
   writeLibrarySnapshotToStorage,
 } from './utils/storage';
+import { normalizeAnimeExternalUrl } from './utils/externalUrl';
 import {
   filterDisplayEligibleAnimeList,
   isDisplayEligibleAnime,
@@ -392,6 +393,7 @@ function App() {
     const normalizedCountryOfOrigin = normalizeText(anime?.countryOfOrigin);
     const normalizedBannerImage = normalizeText(anime?.bannerImage);
     const normalizedDescription = normalizeText(anime?.description);
+    const normalizedExternalUrl = normalizeAnimeExternalUrl(anime?.externalUrl);
     const normalizedAverageScore = normalizeFiniteNumber(anime?.averageScore);
     const normalizedEpisodes = normalizeFiniteNumber(anime?.episodes);
     const normalizedSeasonYear = normalizeFiniteNumber(anime?.seasonYear);
@@ -436,6 +438,7 @@ function App() {
       && anime?.countryOfOrigin === normalizedCountryOfOrigin
       && anime?.bannerImage === normalizedBannerImage
       && anime?.description === normalizedDescription
+      && (anime?.externalUrl || '') === normalizedExternalUrl
       && anime?.addedAt === normalizedAddedAt
       && anime?.bookmarkedAt === normalizedBookmarkedAt
       && (anime?.rating ?? null) === normalizedRating
@@ -474,6 +477,11 @@ function App() {
       delete nextAnime.bookmarkedAt;
     } else {
       nextAnime.bookmarkedAt = normalizedBookmarkedAt;
+    }
+    if (normalizedExternalUrl) {
+      nextAnime.externalUrl = normalizedExternalUrl;
+    } else if (Object.prototype.hasOwnProperty.call(nextAnime, 'externalUrl')) {
+      delete nextAnime.externalUrl;
     }
     if (hasTagList) {
       nextAnime.tags = normalizeAnimeTags(anime.tags);
@@ -1857,6 +1865,49 @@ function App() {
     commitLibrarySnapshot(nextAnimeList, currentBookmarkList);
   };
 
+  const handleConfigureAnimeExternalUrl = (id) => {
+    const currentAnimeList = Array.isArray(libraryListsRef.current.animeList)
+      ? libraryListsRef.current.animeList
+      : [];
+    const currentBookmarkList = Array.isArray(libraryListsRef.current.bookmarkList)
+      ? libraryListsRef.current.bookmarkList
+      : [];
+    const targetAnime = currentAnimeList.find((anime) => anime.id === id);
+    if (!targetAnime) return;
+
+    const currentExternalUrl = normalizeAnimeExternalUrl(targetAnime.externalUrl);
+    const nextInput = window.prompt(
+      '作品カードに設定するURLを入力してください。空欄でURLを削除できます。',
+      currentExternalUrl
+    );
+    if (nextInput === null) return;
+
+    const trimmedInput = nextInput.trim();
+    const normalizedExternalUrl = trimmedInput ? normalizeAnimeExternalUrl(trimmedInput) : '';
+    if (trimmedInput && !normalizedExternalUrl) {
+      window.alert('URLは http:// または https:// から始まる形式、または example.com のような形式で入力してください。');
+      return;
+    }
+    if (normalizedExternalUrl === currentExternalUrl) return;
+
+    let changed = false;
+    const nextAnimeList = currentAnimeList.map((anime) => {
+      if (anime.id !== id) return anime;
+      changed = true;
+      if (!normalizedExternalUrl) {
+        const nextAnime = { ...anime };
+        delete nextAnime.externalUrl;
+        return nextAnime;
+      }
+      return {
+        ...anime,
+        externalUrl: normalizedExternalUrl,
+      };
+    });
+    if (!changed) return;
+    commitLibrarySnapshot(nextAnimeList, currentBookmarkList);
+  };
+
   const handleToggleBookmark = (data) => {
     if (!data || typeof data.id !== 'number') {
       return { success: false, message: '作品情報を取得できませんでした。' };
@@ -2884,6 +2935,7 @@ function App() {
                         onLongPress={handleLongPressAnime}
                         onUpdateRating={handleUpdateAnimeRating}
                         onUpdateWatchCount={handleUpdateAnimeWatchCount}
+                        onConfigureExternalUrl={handleConfigureAnimeExternalUrl}
                         onPlayTrailer={handleOpenTrailer}
                         onViewportPriorityChange={handleMyListViewportPriorityChange}
                       />

@@ -1,11 +1,12 @@
 import { normalizeAnimeTrailer } from './trailer';
 import { getSafeIndexedDb, getSafeLocalStorage } from './browserStorage';
+import { normalizeAnimeExternalUrl } from './externalUrl';
 
 export const ANIME_LIST_STORAGE_KEY = 'myAnimeList';
 export const BOOKMARK_LIST_STORAGE_KEY = 'myAnimeBookmarkList';
 export const LIBRARY_SYNC_META_STORAGE_KEY = 'myAnimeLibraryMeta';
 
-const STORAGE_SCHEMA_VERSION = 5;
+const STORAGE_SCHEMA_VERSION = 6;
 const MIN_SUPPORTED_STORAGE_SCHEMA_VERSION = 2;
 const LIBRARY_SYNC_META_SCHEMA_VERSION = 1;
 const STORAGE_WRITE_VARIANTS = ['full', 'compact', 'minimal'];
@@ -115,6 +116,7 @@ const serializeAnimeEntry = (anime, variant = 'full') => {
     normalizeFiniteNumber(anime.watchCount),
     normalizeFiniteNumber(anime.addedAt),
     normalizeFiniteNumber(anime.bookmarkedAt),
+    normalizeAnimeExternalUrl(anime.externalUrl),
   ];
 };
 
@@ -123,6 +125,7 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
     const numericSchemaVersion = Number(schemaVersion) || 0;
     const supportsTrailer = numericSchemaVersion >= 4;
     const supportsTrailerChecked = numericSchemaVersion >= 5;
+    const supportsExternalUrl = numericSchemaVersion >= 6;
     const supportsWatchCount = numericSchemaVersion >= 3;
     let trailerId = '';
     let trailerSite = '';
@@ -131,6 +134,7 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
     let watchCount = null;
     let addedAt = null;
     let bookmarkedAt = null;
+    let externalUrl = '';
 
     const [
       id,
@@ -160,6 +164,7 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
       extra4,
       extra5,
       extra6,
+      extra7,
     ] = entry;
 
     if (supportsTrailerChecked) {
@@ -170,6 +175,7 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
       watchCount = extra4;
       addedAt = extra5;
       bookmarkedAt = extra6;
+      externalUrl = supportsExternalUrl ? extra7 : '';
     } else if (supportsTrailer) {
       trailerId = extra0;
       trailerSite = extra1;
@@ -226,6 +232,11 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
       anime.trailerChecked = trailerChecked;
     }
 
+    const normalizedExternalUrl = normalizeAnimeExternalUrl(externalUrl);
+    if (normalizedExternalUrl) {
+      anime.externalUrl = normalizedExternalUrl;
+    }
+
     if (!Number.isFinite(anime.id)) return null;
     return anime;
   }
@@ -235,14 +246,28 @@ const deserializeAnimeEntry = (entry, schemaVersion = STORAGE_SCHEMA_VERSION) =>
   if (!Number.isFinite(id)) return null;
   const hasTrailerField = Object.prototype.hasOwnProperty.call(entry, 'trailer');
   const hasTrailerCheckedField = Object.prototype.hasOwnProperty.call(entry, 'trailerChecked');
+  const normalizedExternalUrl = normalizeAnimeExternalUrl(entry.externalUrl);
   if (!hasTrailerField && !hasTrailerCheckedField) {
-    return entry;
+    const nextEntry = { ...entry };
+    if (normalizedExternalUrl) {
+      nextEntry.externalUrl = normalizedExternalUrl;
+    } else {
+      delete nextEntry.externalUrl;
+    }
+    return nextEntry;
   }
-  return {
+
+  const nextEntry = {
     ...entry,
     ...(hasTrailerField ? { trailer: normalizeAnimeTrailer(entry.trailer) } : {}),
     trailerChecked: hasTrailerCheckedField ? entry.trailerChecked === true : false,
   };
+  if (normalizedExternalUrl) {
+    nextEntry.externalUrl = normalizedExternalUrl;
+  } else {
+    delete nextEntry.externalUrl;
+  }
+  return nextEntry;
 };
 
 const serializeListPayload = (list, variant = 'full') => JSON.stringify({

@@ -2468,6 +2468,25 @@ body {
     overflow: hidden;
 }
 
+.card-image-tap-target {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: default;
+}
+
+.card-image-tap-target.has-external-url {
+    cursor: pointer;
+}
+
+.card-image-tap-target:focus-visible {
+    outline: 2px solid #000;
+    outline-offset: -2px;
+}
+
 .card-image-wrapper img {
     width: 100%;
     height: 100%;
@@ -2498,6 +2517,26 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     z-index: 5;
+}
+
+.card-external-url-badge {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 8px;
+    border: 1px solid rgba(0, 0, 0, 0.92);
+    background: rgba(255, 255, 255, 0.94);
+    color: #111;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+    pointer-events: none;
 }
 
 .selection-indicator {

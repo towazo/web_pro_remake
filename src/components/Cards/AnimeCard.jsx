@@ -8,6 +8,9 @@ import { hasAnimeTrailerMetadata } from '../../utils/trailer';
 
 const LONG_PRESS_MS = 450;
 const RATING_VALUES = [1, 2, 3, 4, 5];
+const IMAGE_SECRET_TAP_COUNT = 3;
+const IMAGE_SECRET_TAP_RESET_MS = 1500;
+const IMAGE_LINK_OPEN_DELAY_MS = 420;
 
 const normalizeRating = (value) => {
   const parsed = Number(value);
@@ -25,6 +28,7 @@ function AnimeCard({
   onLongPress,
   onUpdateRating,
   onUpdateWatchCount,
+  onConfigureExternalUrl,
   allowRatingEditInSelectionMode = false,
   allowWatchCountEditInSelectionMode = false,
   onPlayTrailer,
@@ -32,6 +36,9 @@ function AnimeCard({
 }) {
   const cardRef = useRef(null);
   const longPressTimerRef = useRef(null);
+  const imageTapResetTimerRef = useRef(null);
+  const imageLinkOpenTimerRef = useRef(null);
+  const imageTapCountRef = useRef(0);
   const longPressTriggeredRef = useRef(false);
   const isMountedRef = useRef(true);
   const [isWatchControlsPinned, setIsWatchControlsPinned] = useState(false);
@@ -43,6 +50,8 @@ function AnimeCard({
   const supportsTrailerControl = !isSelectionMode && typeof onPlayTrailer === 'function';
   const shouldTrackViewportPriority = typeof onViewportPriorityChange === 'function';
   const hasTrailerMetadata = hasAnimeTrailerMetadata(anime);
+  const hasExternalUrl = typeof anime?.externalUrl === 'string' && anime.externalUrl.length > 0;
+  const supportsImageTapShortcut = !isSelectionMode && typeof onConfigureExternalUrl === 'function';
   const shouldProbeTrailerPlayback = supportsTrailerControl && hasTrailerMetadata;
   const { shouldAutoProbe, probePriority } = useViewportTrailerPriority(cardRef, {
     enabled: shouldProbeTrailerPlayback || shouldTrackViewportPriority,
@@ -73,10 +82,31 @@ function AnimeCard({
     }
   };
 
+  const clearImageTapResetTimer = () => {
+    if (imageTapResetTimerRef.current) {
+      clearTimeout(imageTapResetTimerRef.current);
+      imageTapResetTimerRef.current = null;
+    }
+  };
+
+  const clearImageLinkOpenTimer = () => {
+    if (imageLinkOpenTimerRef.current) {
+      clearTimeout(imageLinkOpenTimerRef.current);
+      imageLinkOpenTimerRef.current = null;
+    }
+  };
+
+  const resetImageTapSequence = () => {
+    imageTapCountRef.current = 0;
+    clearImageTapResetTimer();
+    clearImageLinkOpenTimer();
+  };
+
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
       clearLongPressTimer();
+      resetImageTapSequence();
     };
   }, []);
 
@@ -87,6 +117,10 @@ function AnimeCard({
   useEffect(() => {
     setWatchControlCount(watchCount);
   }, [anime?.id, watchCount]);
+
+  useEffect(() => {
+    resetImageTapSequence();
+  }, [anime?.id, anime?.externalUrl]);
 
   useEffect(() => {
     if (!shouldTrackViewportPriority) return undefined;
@@ -222,6 +256,43 @@ function AnimeCard({
     }
   };
 
+  const handleImageTapPointerDown = (event) => {
+    event.stopPropagation();
+  };
+
+  const handleImageTapActivate = (event) => {
+    event.stopPropagation();
+    if (!supportsImageTapShortcut) return;
+
+    clearImageLinkOpenTimer();
+    clearImageTapResetTimer();
+
+    const nextTapCount = imageTapCountRef.current + 1;
+    imageTapCountRef.current = nextTapCount;
+
+    if (nextTapCount >= IMAGE_SECRET_TAP_COUNT) {
+      resetImageTapSequence();
+      onConfigureExternalUrl(anime.id);
+      return;
+    }
+
+    imageTapResetTimerRef.current = setTimeout(() => {
+      imageTapCountRef.current = 0;
+      clearImageTapResetTimer();
+    }, IMAGE_SECRET_TAP_RESET_MS);
+
+    if (!hasExternalUrl || nextTapCount !== 1) return;
+
+    imageLinkOpenTimerRef.current = setTimeout(() => {
+      if (imageTapCountRef.current !== 1 || typeof window === 'undefined') {
+        return;
+      }
+
+      window.open(anime.externalUrl, '_blank', 'noopener,noreferrer');
+      resetImageTapSequence();
+    }, IMAGE_LINK_OPEN_DELAY_MS);
+  };
+
   return (
     <div
       ref={cardRef}
@@ -238,6 +309,21 @@ function AnimeCard({
       aria-pressed={isSelectionMode ? isSelected : undefined}
     >
       <div className="card-image-wrapper">
+        {supportsImageTapShortcut && (
+          <button
+            type="button"
+            className={`card-image-tap-target${hasExternalUrl ? ' has-external-url' : ''}`}
+            onPointerDown={handleImageTapPointerDown}
+            onPointerUp={handleImageTapPointerDown}
+            onClick={handleImageTapActivate}
+            aria-label={hasExternalUrl
+              ? '作品イラストをタップで外部サイトを開きます。3回連続タップでURLを変更できます。'
+              : '作品イラストを3回連続タップするとURLを設定できます。'}
+            title={hasExternalUrl
+              ? 'タップで外部サイトを開く / 3回連続タップでURL変更'
+              : '3回連続タップでURL設定'}
+          />
+        )}
         <img
           src={anime.coverImage.large}
           alt={anime.title.native || anime.title.romaji}
@@ -246,6 +332,9 @@ function AnimeCard({
           onDragStart={(event) => event.preventDefault()}
         />
         <div className="episodes-badge">{anime.episodes || '?'} 話</div>
+        {hasExternalUrl && supportsImageTapShortcut && (
+          <div className="card-external-url-badge" aria-hidden="true">URL</div>
+        )}
         {isSelectionMode && (
           <div className={`selection-indicator${isSelected ? ' active' : ''}`} aria-hidden="true">
             {isSelected ? '✓' : ''}
@@ -391,6 +480,7 @@ const areAnimeCardPropsEqual = (prevProps, nextProps) => (
   && prevProps.isSelected === nextProps.isSelected
   && prevProps.allowRatingEditInSelectionMode === nextProps.allowRatingEditInSelectionMode
   && prevProps.allowWatchCountEditInSelectionMode === nextProps.allowWatchCountEditInSelectionMode
+  && Boolean(prevProps.onConfigureExternalUrl) === Boolean(nextProps.onConfigureExternalUrl)
   && Boolean(prevProps.onPlayTrailer) === Boolean(nextProps.onPlayTrailer)
   && Boolean(prevProps.onViewportPriorityChange) === Boolean(nextProps.onViewportPriorityChange)
 );
