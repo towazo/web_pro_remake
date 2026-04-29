@@ -200,6 +200,31 @@ const Hero = React.forwardRef(function Hero({
         : hasBannerImage
             ? "(min-width: 1400px) 430px, (min-width: 1100px) 390px, (min-width: 901px) 340px, 84vw"
             : "(max-width: 768px) 42vw, 220px";
+    const heroMetaItems = [
+        {
+            key: 'year',
+            className: 'hero-meta-item hero-meta-year',
+            content: anime.seasonYear ? `${anime.seasonYear}年` : '不明',
+        },
+        {
+            key: 'genres',
+            className: 'hero-meta-item hero-meta-genres',
+            content: genreText || 'ジャンル不明',
+        },
+        {
+            key: 'episodes',
+            className: 'hero-meta-item hero-meta-episodes',
+            content: `${anime.episodes || '?'}話`,
+        },
+        ...(rating !== null
+            ? [{
+                key: 'rating',
+                className: 'hero-meta-item hero-rating',
+                content: `★${rating}`,
+                ariaLabel: `評価 ${rating} / 5`,
+            }]
+            : []),
+    ];
     const shouldPrepareTrailerPlayer = !isTutorial && (isActive || shouldPreloadTrailer);
     const shouldMountTrailerPlayer = shouldRenderTrailerPreview && shouldPrepareTrailerPlayer;
     const shouldEagerLoadHeroAssets = isActive || shouldPreloadTrailer;
@@ -603,17 +628,15 @@ const Hero = React.forwardRef(function Hero({
                 )}
                 <h1>{anime.title ? (anime.title.native || anime.title.romaji) : 'No Title'}</h1>
                 <div className="hero-meta">
-                    <span>{anime.seasonYear ? `${anime.seasonYear}年` : '不明'}</span>
-                    <span className="dot">•</span>
-                    <span>{genreText}</span>
-                    <span className="dot">•</span>
-                    <span>{anime.episodes || '?'} 話</span>
-                    {rating !== null && (
-                        <>
-                            <span className="dot">•</span>
-                            <span className="hero-rating" aria-label={`評価 ${rating} / 5`}>★{rating}</span>
-                        </>
-                    )}
+                    {heroMetaItems.map((item) => (
+                        <span
+                            key={item.key}
+                            className={item.className}
+                            aria-label={item.ariaLabel}
+                        >
+                            {item.content}
+                        </span>
+                    ))}
                 </div>
 
                 {isTranslating ? (

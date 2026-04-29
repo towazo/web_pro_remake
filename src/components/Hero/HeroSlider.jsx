@@ -7,12 +7,12 @@ const INITIAL_BUFFER_SIZE = 10;
 const BUFFER_REPLENISH_THRESHOLD = 5;
 const TIMELINE_HANDLE_EDGE_OFFSET_PX = 7;
 
-function RestartIcon() {
+function RestartIcon({ spinning = false }) {
     return (
         <svg
             viewBox="0 0 24 24"
             aria-hidden="true"
-            className="slider-refresh-icon"
+            className={`slider-refresh-icon${spinning ? ' spinning' : ''}`}
         >
             <path
                 d="M3 8V3H8"
@@ -317,6 +317,16 @@ function HeroSlider({
         setCurrentSlideRestartToken((prev) => prev + 1);
     };
 
+    const canRefreshSlider = showRefreshButton && typeof onRefresh === 'function';
+    const handleRefreshButtonClick = () => {
+        if (canRefreshSlider) {
+            onRefresh();
+            return;
+        }
+
+        handleRestartCurrentSlide();
+    };
+
     const handleTogglePreviewMuted = () => {
         if (isPreviewMuted) {
             setHasUnlockedPreviewAudio(true);
@@ -383,6 +393,9 @@ function HeroSlider({
         && String(visibleAnime?.trailer?.site || '').toLowerCase() === 'youtube'
     );
     const shouldUseCinematicTrailerChrome = activePreviewAudioAvailable || visibleSlideHasTrailerPreview;
+    const refreshButtonLabel = canRefreshSlider
+        ? 'スライドを再読み込み'
+        : 'このスライドを最初から見る';
     const myListActionLabel = isVisibleAnimeInMyList ? '取消' : 'マイリスト';
     const bookmarkActionLabel = isVisibleAnimeBookmarked ? '解除' : 'ブックマーク';
     const handleGoToSlide = (index) => {
@@ -525,12 +538,13 @@ function HeroSlider({
                 {totalSlides > 0 && (
                     <button
                         type="button"
-                        className="slider-refresh-button"
-                        onClick={handleRestartCurrentSlide}
-                        aria-label="このページを最初から見る"
-                        title="このページを最初から見る"
+                        className={`slider-refresh-button${canRefreshSlider && isRefreshing ? ' loading' : ''}`}
+                        onClick={handleRefreshButtonClick}
+                        disabled={canRefreshSlider && isRefreshing}
+                        aria-label={refreshButtonLabel}
+                        title={refreshButtonLabel}
                     >
-                        <RestartIcon />
+                        <RestartIcon spinning={canRefreshSlider && isRefreshing} />
                     </button>
                 )}
 

@@ -35,6 +35,8 @@ const BROWSE_SPECIAL_PRESET_KEYS = Object.freeze({
 });
 const BROWSE_RESULTS_CACHE = new Map();
 const BROWSE_RESULTS_CACHE_TTL_MS = 15 * 60 * 1000;
+const BROWSE_RECOVERY_RETRY_BASE_MS = 9000;
+const BROWSE_RECOVERY_RETRY_MAX_MS = 45000;
 const SHARE_CARD_IMPORT_MAX_FILES = 4;
 const RATE_LIMIT_MESSAGE_PATTERN = /\b429\b|rate\s*limit|too\s*many/i;
 const BULK_RESULT_KIND = Object.freeze({
@@ -300,6 +302,12 @@ const buildBulkRateLimitInterruptedMessage = (retryAfterMs = 0) => {
 const getRetryUntilTs = (retryAfterMs = 0) => {
     const waitMs = parsePositiveMs(retryAfterMs);
     return waitMs > 0 ? Date.now() + waitMs : 0;
+};
+
+const getBrowseRecoveryRetryDelayMs = (attemptCount) => {
+    const safeAttemptCount = Math.max(1, Number(attemptCount) || 1);
+    const retryDelay = BROWSE_RECOVERY_RETRY_BASE_MS * (2 ** Math.max(0, safeAttemptCount - 1));
+    return Math.min(BROWSE_RECOVERY_RETRY_MAX_MS, retryDelay);
 };
 
 const hasRateLimitError = (value) => RATE_LIMIT_MESSAGE_PATTERN.test(String(value || ''));
@@ -860,6 +868,24 @@ function AddAnimeScreen({
             : '';
         return `preset:${selectedBrowseYear}:${activeBrowsePreset.mediaSeason || ''}:${statusInKey}:${statusNotKey}`;
     }, [selectedBrowseYear, activeBrowsePreset]);
+    const scheduleBrowseRecoveryRetry = React.useCallback((key) => {
+        const safeKey = String(key || '').trim();
+        if (!safeKey) return;
+
+        const currentCount = Number(browseAutoRetryCountRef.current.get(safeKey) || 0);
+        const runAt = Date.now() + getBrowseRecoveryRetryDelayMs(currentCount + 1);
+        setBrowseAutoRetryPlan((currentPlan) => {
+            if (
+                currentPlan?.key === safeKey
+                && Number(currentPlan.runAt) > Date.now()
+                && Number(currentPlan.runAt) <= runAt
+            ) {
+                return currentPlan;
+            }
+
+            return { key: safeKey, runAt };
+        });
+    }, []);
     const upsertSelectedSuggestionItem = React.useCallback((anime) => {
         const animeId = Number(anime?.id);
         if (!Number.isFinite(animeId)) return;
@@ -1325,15 +1351,10 @@ function AddAnimeScreen({
                     const retryUntil = getRetryUntilTs(retryAfterMs);
                     setBrowseRetryUntilTs(retryUntil);
                     const key = browseDataKey || `year:${selectedBrowseYear}`;
-                    const autoRetryCount = Number(browseAutoRetryCountRef.current.get(key) || 0);
-                    if (autoRetryCount < 2) {
-                        setBrowseAutoRetryPlan({ key, runAt: retryUntil });
-                    } else {
-                        setBrowseAutoRetryPlan(null);
-                    }
+                    setBrowseAutoRetryPlan({ key, runAt: retryUntil });
                 } else {
                     setBrowseRetryUntilTs(0);
-                    setBrowseAutoRetryPlan(null);
+                    scheduleBrowseRecoveryRetry(browseDataKey || `year:${selectedBrowseYear}`);
                 }
                 if (fallbackItems.length > 0) {
                     setBrowseResults(fallbackItems);
@@ -1480,19 +1501,14 @@ function AddAnimeScreen({
                         : '';
                     const fallbackEntry = browseDataKey ? BROWSE_RESULTS_CACHE.get(browseDataKey) : null;
                     const fallbackItems = Array.isArray(fallbackEntry?.items) ? fallbackEntry.items : [];
+                    const retryKey = browseDataKey || `year:${selectedBrowseYear}`;
                     if (isRateLimit && retryAfterMs > 0) {
                         const retryUntil = getRetryUntilTs(retryAfterMs);
                         setBrowseRetryUntilTs(retryUntil);
-                        const key = browseDataKey || `year:${selectedBrowseYear}`;
-                        const autoRetryCount = Number(browseAutoRetryCountRef.current.get(key) || 0);
-                        if (autoRetryCount < 2) {
-                            setBrowseAutoRetryPlan({ key, runAt: retryUntil });
-                        } else {
-                            setBrowseAutoRetryPlan(null);
-                        }
+                        setBrowseAutoRetryPlan({ key: retryKey, runAt: retryUntil });
                     } else {
                         setBrowseRetryUntilTs(0);
-                        setBrowseAutoRetryPlan(null);
+                        scheduleBrowseRecoveryRetry(retryKey);
                     }
                     if (fallbackItems.length > 0) {
                         setBrowseResults(fallbackItems);
@@ -1508,10 +1524,16 @@ function AddAnimeScreen({
                 } else if (!safeItems || safeItems.length === 0) {
                     setBrowseResults([]);
                     setBrowsePage(1);
-                    setBrowseError('');
-                    setBrowseErrorType('');
+                    if (activeBrowsePreset) {
+                        setBrowseError(buildApiUnavailableMessage('作品リスト'));
+                        setBrowseErrorType('upstream');
+                        scheduleBrowseRecoveryRetry(browseDataKey || `year:${selectedBrowseYear}`);
+                    } else {
+                        setBrowseError('');
+                        setBrowseErrorType('');
+                        setBrowseAutoRetryPlan(null);
+                    }
                     setBrowseRetryUntilTs(0);
-                    setBrowseAutoRetryPlan(null);
                 } else {
                     setBrowseResults(safeItems);
                     setBrowsePage(1);
@@ -1530,15 +1552,10 @@ function AddAnimeScreen({
                             const retryUntil = getRetryUntilTs(retryAfterMs);
                             setBrowseRetryUntilTs(retryUntil);
                             const key = browseDataKey || `year:${selectedBrowseYear}`;
-                            const autoRetryCount = Number(browseAutoRetryCountRef.current.get(key) || 0);
-                            if (autoRetryCount < 2) {
-                                setBrowseAutoRetryPlan({ key, runAt: retryUntil });
-                            } else {
-                                setBrowseAutoRetryPlan(null);
-                            }
+                            setBrowseAutoRetryPlan({ key, runAt: retryUntil });
                         } else {
                             setBrowseRetryUntilTs(0);
-                            setBrowseAutoRetryPlan(null);
+                            scheduleBrowseRecoveryRetry(browseDataKey || `year:${selectedBrowseYear}`);
                         }
                         setBrowseErrorType('rate_limit');
                         setBrowseError(buildApiRateLimitMessage(retryAfterMs));
@@ -1612,7 +1629,8 @@ function AddAnimeScreen({
         selectedBrowseYear,
         activeBrowsePreset,
         browseReloadToken,
-        browseDataKey
+        browseDataKey,
+        scheduleBrowseRecoveryRetry
     ]);
 
     useEffect(() => {

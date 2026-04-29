@@ -278,6 +278,8 @@ const DETAIL_ENRICHMENT_RETRY_BASE_MS = 4000;
 const DETAIL_ENRICHMENT_RETRY_MAX_MS = 60000;
 const FEATURED_SLIDER_CURRENT_SEASON_FORMATS = Object.freeze(['TV', 'TV_SHORT', 'MOVIE', 'ONA']);
 const FEATURED_SLIDER_CURRENT_SEASON_MAX_PAGES = 4;
+const FEATURED_SLIDER_CURRENT_SEASON_RETRY_BASE_MS = 12000;
+const FEATURED_SLIDER_CURRENT_SEASON_RETRY_MAX_MS = 60000;
 const PAGE_TRANSITION_FOOTER_HIDE_MS = 1200;
 const LAUNCH_SPLASH_DURATION_MS = 4500;
 const REDUCED_MOTION_LAUNCH_SPLASH_DURATION_MS = 1400;
@@ -309,6 +311,12 @@ const getDetailEnrichmentRetryDelayMs = (attemptCount) => {
   const safeAttemptCount = Math.max(1, Number(attemptCount) || 1);
   const retryDelay = DETAIL_ENRICHMENT_RETRY_BASE_MS * (2 ** Math.max(0, safeAttemptCount - 1));
   return Math.min(DETAIL_ENRICHMENT_RETRY_MAX_MS, retryDelay);
+};
+
+const getCurrentSeasonFeaturedRetryDelayMs = (attemptCount) => {
+  const safeAttemptCount = Math.max(1, Number(attemptCount) || 1);
+  const retryDelay = FEATURED_SLIDER_CURRENT_SEASON_RETRY_BASE_MS * (2 ** Math.max(0, safeAttemptCount - 1));
+  return Math.min(FEATURED_SLIDER_CURRENT_SEASON_RETRY_MAX_MS, retryDelay);
 };
 
 /**
@@ -568,6 +576,7 @@ function App() {
   const [isCurrentSeasonFeaturedCacheFresh, setIsCurrentSeasonFeaturedCacheFresh] = useState(() => (
     cachedCurrentSeasonFeaturedCacheState.isFresh
   ));
+  const [currentSeasonFeaturedRetryToken, setCurrentSeasonFeaturedRetryToken] = useState(0);
   const [featuredSliderState, setFeaturedSliderState] = useState(() => (
     homeFeaturedSliderSource === HOME_FEATURED_SLIDER_SOURCES.currentSeason
       ? buildFeaturedSliderState(
@@ -618,6 +627,8 @@ function App() {
   const featuredSourceAnimeListRef = useRef(animeList);
   const currentSeasonFeaturedRequestIdRef = useRef(0);
   const currentSeasonFeaturedFetchAttemptedRef = useRef(new Set());
+  const currentSeasonFeaturedRetryTimerRef = useRef(null);
+  const currentSeasonFeaturedRetryCountRef = useRef(0);
   const detailEnrichmentStateRef = useRef(new Map());
   const detailEnrichmentRequestInFlightRef = useRef(false);
   const detailEnrichmentAbortControllerRef = useRef(null);
@@ -692,6 +703,24 @@ function App() {
     });
   }, [animeList, shouldUseImmediateFeaturedFallback]);
   const visibleFeaturedSliderState = immediateFeaturedFallbackState || featuredSliderState;
+
+  const clearCurrentSeasonFeaturedRetryTimer = useCallback(() => {
+    if (!currentSeasonFeaturedRetryTimerRef.current) return;
+    clearTimeout(currentSeasonFeaturedRetryTimerRef.current);
+    currentSeasonFeaturedRetryTimerRef.current = null;
+  }, []);
+
+  const scheduleCurrentSeasonFeaturedRetry = useCallback(() => {
+    if (currentSeasonFeaturedRetryTimerRef.current) return;
+
+    const nextAttempt = currentSeasonFeaturedRetryCountRef.current + 1;
+    const delayMs = getCurrentSeasonFeaturedRetryDelayMs(nextAttempt);
+    currentSeasonFeaturedRetryCountRef.current = nextAttempt;
+    currentSeasonFeaturedRetryTimerRef.current = setTimeout(() => {
+      currentSeasonFeaturedRetryTimerRef.current = null;
+      setCurrentSeasonFeaturedRetryToken((prev) => prev + 1);
+    }, delayMs);
+  }, []);
 
   const buildNextFeaturedSliderState = useCallback((options = {}) => {
     featuredShuffleTokenRef.current += 1;
@@ -1465,14 +1494,16 @@ function App() {
     if (hasCurrentSeasonFeaturedLoaded && isCurrentSeasonFeaturedCacheFresh) return undefined;
 
     const fetchKey = `${currentSeasonAddPreset.year}:${currentSeasonAddPreset.mediaSeason}`;
+    const fetchAttemptKey = `${fetchKey}:${currentSeasonFeaturedRetryToken}`;
     if (
       hasCurrentSeasonFeaturedLoaded
       && !isCurrentSeasonFeaturedCacheFresh
-      && currentSeasonFeaturedFetchAttemptedRef.current.has(fetchKey)
+      && currentSeasonFeaturedFetchAttemptedRef.current.has(fetchAttemptKey)
     ) {
       return undefined;
     }
-    currentSeasonFeaturedFetchAttemptedRef.current.add(fetchKey);
+    currentSeasonFeaturedFetchAttemptedRef.current.add(fetchAttemptKey);
+    clearCurrentSeasonFeaturedRetryTimer();
 
     const controller = new AbortController();
     const requestId = currentSeasonFeaturedRequestIdRef.current + 1;
@@ -1517,12 +1548,18 @@ function App() {
           setIsCurrentSeasonFeaturedCacheFresh(nextItems.length > 0);
         });
         if (nextItems.length > 0) {
+          currentSeasonFeaturedRetryCountRef.current = 0;
+          currentSeasonFeaturedFetchAttemptedRef.current.clear();
+          clearCurrentSeasonFeaturedRetryTimer();
           writeHomeCurrentSeasonFeaturedAnimeListToStorage(currentSeasonInfo, nextItems);
+        } else {
+          scheduleCurrentSeasonFeaturedRetry();
         }
       } catch (error) {
         if (controller.signal.aborted || currentSeasonFeaturedRequestIdRef.current !== requestId) return;
         setHasCurrentSeasonFeaturedLoaded(true);
         setIsCurrentSeasonFeaturedCacheFresh(false);
+        scheduleCurrentSeasonFeaturedRetry();
       } finally {
         if (!controller.signal.aborted && currentSeasonFeaturedRequestIdRef.current === requestId) {
           setIsCurrentSeasonFeaturedLoading(false);
@@ -1538,11 +1575,48 @@ function App() {
   }, [
     currentSeasonAddPreset,
     currentSeasonFeaturedAnimeList.length,
+    currentSeasonFeaturedRetryToken,
     currentSeasonInfo,
+    clearCurrentSeasonFeaturedRetryTimer,
     hasCurrentSeasonFeaturedLoaded,
     homeFeaturedSliderSource,
     isCurrentSeasonFeaturedCacheFresh,
+    scheduleCurrentSeasonFeaturedRetry,
   ]);
+
+  useEffect(() => {
+    if (homeFeaturedSliderSource !== HOME_FEATURED_SLIDER_SOURCES.currentSeason) return undefined;
+    if (isCurrentSeasonFeaturedCacheFresh) return undefined;
+    if (typeof window === 'undefined') return undefined;
+
+    const requestRetry = () => {
+      clearCurrentSeasonFeaturedRetryTimer();
+      setCurrentSeasonFeaturedRetryToken((prev) => prev + 1);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestRetry();
+      }
+    };
+
+    window.addEventListener('online', requestRetry);
+    window.addEventListener('focus', requestRetry);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('online', requestRetry);
+      window.removeEventListener('focus', requestRetry);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [
+    clearCurrentSeasonFeaturedRetryTimer,
+    homeFeaturedSliderSource,
+    isCurrentSeasonFeaturedCacheFresh,
+  ]);
+
+  useEffect(() => () => {
+    clearCurrentSeasonFeaturedRetryTimer();
+  }, [clearCurrentSeasonFeaturedRetryTimer]);
 
   // 3. Featured Content Selection
   useEffect(() => {
@@ -1681,7 +1755,7 @@ function App() {
 
   // 4. Action Handlers
   const handleRefreshFeaturedSlides = () => {
-    if (isRefreshingFeatured || !featuredSliderState.showRefreshButton) return;
+    if (isRefreshingFeatured || !visibleFeaturedSliderState.showRefreshButton) return;
     setIsRefreshingFeatured(true);
     if (featuredRefreshTimerRef.current) {
       clearTimeout(featuredRefreshTimerRef.current);
