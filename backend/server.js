@@ -19,12 +19,19 @@ const ALLOWED_ORIGINS = (
 const ALLOWED_ORIGIN_SET = new Set(ALLOWED_ORIGINS);
 const ALLOWED_SHARE_IMAGE_HOST_SUFFIXES = ['.anilist.co', '.anili.st'];
 const ANILIST_GRAPHQL_ENDPOINT = 'https://graphql.anilist.co';
+const JIKAN_ANIME_SEARCH_ENDPOINT = 'https://api.jikan.moe/v4/anime';
 const ANILIST_RATE_LIMIT_HEADERS = [
   'retry-after',
   'x-ratelimit-limit',
   'x-ratelimit-remaining',
   'x-ratelimit-reset',
   'x-ratelimit-reset-after',
+];
+const JIKAN_RATE_LIMIT_HEADERS = [
+  'retry-after',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
 ];
 
 const DATA_DIR = path.join(__dirname, 'data');
@@ -75,6 +82,17 @@ const parseAllowedShareImageUrl = (rawUrl) => {
   } catch (_) {
     return null;
   }
+};
+
+const buildJikanAnimeSearchUrl = (rawQuery, rawLimit) => {
+  const query = String(rawQuery || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+  if (!query || query.length > 160) return null;
+  const limit = Math.max(1, Math.min(24, Number(rawLimit) || 12));
+  const params = new URLSearchParams();
+  params.set('q', query);
+  params.set('limit', String(limit));
+  params.set('sfw', 'true');
+  return `${JIKAN_ANIME_SEARCH_ENDPOINT}?${params.toString()}`;
 };
 
 app.use(express.json({ limit: '1mb' }));
@@ -128,6 +146,40 @@ app.use((req, res, next) => {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, at: nowIso() });
+});
+
+app.get('/api/jikan-anime-search', async (req, res) => {
+  const targetUrl = buildJikanAnimeSearchUrl(req.query?.q, req.query?.limit);
+  if (!targetUrl) {
+    res.status(400).json({ error: 'Search query is required.', code: 'JIKAN_QUERY_REQUIRED' });
+    return;
+  }
+
+  try {
+    const upstream = await fetch(targetUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'AniTriggerJikanProxy/1.0',
+      },
+    });
+
+    const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
+    JIKAN_RATE_LIMIT_HEADERS.forEach((name) => {
+      const value = upstream.headers.get(name);
+      if (value) res.setHeader(name, value);
+    });
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(upstream.status).send(await upstream.text());
+  } catch (error) {
+    logError('jikan_proxy_failed', error);
+    res.status(502).json({
+      error: 'Jikan request failed.',
+      code: 'JIKAN_PROXY_FAILED',
+      detail: String(error?.message || error || 'unknown error'),
+    });
+  }
 });
 
 app.post(['/anilist', '/anilist/'], async (req, res, next) => {

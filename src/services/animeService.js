@@ -22,6 +22,22 @@ const ANILIST_ENDPOINTS = [
   return [...list, endpoint];
 }, []);
 const ANILIST_ENDPOINT_FALLBACK_STATUSES = new Set([403, 404, 405]);
+const JIKAN_DIRECT_ANIME_SEARCH_ENDPOINT = 'https://api.jikan.moe/v4/anime';
+const JIKAN_PRIMARY_ANIME_SEARCH_ENDPOINT = String(
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_JIKAN_SEARCH_ENDPOINT)
+    || '/api/jikan-anime-search'
+).trim() || '/api/jikan-anime-search';
+const JIKAN_ANIME_SEARCH_ENDPOINTS = [
+  JIKAN_PRIMARY_ANIME_SEARCH_ENDPOINT,
+  JIKAN_DIRECT_ANIME_SEARCH_ENDPOINT,
+].reduce((list, endpoint) => {
+  const normalizedKey = normalizeAniListEndpoint(endpoint);
+  if (!normalizedKey || list.some((item) => normalizeAniListEndpoint(item) === normalizedKey)) return list;
+  return [...list, endpoint];
+}, []);
+const EXTERNAL_SEARCH_ALIAS_FIELD = '__externalSearchAliases';
+const EXTERNAL_SEARCH_DEFAULT_LIMIT = 12;
+const EXTERNAL_SEARCH_MAX_LIMIT = 24;
 
 const ANIME_QUERY = `
   query ($search: String, $formatIn: [MediaFormat], $countryOfOrigin: CountryCode) {
@@ -612,15 +628,25 @@ const titleSimilarity = (a, b) => {
   return Math.max(diceCoefficient(a, b), substringCoverage(a, b));
 };
 
+const collectMediaSearchTitles = (media) => [
+  media?.title?.native,
+  media?.title?.romaji,
+  media?.title?.english,
+  ...(Array.isArray(media?.[EXTERNAL_SEARCH_ALIAS_FIELD]) ? media[EXTERNAL_SEARCH_ALIAS_FIELD] : []),
+].filter(Boolean);
+
+const stripExternalSearchAliases = (media) => {
+  if (!media || typeof media !== 'object') return media;
+  if (!Object.prototype.hasOwnProperty.call(media, EXTERNAL_SEARCH_ALIAS_FIELD)) return media;
+  const { [EXTERNAL_SEARCH_ALIAS_FIELD]: _aliases, ...rest } = media;
+  return rest;
+};
+
 const selectBestMediaCandidate = (originalTitle, mediaList, minScore = 0.36) => {
   if (!Array.isArray(mediaList) || mediaList.length === 0) return null;
   const ranked = mediaList
     .map((media) => {
-      const titles = [
-        media?.title?.native,
-        media?.title?.romaji,
-        media?.title?.english,
-      ].filter(Boolean);
+      const titles = collectMediaSearchTitles(media);
       const score = titles.reduce((best, t) => Math.max(best, titleSimilarity(originalTitle, t)), 0);
       return { media, score };
     })
@@ -640,11 +666,7 @@ const selectBestMediaCandidate = (originalTitle, mediaList, minScore = 0.36) => 
     if (best.score < effectiveMinScore) return null;
 
     const originalNorm = stripTitleNoise(originalTitle);
-    const bestTitleList = [
-      best?.media?.title?.native,
-      best?.media?.title?.romaji,
-      best?.media?.title?.english,
-    ].filter(Boolean);
+    const bestTitleList = collectMediaSearchTitles(best?.media);
     const hasContainment = bestTitleList.some((title) => {
       const titleNorm = stripTitleNoise(title);
       if (!originalNorm || !titleNorm) return false;
@@ -661,9 +683,7 @@ const selectBestMediaCandidate = (originalTitle, mediaList, minScore = 0.36) => 
 const buildAdaptiveSearchTerms = (title, maxTerms = 4) => {
   const base = String(title || '').trim();
   if (!base || base.length < 2) return [];
-  const baseNormalized = stripTitleNoise(base);
   return buildSearchTermVariants(base, Math.max(3, Number(maxTerms) || 4))
-    .filter((t) => stripTitleNoise(t) !== baseNormalized)
     .slice(0, Math.max(1, Number(maxTerms) || 4));
 };
 
@@ -906,6 +926,283 @@ const postAniListGraphQL = async (query, variables, options = {}) => {
   throw lastError;
 };
 
+const buildJikanAnimeSearchUrl = (endpoint, title, limit) => {
+  const baseEndpoint = String(endpoint || '').trim() || JIKAN_DIRECT_ANIME_SEARCH_ENDPOINT;
+  const params = new URLSearchParams();
+  params.set('q', normalizeTitleSpacing(title));
+  params.set('limit', String(Math.max(1, Math.min(EXTERNAL_SEARCH_MAX_LIMIT, Number(limit) || EXTERNAL_SEARCH_DEFAULT_LIMIT))));
+  params.set('sfw', 'true');
+  return `${baseEndpoint}${baseEndpoint.includes('?') ? '&' : '?'}${params.toString()}`;
+};
+
+const collectJikanAnimeAliases = (item) => {
+  const aliases = [];
+  const pushAlias = (value) => {
+    const normalized = normalizeTitleSpacing(value);
+    if (!normalized) return;
+    const key = stripTitleNoise(normalized);
+    if (!key) return;
+    if (!aliases.some((alias) => stripTitleNoise(alias) === key)) {
+      aliases.push(normalized);
+    }
+  };
+
+  pushAlias(item?.title);
+  pushAlias(item?.title_english);
+  pushAlias(item?.title_japanese);
+  (Array.isArray(item?.title_synonyms) ? item.title_synonyms : []).forEach(pushAlias);
+  (Array.isArray(item?.titles) ? item.titles : []).forEach((titleEntry) => {
+    pushAlias(titleEntry?.title);
+  });
+
+  return aliases;
+};
+
+const fetchJikanAnimeSearch = async (title, limit = EXTERNAL_SEARCH_DEFAULT_LIMIT, options = {}) => {
+  const query = normalizeTitleSpacing(title);
+  if (!query) return [];
+  if (options?.signal?.aborted) return [];
+
+  const timeoutMs = Math.max(4000, Number(options?.externalSearchTimeoutMs || options?.timeoutMs) || 6000);
+  let lastError = null;
+
+  for (const endpoint of JIKAN_ANIME_SEARCH_ENDPOINTS) {
+    if (options?.signal?.aborted) return [];
+    try {
+      const response = await fetchWithTimeout(
+        buildJikanAnimeSearchUrl(endpoint, query, limit),
+        {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            Accept: 'application/json',
+          },
+          signal: options?.signal,
+        },
+        timeoutMs
+      );
+      const rateLimitMeta = extractRateLimitMeta(response);
+      const retryAfterMs = Number.isFinite(Number(rateLimitMeta.retryAfterMs))
+        ? Number(rateLimitMeta.retryAfterMs)
+        : null;
+
+      if (!response.ok) {
+        lastError = {
+          kind: 'external_http',
+          source: 'jikan',
+          search: query,
+          status: response.status,
+          retryAfterMs,
+          rateLimit: rateLimitMeta,
+          endpoint,
+        };
+        if (response.status === 429) break;
+        continue;
+      }
+
+      const payload = await response.json();
+      const seenMalIds = new Set();
+      return (Array.isArray(payload?.data) ? payload.data : [])
+        .map((item) => {
+          const malId = Number(item?.mal_id);
+          if (!Number.isFinite(malId) || seenMalIds.has(malId)) return null;
+          seenMalIds.add(malId);
+          return {
+            malId,
+            aliases: collectJikanAnimeAliases(item),
+          };
+        })
+        .filter(Boolean);
+    } catch (error) {
+      if (isAbortError(error) || options?.signal?.aborted) return [];
+      lastError = {
+        kind: 'external_error',
+        source: 'jikan',
+        search: query,
+        status: Number(error?.status) || 0,
+        error,
+        endpoint,
+      };
+    }
+  }
+
+  if (lastError) {
+    safeInvokeRetryCallback(options?.onRetry, {
+      ...lastError,
+      attempt: 1,
+      maxAttempts: 1,
+      waitMs: 0,
+      willRetry: false,
+    });
+  }
+  return [];
+};
+
+const fetchAnimeDetailsByMalIds = async (malIds, options = {}) => {
+  const safeMalIds = Array.isArray(malIds)
+    ? malIds
+      .map((id) => Number(id))
+      .filter((id, index, source) => Number.isFinite(id) && source.indexOf(id) === index)
+    : [];
+  if (safeMalIds.length === 0) return [];
+
+  const {
+    allowUnknownFormat = true,
+    allowUnknownCountry = true,
+    allowedFormats: allowedFormatsOption,
+    formatIn: formatInOption,
+    countryOfOrigin: countryOfOriginOption,
+    searchAliasByMalId,
+    ...requestOptions
+  } = options || {};
+  const allowedFormats = resolveAllowedFormats(allowedFormatsOption || formatInOption, DEFAULT_YEAR_FORMATS);
+  const { country: countryPreference } = resolveCountryPreference(
+    { countryOfOrigin: countryOfOriginOption },
+    DEFAULT_COUNTRY_OF_ORIGIN
+  );
+  const fields = [
+    'id',
+    'idMal',
+    'title { native romaji english }',
+    'coverImage { extraLarge large }',
+    'season',
+    'seasonYear',
+    'status',
+    'startDate { year month day }',
+    'averageScore',
+    'episodes',
+    'genres',
+    'tags { id name isMediaSpoiler }',
+    'format',
+    'countryOfOrigin',
+    'bannerImage',
+    'description',
+    'trailer { id site thumbnail }',
+  ].join('\n');
+  const normalizeMalIdMedia = (media, malId) => {
+    if (!isDisplayEligibleAnime(media, {
+      allowUnknownFormat,
+      allowUnknownCountry,
+      allowedFormats,
+      countryOfOrigin: countryPreference || undefined,
+    })) {
+      return null;
+    }
+
+    const aliases = searchAliasByMalId instanceof Map ? searchAliasByMalId.get(malId) : null;
+    return Array.isArray(aliases) && aliases.length > 0
+      ? { ...media, [EXTERNAL_SEARCH_ALIAS_FIELD]: aliases }
+      : media;
+  };
+
+  const fetchSingleByMalId = async (malId) => {
+    if (requestOptions.signal?.aborted) return null;
+    try {
+      const singleQuery = `query($malId: Int) { Media(idMal: $malId, type: ANIME) {\n${fields}\n} }`;
+      const singleResult = await postAniListGraphQL(singleQuery, { malId }, requestOptions);
+      if (!singleResult.ok) return null;
+      return normalizeMalIdMedia(singleResult.data?.Media ?? null, malId);
+    } catch (error) {
+      if (!isAbortError(error)) {
+        console.error(`Error fetching by MAL id ${malId}:`, error);
+      }
+      return null;
+    }
+  };
+
+  const fetchSinglesByMalId = async (targetMalIds = safeMalIds) => {
+    const results = [];
+    for (const malId of targetMalIds) {
+      results.push(await fetchSingleByMalId(malId));
+      if (requestOptions.signal?.aborted) break;
+    }
+    while (results.length < targetMalIds.length) results.push(null);
+    return results;
+  };
+
+  const fetchBatchByMalIds = async (targetMalIds) => {
+    const variables = {};
+    const queryParts = targetMalIds.map((id, index) => {
+      variables[`malId${index}`] = id;
+      return `m${index}: Media(idMal: $malId${index}, type: ANIME) {\n${fields}\n}`;
+    });
+    const query = `query(${targetMalIds.map((_, index) => `$malId${index}: Int`).join(', ')}) {\n${queryParts.join('\n')}\n}`;
+
+    try {
+      const result = await postAniListGraphQL(query, variables, requestOptions);
+      if (!result.ok) return await fetchSinglesByMalId(targetMalIds);
+
+      const mapped = targetMalIds.map((malId, index) => {
+        const media = result.data?.[`m${index}`] ?? null;
+        return normalizeMalIdMedia(media, malId);
+      });
+      if (Array.isArray(result.errors) && result.errors.length > 0 && mapped.some((item) => item === null)) {
+        const singles = await fetchSinglesByMalId(targetMalIds);
+        return mapped.map((item, index) => item || singles[index]);
+      }
+      return mapped;
+    } catch (error) {
+      if (!isAbortError(error)) {
+        console.error('Error fetching by MAL ids:', error);
+      }
+      return await fetchSinglesByMalId(targetMalIds);
+    }
+  };
+
+  const results = [];
+  const batchSize = Math.max(1, Math.min(3, Number(options?.malIdBatchSize) || 3));
+  for (let index = 0; index < safeMalIds.length; index += batchSize) {
+    if (requestOptions.signal?.aborted) break;
+    const chunk = safeMalIds.slice(index, index + batchSize);
+    results.push(...await fetchBatchByMalIds(chunk));
+    const validCount = results.filter(Boolean).length;
+    const requestedCount = Number(options?.targetResultCount);
+    if (Number.isFinite(requestedCount) && requestedCount > 0 && validCount >= requestedCount) {
+      break;
+    }
+  }
+  while (results.length < safeMalIds.length) results.push(null);
+  return results;
+};
+
+const fetchExternalAnimeSearchCandidates = async (title, perPage = 8, options = {}) => {
+  if (options?.externalSearchFallback === false) return [];
+  const query = normalizeTitleSpacing(title);
+  if (!query) return [];
+  if (options?.signal?.aborted) return [];
+
+  const requestedCount = Math.max(1, Math.min(8, Number(perPage) || 8));
+  const externalLimit = Math.max(
+    requestedCount,
+    Math.min(EXTERNAL_SEARCH_MAX_LIMIT, Number(options?.externalSearchLimit) || requestedCount)
+  );
+  const jikanItems = await fetchJikanAnimeSearch(query, externalLimit, options);
+  if (options?.signal?.aborted || jikanItems.length === 0) return [];
+
+  const searchAliasByMalId = new Map();
+  const malIds = jikanItems.map((item) => {
+    searchAliasByMalId.set(item.malId, item.aliases);
+    return item.malId;
+  });
+
+  return (await fetchAnimeDetailsByMalIds(malIds, {
+    ...options,
+    searchAliasByMalId,
+    targetResultCount: requestedCount,
+    timeoutMs: Math.max(4000, Number(options?.timeoutMs) || 6000),
+    maxAttempts: Math.max(1, Number(options?.maxAttempts) || 2),
+    baseDelayMs: Math.max(80, Number(options?.baseDelayMs) || 250),
+    maxRetryDelayMs: Math.max(200, Number(options?.maxRetryDelayMs) || 900),
+  })).filter(Boolean);
+};
+
+const searchAnimeListWithFallback = async (title, perPage = 8, options = {}) => {
+  const list = await searchAnimeListInternal(title, perPage, options);
+  if (Array.isArray(list) && list.length > 0) return list;
+  if (options?.signal?.aborted) return [];
+  return fetchExternalAnimeSearchCandidates(title, perPage, options);
+};
+
 export const fetchAnimeDetails = async (title, options = {}) => {
   const {
     adaptiveFallback = false,
@@ -1007,7 +1304,7 @@ export const fetchAnimeDetails = async (title, options = {}) => {
         }
       }
 
-      const list = await searchAnimeListInternal(fallbackQuery, adaptivePerPage, fallbackRequestOptions);
+      const list = await searchAnimeListWithFallback(fallbackQuery, adaptivePerPage, fallbackRequestOptions);
       if (!Array.isArray(list) || list.length === 0) continue;
 
       const selected = selectBestMediaCandidate(title, list, effectiveMinScore);
@@ -1223,11 +1520,7 @@ const searchAnimeListInternal = async (title, perPage = 8, options = {}) => {
 };
 
 const scoreSearchCandidate = (query, media) => {
-  const titles = [
-    media?.title?.native,
-    media?.title?.romaji,
-    media?.title?.english,
-  ].filter(Boolean);
+  const titles = collectMediaSearchTitles(media);
   if (titles.length === 0) return 0;
 
   const queryNormalized = stripTitleNoise(query);
@@ -1677,21 +1970,22 @@ export const findClosestAnimeCandidates = async (title, options = {}) => {
   const rankedMap = new Map();
 
   for (const term of terms) {
-    const list = await searchAnimeListInternal(term, perPage, {
+    const list = await searchAnimeListWithFallback(term, perPage, {
       timeoutMs,
       maxAttempts,
       baseDelayMs,
       maxRetryDelayMs,
+      signal: options?.signal,
+      onRetry: options?.onRetry,
+      externalSearchFallback: options?.externalSearchFallback,
+      externalSearchLimit: options?.externalSearchLimit,
+      externalSearchTimeoutMs: options?.externalSearchTimeoutMs,
     });
 
     for (const media of list) {
       const id = Number(media?.id);
       if (!Number.isFinite(id)) continue;
-      const titles = [
-        media?.title?.native,
-        media?.title?.romaji,
-        media?.title?.english,
-      ].filter(Boolean);
+      const titles = collectMediaSearchTitles(media);
       const score = titles.reduce((best, t) => Math.max(best, titleSimilarity(base, t)), 0);
       const prev = rankedMap.get(id);
       if (!prev || score > prev.score) {
@@ -1703,7 +1997,11 @@ export const findClosestAnimeCandidates = async (title, options = {}) => {
   return Array.from(rankedMap.values())
     .filter((item) => item.score >= minScore)
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(1, Number(limit) || 3));
+    .slice(0, Math.max(1, Number(limit) || 3))
+    .map((item) => ({
+      ...item,
+      media: stripExternalSearchAliases(item.media),
+    }));
 };
 
 export const fetchAnimeDetailsBatch = async (titles, options = {}) => {
@@ -1816,7 +2114,7 @@ export const searchAnimeList = async (title, perPage = 8, options = {}) => {
   const fetchPerTerm = Math.max(requestedCount, 12);
   const rankedMap = new Map();
 
-  const primaryList = await searchAnimeListInternal(query, fetchPerTerm, options);
+  const primaryList = await searchAnimeListWithFallback(query, fetchPerTerm, options);
   if (options?.signal?.aborted) return [];
   mergeSearchCandidates(rankedMap, query, primaryList);
 
@@ -1828,7 +2126,7 @@ export const searchAnimeList = async (title, perPage = 8, options = {}) => {
 
     for (const term of variantTerms) {
       if (options?.signal?.aborted) break;
-      const list = await searchAnimeListInternal(term, fetchPerTerm, options);
+      const list = await searchAnimeListWithFallback(term, fetchPerTerm, options);
       if (options?.signal?.aborted) break;
       mergeSearchCandidates(rankedMap, query, list);
       const hasStrongMatch = Array.from(rankedMap.values()).some((entry) => entry.score >= 1);
@@ -1839,7 +2137,7 @@ export const searchAnimeList = async (title, perPage = 8, options = {}) => {
   return Array.from(rankedMap.values())
     .sort((a, b) => b.score - a.score)
     .slice(0, requestedCount)
-    .map((entry) => entry.media);
+    .map((entry) => stripExternalSearchAliases(entry.media));
 };
 
 export const fetchAnimeByYear = async (seasonYear, options = {}) => {

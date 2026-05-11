@@ -1,3 +1,4 @@
 /api/share-image-proxy /.netlify/functions/share-image-proxy 200
+/api/jikan-anime-search /.netlify/functions/jikan-anime-search 200
 /anilist /.netlify/functions/anilist-proxy 200
 /anilist/* /.netlify/functions/anilist-proxy 200
