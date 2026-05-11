@@ -12,13 +12,13 @@ const ANILIST_PRIMARY_ENDPOINT = String(
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ANILIST_ENDPOINT)
     || '/anilist/'
 ).trim() || '/anilist/';
-const normalizeAniListEndpoint = (value = '') => String(value || '').trim().replace(/\/+$/, '') || '';
+const normalizeEndpointKey = (value = '') => String(value || '').trim().replace(/\/+$/, '') || '';
 const ANILIST_ENDPOINTS = [
   ANILIST_PRIMARY_ENDPOINT,
   ANILIST_DIRECT_ENDPOINT,
 ].reduce((list, endpoint) => {
-  const normalizedKey = normalizeAniListEndpoint(endpoint);
-  if (!normalizedKey || list.some((item) => normalizeAniListEndpoint(item) === normalizedKey)) return list;
+  const normalizedKey = normalizeEndpointKey(endpoint);
+  if (!normalizedKey || list.some((item) => normalizeEndpointKey(item) === normalizedKey)) return list;
   return [...list, endpoint];
 }, []);
 const ANILIST_ENDPOINT_FALLBACK_STATUSES = new Set([403, 404, 405]);
@@ -31,8 +31,8 @@ const JIKAN_ANIME_SEARCH_ENDPOINTS = [
   JIKAN_PRIMARY_ANIME_SEARCH_ENDPOINT,
   JIKAN_DIRECT_ANIME_SEARCH_ENDPOINT,
 ].reduce((list, endpoint) => {
-  const normalizedKey = normalizeAniListEndpoint(endpoint);
-  if (!normalizedKey || list.some((item) => normalizeAniListEndpoint(item) === normalizedKey)) return list;
+  const normalizedKey = normalizeEndpointKey(endpoint);
+  if (!normalizedKey || list.some((item) => normalizeEndpointKey(item) === normalizedKey)) return list;
   return [...list, endpoint];
 }, []);
 const EXTERNAL_SEARCH_ALIAS_FIELD = '__externalSearchAliases';

@@ -95,6 +95,13 @@ const buildJikanAnimeSearchUrl = (rawQuery, rawLimit) => {
   return `${JIKAN_ANIME_SEARCH_ENDPOINT}?${params.toString()}`;
 };
 
+const forwardResponseHeaders = (source, target, headerNames) => {
+  headerNames.forEach((name) => {
+    const value = source.headers.get(name);
+    if (value) target.setHeader(name, value);
+  });
+};
+
 app.use(express.json({ limit: '1mb' }));
 
 app.use((req, res, next) => {
@@ -165,10 +172,7 @@ app.get('/api/jikan-anime-search', async (req, res) => {
     });
 
     const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
-    JIKAN_RATE_LIMIT_HEADERS.forEach((name) => {
-      const value = upstream.headers.get(name);
-      if (value) res.setHeader(name, value);
-    });
+    forwardResponseHeaders(upstream, res, JIKAN_RATE_LIMIT_HEADERS);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
     res.status(upstream.status).send(await upstream.text());
@@ -200,10 +204,7 @@ app.post(['/anilist', '/anilist/'], async (req, res, next) => {
     });
 
     const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
-    ANILIST_RATE_LIMIT_HEADERS.forEach((name) => {
-      const value = upstream.headers.get(name);
-      if (value) res.setHeader(name, value);
-    });
+    forwardResponseHeaders(upstream, res, ANILIST_RATE_LIMIT_HEADERS);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
     res.status(upstream.status).send(await upstream.text());
